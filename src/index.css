@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@layer base {
+  /* Prevent zoom on focus for iOS */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Custom Leaflet Popup Styling */
+.leaflet-popup-content-wrapper {
+  border-radius: 16px !important;
+  padding: 4px !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px !important;
+  width: auto !important;
+}
+
+.leaflet-popup-tip {
+  background: white !important;
+}
+
+/* Better tap highlight for mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
