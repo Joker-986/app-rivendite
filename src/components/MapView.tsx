@@ -69,6 +69,9 @@ export default function MapView({ results }: MapViewProps) {
         
         try {
           if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
+
+          // Inserisci qui una tua email per farti riconoscere da OpenStreetMap
+          const appEmail = "tgest.app@gmail.com";
           
           let geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
           
