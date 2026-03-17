@@ -4,7 +4,6 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Navigation, AlertTriangle, MapPinOff, MapPin, Store, Info } from 'lucide-react';
 
-// Fix for default marker icon in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -25,17 +24,14 @@ interface GeocodedResult extends SearchResult {
   lon: number;
 }
 
-// Component to adjust map bounds based on markers
 const MapBounds = ({ markers }: { markers: GeocodedResult[] }) => {
   const map = useMap();
-  
   useEffect(() => {
     if (markers.length > 0) {
       const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lon]));
       map.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [markers, map]);
-  
   return null;
 };
 
@@ -59,6 +55,23 @@ export default function MapView({ results }: MapViewProps) {
       const newGeocoded: GeocodedResult[] = [];
       const newNotFound: SearchResult[] = [];
       
+      // Funzione che chiama il NOSTRO server invece di OpenStreetMap direttamente
+      const fetchGeocodeFromBackend = async (addr: string) => {
+        try {
+          const res = await fetch('/api/geocode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: addr })
+          });
+          if (res.ok) {
+            return await res.json();
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      };
+      
       for (let i = 0; i < results.length; i++) {
         if (!isMounted) break;
         
@@ -68,37 +81,19 @@ export default function MapView({ results }: MapViewProps) {
         const fallbackAddress = `${res['Comune']}, ${res['Prov.']}, Italy`;
         
         try {
+          // Pausa per non intasare il server
           if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
           
-          // Inseriamo l'email per non farci bloccare da OpenStreetMap sul telefono
-          const appEmail = "tgest.app@gmail.com";
-          
-          let geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&email=${appEmail}`;
-          
-          // Rimosso il finto User-Agent che mandava in blocco la WebView di Android
-          const fetchGeocode = async (url: string) => {
-            return fetch(url, {
-              headers: {
-                'Accept-Language': 'it'
-              }
-            });
-          };
+          let data = await fetchGeocodeFromBackend(address);
 
-          let response = await fetchGeocode(geocodeUrl);
-          let data = response.ok ? await response.json() : [];
-
-          // Fallback if specific address fails
+          // Fallback 1: Indirizzo originale se quello pulito fallisce
           if ((!data || data.length === 0) && cleanIndirizzo !== res['Indirizzo']) {
-            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(res['Indirizzo'] + ', ' + res['Comune'] + ', ' + res['Prov.'] + ', Italy')}&limit=1&email=${appEmail}`;
-            response = await fetchGeocode(geocodeUrl);
-            data = response.ok ? await response.json() : [];
+            data = await fetchGeocodeFromBackend(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`);
           }
 
-          // Second fallback: just Comune and Prov
+          // Fallback 2: Solo Comune e Provincia
           if (!data || data.length === 0) {
-            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fallbackAddress)}&limit=1&email=${appEmail}`;
-            response = await fetchGeocode(geocodeUrl);
-            data = response.ok ? await response.json() : [];
+            data = await fetchGeocodeFromBackend(fallbackAddress);
           }
           
           if (data && data.length > 0) {
@@ -146,12 +141,12 @@ export default function MapView({ results }: MapViewProps) {
       
       <div className="h-[400px] w-full rounded-xl overflow-hidden border border-slate-200 relative z-0">
         <MapContainer 
-          center={[41.8719, 12.5674]} // Default center (Italy)
+          center={[41.8719, 12.5674]} 
           zoom={6} 
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
-            attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+            attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           
@@ -169,11 +164,6 @@ export default function MapView({ results }: MapViewProps) {
                         {res['Tipo Rivendita']}
                       </span>
                     )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {res['Stato']}
-                    </span>
                   </div>
                   
                   <div className="flex items-start gap-2 mb-3">
@@ -191,29 +181,22 @@ export default function MapView({ results }: MapViewProps) {
                   
                   <div className="grid grid-cols-1 gap-2">
                     <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${res.lat},${res.lon}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=$${res.lat},${res.lon}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                     >
                       <Navigation className="w-4 h-4" />
-                      Ottieni Indicazioni
+                      Naviga
                     </a>
                   </div>
                 </div>
               </Popup>
             </Marker>
           ))}
-          
           <MapBounds markers={geocodedResults} />
         </MapContainer>
       </div>
-      
-      {geocodedResults.length === 0 && !isGeocoding && (
-        <p className="text-sm text-slate-500 text-center mt-2">
-          Impossibile trovare le coordinate per queste rivendite.
-        </p>
-      )}
       
       {notFoundResults.length > 0 && (
         <div className="mt-4 border-t border-slate-100 pt-4">
@@ -246,9 +229,6 @@ export default function MapView({ results }: MapViewProps) {
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-3 italic">
-            Nota: Alcuni indirizzi potrebbero non essere riconosciuti dal sistema cartografico a causa di imprecisioni nei dati originali.
-          </p>
         </div>
       )}
     </div>
