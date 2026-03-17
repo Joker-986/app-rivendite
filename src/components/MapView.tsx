@@ -188,7 +188,7 @@ export default function MapView({ results }: MapViewProps) {
                   
                   <div className="grid grid-cols-1 gap-2">
                     <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${res.lat},${res.lon}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${res.lat},${res.lon}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
