@@ -69,17 +69,17 @@ export default function MapView({ results }: MapViewProps) {
         
         try {
           if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
-
-          // Inserisci qui una tua email per farti riconoscere da OpenStreetMap
+          
+          // Inseriamo l'email per non farci bloccare da OpenStreetMap sul telefono
           const appEmail = "tgest.app@gmail.com";
           
-          let geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+          let geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&email=${appEmail}`;
           
+          // Rimosso il finto User-Agent che mandava in blocco la WebView di Android
           const fetchGeocode = async (url: string) => {
             return fetch(url, {
               headers: {
-                'Accept-Language': 'it',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'Accept-Language': 'it'
               }
             });
           };
@@ -89,14 +89,14 @@ export default function MapView({ results }: MapViewProps) {
 
           // Fallback if specific address fails
           if ((!data || data.length === 0) && cleanIndirizzo !== res['Indirizzo']) {
-            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(res['Indirizzo'] + ', ' + res['Comune'] + ', ' + res['Prov.'] + ', Italy')}&limit=1`;
+            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(res['Indirizzo'] + ', ' + res['Comune'] + ', ' + res['Prov.'] + ', Italy')}&limit=1&email=${appEmail}`;
             response = await fetchGeocode(geocodeUrl);
             data = response.ok ? await response.json() : [];
           }
 
           // Second fallback: just Comune and Prov
           if (!data || data.length === 0) {
-            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fallbackAddress)}&limit=1`;
+            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fallbackAddress)}&limit=1&email=${appEmail}`;
             response = await fetchGeocode(geocodeUrl);
             data = response.ok ? await response.json() : [];
           }
@@ -151,7 +151,7 @@ export default function MapView({ results }: MapViewProps) {
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           
@@ -191,7 +191,7 @@ export default function MapView({ results }: MapViewProps) {
                   
                   <div className="grid grid-cols-1 gap-2">
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${res.lat},${res.lon}`}
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${res.lat},${res.lon}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
