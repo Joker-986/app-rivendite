@@ -70,7 +70,8 @@ export default function MapView({ results }: MapViewProps) {
           
           const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`, {
             headers: {
-              'Accept-Language': 'it'
+              'Accept-Language': 'it',
+              'User-Agent': 'RivenditeApp/1.0'
             }
           });
           
@@ -130,8 +131,8 @@ export default function MapView({ results }: MapViewProps) {
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           
           {geocodedResults.map((res, idx) => (
@@ -139,7 +140,7 @@ export default function MapView({ results }: MapViewProps) {
               <Popup className="custom-popup">
                 <div className="p-2 min-w-[220px]">
                   <div className="flex flex-wrap gap-1.5 mb-3">
-                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="bg-brand-100 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Store className="w-3 h-3" />
                       Riv. {res['Num. Rivendita']}
                     </span>
@@ -156,7 +157,7 @@ export default function MapView({ results }: MapViewProps) {
                   </div>
                   
                   <div className="flex items-start gap-2 mb-3">
-                    <MapPin className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                    <MapPin className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
                     <div>
                       <div className="font-bold text-slate-900 text-sm leading-tight">
                         {res['Comune']} ({res['Prov.']})
@@ -170,10 +171,10 @@ export default function MapView({ results }: MapViewProps) {
                   
                   <div className="grid grid-cols-1 gap-2">
                     <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${res.lat},${res.lon}`}
+                      href={`https://maps.google.com/maps?daddr=${res.lat},${res.lon}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+                      className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                     >
                       <Navigation className="w-4 h-4" />
                       Ottieni Indicazioni

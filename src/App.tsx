@@ -105,6 +105,10 @@ export default function App() {
     localStorage.setItem('rubrica', JSON.stringify(rubrica));
   }, [rubrica]);
 
+  useEffect(() => {
+    initSession();
+  }, []);
+
   const initSession = async () => {
     try {
       setLoading(true);
@@ -488,7 +492,7 @@ export default function App() {
         <div className="flex justify-between items-start">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-md">
+              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
                 Riv. {res['Num. Rivendita']}
               </span>
               <span className={`text-xs font-medium px-2 py-1 rounded-md ${
@@ -614,7 +618,7 @@ export default function App() {
           <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                <Clock className="w-4 h-4 text-indigo-600" />
+                <Clock className="w-4 h-4 text-brand-600" />
               </div>
               <div className="flex-1">
                 <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
@@ -627,11 +631,11 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                  <Phone className="w-4 h-4 text-indigo-600" />
+                  <Phone className="w-4 h-4 text-brand-600" />
                 </div>
                 <div>
                   <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                  <a href={`tel:${enrichedData[id].phone}`} className="text-indigo-600 hover:text-indigo-700 font-bold text-sm transition-colors">
+                  <a href={`tel:${enrichedData[id].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
                     {enrichedData[id].phone}
                   </a>
                 </div>
@@ -640,11 +644,11 @@ export default function App() {
               {enrichedData[id].email && enrichedData[id].email !== 'Non disponibile' && (
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                    <Mail className="w-4 h-4 text-indigo-600" />
+                    <Mail className="w-4 h-4 text-brand-600" />
                   </div>
                   <div className="min-w-0">
                     <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                    <a href={`mailto:${enrichedData[id].email}`} className="text-indigo-600 hover:text-indigo-700 font-bold text-sm truncate block transition-colors">
+                    <a href={`mailto:${enrichedData[id].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
                       {enrichedData[id].email}
                     </a>
                   </div>
@@ -678,7 +682,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => handleEnrich(id, res)}
-                className="w-full text-center text-sm font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 active:bg-indigo-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-indigo-100"
+                className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
               >
                 <Clock className="w-4 h-4" />
                 Mostra orari e contatti
@@ -699,7 +703,7 @@ export default function App() {
               href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 active:scale-95 text-blue-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+              className="w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
             >
               <Calendar className="w-4 h-4" />
               Aggiungi a Google Calendar
@@ -707,10 +711,10 @@ export default function App() {
           )}
           <div className="flex gap-2">
             <a
-              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+              href={`https://maps.google.com/maps?daddr=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
             >
               <Navigation className="w-4 h-4" />
               Naviga
@@ -731,7 +735,7 @@ export default function App() {
         {isExpanded && (
           <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
             <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <BookOpen className="w-4 h-4 text-brand-600" />
               Informazioni Extra
             </h4>
             
@@ -741,7 +745,7 @@ export default function App() {
                 <select
                   value={extra.stato}
                   onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 >
                   <option value="">Seleziona</option>
                   <option value="Attivata">Attivata</option>
@@ -756,7 +760,7 @@ export default function App() {
                 <select
                   value={extra.visitata}
                   onChange={(e) => handleRubricaUpdate(id, 'visitata', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 >
                   <option value="">Seleziona</option>
                   <option value="Si">Si</option>
@@ -773,16 +777,16 @@ export default function App() {
                       type="date"
                       value={extra.dataVisita || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'dataVisita', e.target.value)}
-                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     />
                     <select
                       value={extra.oraVisita || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'oraVisita', e.target.value)}
-                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     >
                       <option value="">Ora</option>
-                      {Array.from({ length: 24 * 4 }).map((_, i) => {
-                        const h = Math.floor(i / 4).toString().padStart(2, '0');
+                      {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
+                        const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
                         const m = ((i % 4) * 15).toString().padStart(2, '0');
                         const time = `${h}:${m}`;
                         return <option key={time} value={time}>{time}</option>;
@@ -800,16 +804,16 @@ export default function App() {
                       type="date"
                       value={extra.dataRivisita || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
-                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     />
                     <select
                       value={extra.oraRivisita || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
-                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     >
                       <option value="">Ora</option>
-                      {Array.from({ length: 24 * 4 }).map((_, i) => {
-                        const h = Math.floor(i / 4).toString().padStart(2, '0');
+                      {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
+                        const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
                         const m = ((i % 4) * 15).toString().padStart(2, '0');
                         const time = `${h}:${m}`;
                         return <option key={time} value={time}>{time}</option>;
@@ -824,7 +828,7 @@ export default function App() {
                 <select
                   value={extra.giornoLevata}
                   onChange={(e) => handleRubricaUpdate(id, 'giornoLevata', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 >
                   <option value="">Seleziona</option>
                   <option value="Lunedì">Lunedì</option>
@@ -842,7 +846,7 @@ export default function App() {
                   value={extra.riferimento}
                   onChange={(e) => handleRubricaUpdate(id, 'riferimento', e.target.value)}
                   placeholder="Nome del referente"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 />
               </div>
 
@@ -853,7 +857,7 @@ export default function App() {
                   value={extra.telefono}
                   onChange={(e) => handleRubricaUpdate(id, 'telefono', e.target.value)}
                   placeholder="Numero di telefono"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 />
               </div>
 
@@ -864,7 +868,7 @@ export default function App() {
                   value={extra.pIva}
                   onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value)}
                   placeholder="Partita IVA"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 />
               </div>
 
@@ -875,7 +879,7 @@ export default function App() {
                   value={extra.mail}
                   onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
                   placeholder="Indirizzo email"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 />
               </div>
 
@@ -885,21 +889,21 @@ export default function App() {
                     type="checkbox"
                     checked={extra.richiestaOrdine || false}
                     onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
-                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                    className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
                   />
                   <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
                 </label>
               </div>
 
               {extra.richiestaOrdine && (
-                <div className="space-y-4 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
                     <input
                       type="date"
                       value={extra.dataOrdine || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     />
                   </div>
                   <div className="space-y-1">
@@ -909,7 +913,7 @@ export default function App() {
                       onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
                       placeholder="Inserisci qui gli articoli da ordinare..."
                       rows={3}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm resize-none"
+                      className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
                     />
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -932,7 +936,7 @@ export default function App() {
                 }
                 setExpandedCardId(null);
               }}
-              className="w-full mt-4 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md shadow-indigo-100 active:scale-95 transition-all"
+              className="w-full mt-4 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
             >
               {isCrmTab ? 'Salva Modifiche' : 'Salva i dettagli'}
             </button>
@@ -945,7 +949,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
       {/* Header */}
-      <header className="bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-20">
+      <header className="bg-brand-600 text-white p-4 shadow-md sticky top-0 z-20">
         <div className="max-w-md mx-auto">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -954,7 +958,7 @@ export default function App() {
             </div>
             <button 
               onClick={handleReset}
-              className="p-2 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all flex items-center justify-center"
+              className="p-2 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all flex items-center justify-center"
               aria-label="Resetta ricerca"
               title="Resetta ricerca"
               disabled={loading}
@@ -963,11 +967,11 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex bg-indigo-700/50 p-1 rounded-xl overflow-x-auto [&::-webkit-scrollbar]:hidden">
+          <div className="flex bg-brand-700/50 p-1 rounded-xl overflow-x-auto [&::-webkit-scrollbar]:hidden">
             <button
               onClick={() => setActiveTab('search')}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'search' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-indigo-700/50'
+                activeTab === 'search' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
               <Search className="w-4 h-4" />
@@ -976,7 +980,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('saved')}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'saved' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-indigo-700/50'
+                activeTab === 'saved' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
               <Bookmark className="w-4 h-4" />
@@ -985,7 +989,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('crm')}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'crm' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-indigo-700/50'
+                activeTab === 'crm' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
               <BookOpen className="w-4 h-4" />
@@ -994,7 +998,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('crm_br')}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'crm_br' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-indigo-700/50'
+                activeTab === 'crm_br' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
               <Store className="w-4 h-4" />
@@ -1003,7 +1007,7 @@ export default function App() {
             <button
               onClick={() => setActiveTab('rip')}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'rip' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-100 hover:bg-indigo-700/50'
+                activeTab === 'rip' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
               <AlertCircle className="w-4 h-4" />
@@ -1033,7 +1037,7 @@ export default function App() {
               value={selectedRegion}
               onChange={handleRegionChange}
               disabled={loading || regions.length === 0}
-              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
             >
               <option value="">Seleziona</option>
               {regions.map(r => (
@@ -1045,13 +1049,13 @@ export default function App() {
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700 flex items-center gap-1">
               Provincia <span className="text-red-500">*</span>
-              {loadingOptions && !selectedProvince && <Loader2 className="w-3 h-3 animate-spin text-indigo-500 ml-2" />}
+              {loadingOptions && !selectedProvince && <Loader2 className="w-3 h-3 animate-spin text-brand-500 ml-2" />}
             </label>
             <select
               value={selectedProvince}
               onChange={handleProvinceChange}
               disabled={loading || !selectedRegion || provinces.length === 0}
-              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
             >
               <option value="">Seleziona</option>
               {provinces.map(p => (
@@ -1063,13 +1067,13 @@ export default function App() {
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700 flex items-center gap-1">
               Comune
-              {loadingOptions && selectedProvince && !selectedComune && <Loader2 className="w-3 h-3 animate-spin text-indigo-500 ml-2" />}
+              {loadingOptions && selectedProvince && !selectedComune && <Loader2 className="w-3 h-3 animate-spin text-brand-500 ml-2" />}
             </label>
             <select
               value={selectedComune}
               onChange={(e) => setSelectedComune(e.target.value)}
               disabled={loading || !selectedProvince || comuni.length === 0}
-              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
             >
               <option value="">Seleziona</option>
               {comuni.map(c => (
@@ -1085,7 +1089,7 @@ export default function App() {
               value={numRivendita}
               onChange={(e) => setNumRivendita(e.target.value)}
               disabled={loading}
-              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+              className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
               placeholder="Es. 12"
             />
           </div>
@@ -1097,7 +1101,7 @@ export default function App() {
                 value={tipoRiv}
                 onChange={(e) => setTipoRiv(e.target.value)}
                 disabled={loading}
-                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
               >
                 <option value="">Tutti</option>
                 <option value="1">ORDINARIA</option>
@@ -1111,7 +1115,7 @@ export default function App() {
                 value={statoRiv}
                 onChange={(e) => setStatoRiv(e.target.value)}
                 disabled={loading}
-                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50 text-base"
+                className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
               >
                 <option value="">Tutti</option>
                 <option value="1">ATTIVA</option>
@@ -1127,7 +1131,7 @@ export default function App() {
             <button
               type="submit"
               disabled={loading || !selectedRegion || !selectedProvince}
-              className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-indigo-200"
+              className="w-full h-14 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-brand-200"
             >
               {loading && !loadingOptions ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -1138,9 +1142,9 @@ export default function App() {
             </button>
           </div>
           
-          <div className="bg-blue-50/50 p-3 rounded-lg flex gap-2 items-start mt-4">
-            <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-800 leading-relaxed">
+          <div className="bg-brand-50/50 p-3 rounded-lg flex gap-2 items-start mt-4">
+            <Info className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-brand-800 leading-relaxed">
               I campi contrassegnati con l'asterisco (*) sono obbligatori.<br/>
               Nota: con la dizione "In sospensione dei generi" si intende la temporanea sospensione della commercializzazione di alcune tipologie e prodotti del tabacco.
             </p>
@@ -1159,7 +1163,7 @@ export default function App() {
                         type="button"
                         onClick={() => setViewMode('list')}
                         className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                          viewMode === 'list' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'
+                          viewMode === 'list' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600'
                         }`}
                       >
                         <List className="w-4 h-4" />
@@ -1169,7 +1173,7 @@ export default function App() {
                         type="button"
                         onClick={() => setViewMode('map')}
                         className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                          viewMode === 'map' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'
+                          viewMode === 'map' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600'
                         }`}
                       >
                         <MapIcon className="w-4 h-4" />
@@ -1193,7 +1197,7 @@ export default function App() {
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded-md">
+                              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
                                 Riv. {res['Num. Rivendita']}
                               </span>
                               <span className={`text-xs font-medium px-2 py-1 rounded-md ${
@@ -1229,7 +1233,7 @@ export default function App() {
                             className={`p-1.5 rounded-lg transition-all shrink-0 ${
                               copiedId === getRivenditaId(res) 
                                 ? 'bg-emerald-50 text-emerald-600' 
-                                : 'hover:bg-slate-100 text-slate-400 hover:text-indigo-600'
+                                : 'hover:bg-slate-100 text-slate-400 hover:text-brand-600'
                             }`}
                             title="Copia indirizzo"
                           >
@@ -1256,7 +1260,7 @@ export default function App() {
                           <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
                             <div className="flex items-start gap-3">
                               <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                <Clock className="w-4 h-4 text-indigo-600" />
+                                <Clock className="w-4 h-4 text-brand-600" />
                               </div>
                               <div className="flex-1">
                                 <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
@@ -1269,11 +1273,11 @@ export default function App() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="flex items-start gap-3">
                                 <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                  <Phone className="w-4 h-4 text-indigo-600" />
+                                  <Phone className="w-4 h-4 text-brand-600" />
                                 </div>
                                 <div>
                                   <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                                  <a href={`tel:${enrichedData[getRivenditaId(res)].phone}`} className="text-indigo-600 hover:text-indigo-700 font-bold text-sm transition-colors">
+                                  <a href={`tel:${enrichedData[getRivenditaId(res)].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
                                     {enrichedData[getRivenditaId(res)].phone}
                                   </a>
                                 </div>
@@ -1282,11 +1286,11 @@ export default function App() {
                               {enrichedData[getRivenditaId(res)].email && enrichedData[getRivenditaId(res)].email !== 'Non disponibile' && (
                                 <div className="flex items-start gap-3">
                                   <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                    <Mail className="w-4 h-4 text-indigo-600" />
+                                    <Mail className="w-4 h-4 text-brand-600" />
                                   </div>
                                   <div className="min-w-0">
                                     <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                                    <a href={`mailto:${enrichedData[getRivenditaId(res)].email}`} className="text-indigo-600 hover:text-indigo-700 font-bold text-sm truncate block transition-colors">
+                                    <a href={`mailto:${enrichedData[getRivenditaId(res)].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
                                       {enrichedData[getRivenditaId(res)].email}
                                     </a>
                                   </div>
@@ -1320,7 +1324,7 @@ export default function App() {
                             ) : (
                               <button
                                 onClick={() => handleEnrich(getRivenditaId(res), res)}
-                                className="w-full text-center text-sm font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 active:bg-indigo-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-indigo-100"
+                                className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
                               >
                                 <Clock className="w-4 h-4" />
                                 Mostra orari e contatti
@@ -1329,10 +1333,10 @@ export default function App() {
                           )}
                           
                           <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+                            href={`https://maps.google.com/maps?daddr=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+                            className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                           >
                             <Navigation className="w-4 h-4" />
                             Naviga
@@ -1389,7 +1393,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setActiveTab('search')}
-                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md shadow-indigo-100 active:scale-95 transition-all"
+                  className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
                 >
                   Vai alla ricerca
                 </button>
@@ -1425,7 +1429,7 @@ export default function App() {
                     <select
                       value={rubricaFilterStato}
                       onChange={(e) => setRubricaFilterStato(e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     >
                       <option value="">Tutti</option>
                       <option value="Attivata">Attivata</option>
@@ -1438,7 +1442,7 @@ export default function App() {
                   <select
                     value={rubricaSort}
                     onChange={(e) => setRubricaSort(e.target.value)}
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                   >
                     <option value="none">Nessun ordine</option>
                     <option value="dataVisitaAsc">Data Ultima Visita (Crescente)</option>
@@ -1459,7 +1463,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setActiveTab('saved')}
-                  className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md shadow-indigo-100 active:scale-95 transition-all"
+                  className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
                 >
                   Vai ai salvati
                 </button>

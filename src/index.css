@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-50: #f0f7ff;
+  --color-brand-100: #e0effe;
+  --color-brand-200: #bae0fd;
+  --color-brand-500: #0a84ff;
+  --color-brand-600: #033d6b;
+  --color-brand-700: #022d50;
+  --color-brand-800: #011e36;
+  --color-brand-900: #011526;
+}
+
 @layer base {
   /* Prevent zoom on focus for iOS */
   input, select, textarea {
