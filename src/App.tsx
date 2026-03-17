@@ -948,25 +948,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-      {/* Header */}
-      <header className="bg-brand-600 text-white p-4 shadow-md sticky top-0 z-20">
+     {/* Header (Solo Tab di navigazione) */}
+      <header className="bg-brand-600 p-3 shadow-md sticky top-0 z-20">
         <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Store className="w-6 h-6" />
-              <h1 className="text-xl font-semibold tracking-tight">Trova Rivendite</h1>
-            </div>
-            <button 
-              onClick={handleReset}
-              className="p-2 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all flex items-center justify-center"
-              aria-label="Resetta ricerca"
-              title="Resetta ricerca"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-
           <div className="flex bg-brand-700/50 p-1 rounded-xl overflow-x-auto [&::-webkit-scrollbar]:hidden">
             <button
               onClick={() => setActiveTab('search')}
