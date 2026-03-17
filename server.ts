@@ -2,10 +2,14 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { JSDOM } from 'jsdom';
-import { GoogleGenAI, Type } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
+
+// Verifica variabili d'ambiente all'avvio
+if (!process.env.GEMINI_API_KEY) {
+  console.warn("ATTENZIONE: GEMINI_API_KEY non configurata nelle variabili d'ambiente.");
+}
 
 app.use(express.json());
 
@@ -186,7 +190,9 @@ app.post('/api/search', async (req, res) => {
       const paginator = dom.window.document.querySelector('.ui-paginator');
       if (paginator) {
         const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
+        // Format usually: (1 di 10) or similar
         const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/);
+        
         const pages = Array.from(paginator.querySelectorAll('.ui-paginator-page'));
         const activePage = paginator.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '1';
         
@@ -259,6 +265,7 @@ app.post('/api/paginate', async (req, res) => {
         results.push(rowData);
       }
 
+      // Extract pagination info from the updated table HTML
       const paginator = dom.window.document.querySelector('.ui-paginator');
       if (paginator) {
         const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
@@ -278,79 +285,6 @@ app.post('/api/paginate', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to paginate' });
-  }
-});
-
-// --- NUOVA ROTTA GEMINI SICURA ---
-app.post('/api/enrich', async (req, res) => {
-  const { rivendita } = req.body;
-  
-  // Il server legge la chiave dalla "cassaforte" di Render
-  const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    console.error("GEMINI_API_KEY is missing nel server");
-    res.status(500).json({
-      openingHours: "Configurazione mancante",
-      phone: "Configurazione mancante",
-      email: "Configurazione mancante",
-      notes: "Chiave API non configurata sul server."
-    });
-    return;
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  const prompt = `Trova gli orari di apertura e le informazioni di contatto per la seguente rivendita di tabacchi in Italia:
-  Numero Rivendita: ${rivendita['Num. Rivendita']}
-  Indirizzo: ${rivendita['Indirizzo']}
-  Comune: ${rivendita['Comune']}
-  Provincia: ${rivendita['Prov.']}
-  
-  REGOLE IMPORTANTI:
-  1. Per gli orari di apertura, sii estremamente accurato. Se trovi orari diversi per giorni diversi, elencali uno per riga.
-  2. Per il numero di telefono, restituisci solo cifre, senza spazi.
-  3. Non includere il sito web.
-  
-  Usa Google Search per trovare informazioni reali e aggiornate.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            openingHours: { type: Type.STRING },
-            phone: { type: Type.STRING },
-            email: { type: Type.STRING },
-            notes: { type: Type.STRING }
-          },
-          required: ["openingHours", "phone"]
-        }
-      }
-    });
-
-    let text = response.text || '';
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(text || '{}');
-    
-    res.json({
-      openingHours: data.openingHours || "Non disponibile",
-      phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
-      email: data.email || "Non disponibile",
-      notes: data.notes || "Dettagli recuperati con successo."
-    });
-  } catch (error: any) {
-    console.error("Error enriching rivendita:", error);
-    res.status(500).json({
-      openingHours: "Non disponibile",
-      phone: "Non disponibile",
-      email: "Non disponibile",
-      notes: `Errore: ${error.message || 'Impossibile recuperare i dettagli'}`
-    });
   }
 });
 

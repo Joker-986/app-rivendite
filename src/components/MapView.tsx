@@ -63,31 +63,48 @@ export default function MapView({ results }: MapViewProps) {
         if (!isMounted) break;
         
         const res = results[i];
-        const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
+        const cleanIndirizzo = res['Indirizzo'].replace(/S\.N\.C\.|SNC/gi, '').trim();
+        const address = `${cleanIndirizzo}, ${res['Comune']}, ${res['Prov.']}, Italy`;
+        const fallbackAddress = `${res['Comune']}, ${res['Prov.']}, Italy`;
         
         try {
           if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
           
-          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`, {
-            headers: {
-              'Accept-Language': 'it',
-              'User-Agent': 'RivenditeApp/1.0'
-            }
-          });
+          let geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
           
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.length > 0) {
-              newGeocoded.push({
-                ...res,
-                lat: parseFloat(data[0].lat),
-                lon: parseFloat(data[0].lon)
-              });
-              setGeocodedResults([...newGeocoded]);
-            } else {
-              newNotFound.push(res);
-              setNotFoundResults([...newNotFound]);
-            }
+          const fetchGeocode = async (url: string) => {
+            return fetch(url, {
+              headers: {
+                'Accept-Language': 'it',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              }
+            });
+          };
+
+          let response = await fetchGeocode(geocodeUrl);
+          let data = response.ok ? await response.json() : [];
+
+          // Fallback if specific address fails
+          if ((!data || data.length === 0) && cleanIndirizzo !== res['Indirizzo']) {
+            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(res['Indirizzo'] + ', ' + res['Comune'] + ', ' + res['Prov.'] + ', Italy')}&limit=1`;
+            response = await fetchGeocode(geocodeUrl);
+            data = response.ok ? await response.json() : [];
+          }
+
+          // Second fallback: just Comune and Prov
+          if (!data || data.length === 0) {
+            geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fallbackAddress)}&limit=1`;
+            response = await fetchGeocode(geocodeUrl);
+            data = response.ok ? await response.json() : [];
+          }
+          
+          if (data && data.length > 0) {
+            newGeocoded.push({
+              ...res,
+              lat: parseFloat(data[0].lat),
+              lon: parseFloat(data[0].lon)
+            });
+            setGeocodedResults([...newGeocoded]);
           } else {
             newNotFound.push(res);
             setNotFoundResults([...newNotFound]);
@@ -171,7 +188,7 @@ export default function MapView({ results }: MapViewProps) {
                   
                   <div className="grid grid-cols-1 gap-2">
                     <a
-                      href={`https://maps.google.com/maps?daddr=${res.lat},${res.lon}`}
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${res.lat},${res.lon}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
@@ -195,11 +212,18 @@ export default function MapView({ results }: MapViewProps) {
         </p>
       )}
       
-      {notFoundResults.length > 0 && !isGeocoding && (
+      {notFoundResults.length > 0 && (
         <div className="mt-4 border-t border-slate-100 pt-4">
-          <div className="flex items-center gap-2 mb-3 text-amber-700">
-            <AlertTriangle className="w-4 h-4" />
-            <h4 className="text-sm font-bold uppercase tracking-wider">Rivendite non localizzate ({notFoundResults.length})</h4>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="w-4 h-4" />
+              <h4 className="text-sm font-bold uppercase tracking-wider">Rivendite non localizzate ({notFoundResults.length})</h4>
+            </div>
+            {isGeocoding && (
+              <span className="text-[10px] text-amber-600 animate-pulse font-medium">
+                Ricerca in corso...
+              </span>
+            )}
           </div>
           <div className="space-y-2">
             {notFoundResults.map((res, idx) => (

@@ -711,7 +711,7 @@ export default function App() {
           )}
           <div className="flex gap-2">
             <a
-              href={`https://maps.google.com/maps?daddr=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
@@ -1333,7 +1333,7 @@ export default function App() {
                           )}
                           
                           <a
-                            href={`https://maps.google.com/maps?daddr=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
