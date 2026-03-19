@@ -160,7 +160,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
   const isInGiro = isSaved(res);
-  const [showNavPicker, setShowNavPicker] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const extra = rubrica[id] || {
     stato: '',
     visitata: '',
@@ -176,13 +176,6 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   const prov = res['Prov.']?.trim() || '';
   const fullAddress = [street, city, prov].filter(Boolean).join(', ').trim();
   const encodedAddress = encodeURIComponent(fullAddress);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-  const navOptions = [
-    { name: 'Google Maps', icon: <MapIcon className="w-5 h-5 text-blue-600" />, url: `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}` },
-    { name: 'Waze', icon: <Navigation className="w-5 h-5 text-sky-500" />, url: `https://waze.com/ul?q=${encodedAddress}&navigate=yes` },
-    ...(isIOS ? [{ name: 'Apple Maps', icon: <MapPin className="w-5 h-5 text-slate-900" />, url: `http://maps.apple.com/?daddr=${encodedAddress}` }] : []),
-  ];
 
   const handleShare = async () => {
     const enriched = enrichedData[id];
@@ -226,7 +219,8 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       if (err instanceof Error && err.name === 'AbortError') return;
       try {
         await navigator.clipboard.writeText(shareText);
-        // Fallback silenzioso o con feedback non invasivo se necessario
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
       } catch (clipErr) {
         console.error('Errore durante la copia negli appunti:', clipErr);
       }
@@ -290,10 +284,13 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         <div className="flex gap-2">
           <button
             onClick={handleShare}
-            className="p-2 bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600 rounded-xl transition-all shrink-0"
+            className={`p-2 rounded-xl transition-all shrink-0 flex items-center gap-1 ${
+              isCopied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
+            }`}
             title="Condividi informazioni"
           >
-            <Share2 className="w-5 h-5" />
+            {isCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
+            {isCopied && <span className="text-[10px] font-bold uppercase">Copiato!</span>}
           </button>
 
           {activeTab === 'search' && (
@@ -569,7 +566,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => setShowNavPicker(true)}
+            onClick={() => { window.location.href = 'geo:0,0?q=' + encodedAddress; }}
             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm"
           >
             <Navigation className="w-3.5 h-3.5" />
@@ -585,52 +582,6 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             {isExpanded ? 'Chiudi' : 'Dettagli'}
           </button>
         </div>
-
-        {/* Navigation Picker Modal */}
-        {showNavPicker && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-slate-900">Scegli Navigatore</h3>
-                  <button 
-                    onClick={() => setShowNavPicker(false)}
-                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                  >
-                    <X className="w-5 h-5 text-slate-400" />
-                  </button>
-                </div>
-                
-                <div className="space-y-3">
-                  {navOptions.map((opt) => (
-                    <a
-                      key={opt.name}
-                      href={opt.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setShowNavPicker(false)}
-                      className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-brand-50 border border-slate-100 hover:border-brand-200 rounded-2xl transition-all group"
-                    >
-                      <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                        {opt.icon}
-                      </div>
-                      <span className="font-bold text-slate-700 group-hover:text-brand-700">{opt.name}</span>
-                      <ChevronRight className="w-4 h-4 text-slate-300 ml-auto group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-              <div className="p-4 bg-slate-50 border-t border-slate-100">
-                <button
-                  onClick={() => setShowNavPicker(false)}
-                  className="w-full py-4 bg-white text-slate-600 font-bold rounded-2xl text-sm hover:bg-slate-100 transition-all border border-slate-200"
-                >
-                  Chiudi
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {!enrichedData[id] && (
           enrichingId === id ? (
@@ -998,7 +949,6 @@ export default function App() {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedComune, setSelectedComune] = useState('');
   const [numRivendita, setNumRivendita] = useState('');
-  const [navPickerRes, setNavPickerRes] = useState<any>(null);
   const [tipoRiv, setTipoRiv] = useState('');
   const [statoRiv, setStatoRiv] = useState('');
   
@@ -2207,7 +2157,10 @@ export default function App() {
                           )}
                           
                           <button
-                            onClick={() => setNavPickerRes(res)}
+                            onClick={() => {
+                              const addr = [res['Indirizzo'], res['Comune'], res['Prov.']].filter(Boolean).join(', ');
+                              window.location.href = 'geo:0,0?q=' + encodeURIComponent(addr);
+                            }}
                             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                           >
                             <Navigation className="w-4 h-4" />
@@ -2720,56 +2673,6 @@ export default function App() {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Global Navigation Picker Modal for Search Results */}
-      {navPickerRes && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Scegli Navigatore</h3>
-                <button 
-                  onClick={() => setNavPickerRes(null)}
-                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                {[
-                  { name: 'Google Maps', icon: <MapIcon className="w-5 h-5 text-blue-600" />, url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}` },
-                  { name: 'Waze', icon: <Navigation className="w-5 h-5 text-sky-500" />, url: `https://waze.com/ul?q=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}&navigate=yes` },
-                  ...(/iPad|iPhone|iPod/.test(navigator.userAgent) ? [{ name: 'Apple Maps', icon: <MapPin className="w-5 h-5 text-slate-900" />, url: `http://maps.apple.com/?daddr=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}` }] : []),
-                ].map((opt) => (
-                  <a
-                    key={opt.name}
-                    href={opt.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setNavPickerRes(null)}
-                    className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-brand-50 border border-slate-100 hover:border-brand-200 rounded-2xl transition-all group"
-                  >
-                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                      {opt.icon}
-                    </div>
-                    <span className="font-bold text-slate-700 group-hover:text-brand-700">{opt.name}</span>
-                    <ChevronRight className="w-4 h-4 text-slate-300 ml-auto group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
-                  </a>
-                ))}
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-100">
-              <button
-                onClick={() => setNavPickerRes(null)}
-                className="w-full py-4 bg-white text-slate-600 font-bold rounded-2xl text-sm hover:bg-slate-100 transition-all border border-slate-200"
-              >
-                Chiudi
-              </button>
             </div>
           </div>
         </div>

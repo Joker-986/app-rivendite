@@ -3,6 +3,31 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+// Service Worker Registration and Update Detection
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((registration) => {
+      console.log('SW registered: ', registration);
+      
+      // Check for updates periodically
+      setInterval(() => {
+        registration.update();
+      }, 1000 * 60 * 60); // Check every hour
+    }).catch((registrationError) => {
+      console.log('SW registration failed: ', registrationError);
+    });
+
+    // Reload the page when a new service worker takes control
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        window.location.reload();
+        refreshing = true;
+      }
+    });
+  });
+}
+
 // Suppress benign Vite WebSocket errors in this environment
 if (typeof window !== 'undefined') {
   const isBenignError = (msg: string) => 

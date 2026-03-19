@@ -1,11 +1,13 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
 import { JSDOM } from 'jsdom';
 import { GoogleGenAI, Type } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
+const APP_VERSION = Date.now().toString(); // Versione dinamica basata sul timestamp di avvio server
 
 // Verifica variabili d'ambiente all'avvio
 if (!process.env.GEMINI_API_KEY) {
@@ -13,6 +15,34 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 app.use(express.json());
+
+// Anti-caching middleware for critical files
+app.use((req, res, next) => {
+  const url = req.url.split('?')[0];
+  if (url === '/sw.js' || url === '/index.html' || url === '/') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
+// Route dinamica per il Service Worker con iniezione della versione
+app.get('/sw.js', (req, res) => {
+  const swPath = path.join(process.cwd(), 'public', 'sw.js');
+  try {
+    let swContent = fs.readFileSync(swPath, 'utf8');
+    // Inietta la versione dinamica nel file
+    swContent = swContent.replace('{{VERSION}}', APP_VERSION);
+    
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(swContent);
+  } catch (err) {
+    console.error('Errore nel caricamento del Service Worker:', err);
+    res.status(404).send('Service Worker not found');
+  }
+});
 
 const BASE_URL = 'https://acciseonline8.adm.gov.it/ConsultazioneOnLineTabacchi/ricercaConcessioni/cerca-concessioni.xhtml';
 
