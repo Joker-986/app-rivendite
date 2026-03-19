@@ -178,40 +178,25 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   const fullAddress = [street, city, prov].filter(Boolean).join(', ').trim();
   const encodedAddress = encodeURIComponent(fullAddress);
 
-  const handleShare = async () => {
+  const shareText = React.useMemo(() => {
     const enriched = enrichedData[id];
-    
-    // Funzione dinamica per formattare i dati
-    const formatData = (obj: any, title: string) => {
-      let text = `--- ${title} ---\n`;
-      const skip = ['id', 'location', 'viewport', 'photos', 'exportedAt', 'version', 'isStore', 'storeNumber', 'lastDataVisita', 'lastOraVisita'];
-      
-      Object.entries(obj).forEach(([key, value]) => {
-        if (value && !skip.includes(key) && typeof value !== 'object') {
-          text += `${key}: ${value}\n`;
-        }
-      });
-      return text;
-    };
+    let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
+    text += `Indirizzo: ${res['Indirizzo']}\n`;
+    text += `Comune: ${res['Comune']} (${res['Prov.']})\n`;
+    if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
+    if (extra.telefono || (enriched && enriched.phone)) text += `Telefono: ${extra.telefono || enriched?.phone}\n`;
+    if (extra.mail || (enriched && enriched.email)) text += `Email: ${extra.mail || enriched?.email}\n`;
+    if (enriched && enriched.openingHours) text += `Orari: ${enriched.openingHours}\n`;
+    if (extra.note || (enriched && enriched.notes)) text += `Note: ${extra.note || enriched?.notes}\n`;
+    return text.trim();
+  }, [res, extra, enrichedData, id]);
 
-    let shareText = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    shareText += formatData(res, "DATI BASE");
-    
-    if (extra && Object.keys(extra).length > 0) {
-      shareText += "\n" + formatData(extra, "INFO CRM");
-    }
-    
-    if (enriched && Object.keys(enriched).length > 0) {
-      shareText += "\n" + formatData(enriched, "INFO EXTRA");
-    }
-
-    const finalString = shareText.trim();
-
+  const handleShare = async () => {
     // PRIMA E UNICA AZIONE PRINCIPALE: navigator.share
     if (navigator.share) {
       try {
         await navigator.share({
-          text: finalString
+          text: shareText
         });
         return; // Successo
       } catch (err) {
@@ -222,7 +207,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
     // FALLBACK SOLO IN CASO DI ERRORE O MANCANZA SUPPORTO
     try {
-      await navigator.clipboard.writeText(finalString);
+      await navigator.clipboard.writeText(shareText);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (clipErr) {
@@ -1108,11 +1093,9 @@ export default function App() {
       document.body.appendChild(a);
       a.click();
       
-      // Pulizia
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
+      // Pulizia immediata per Android Native Flow
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Errore durante l\'esportazione:', err);
     }
@@ -2635,7 +2618,7 @@ export default function App() {
                     <p>Rivendite Salvate: <span className="font-bold">{crmAnagrafiche.length}</span></p>
                     <p>Spazio Occupato: <span className="font-bold">{storageSize}</span></p>
                     <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
-                    <p>Versione App: <span className="font-bold">{DATA_VERSION} {swActive ? '(PWA Attiva)' : ''}</span></p>
+                    <p>Versione App: <span className="font-bold">{packageVersion.version} {swActive ? '(PWA Attiva)' : ''}</span></p>
                   </div>
                 </div>
 
