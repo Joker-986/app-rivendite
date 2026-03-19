@@ -1,5 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 
@@ -9,6 +26,12 @@ interface Option {
 }
 
 interface SearchResult {
+  'Prov.': string;
+  'Comune': string;
+  'Num. Rivendita': string;
+  'Indirizzo': string;
+  'Tipo Rivendita'?: string;
+  'Stato'?: string;
   [key: string]: any;
 }
 
@@ -17,6 +40,8 @@ export interface RivenditaExtra {
   visitata: 'Si' | 'Da Rivisitare' | 'No' | '';
   dataVisita?: string;
   oraVisita?: string;
+  lastDataVisita?: string;
+  lastOraVisita?: string;
   dataRivisita?: string;
   oraRivisita?: string;
   giornoLevata: 'Lunedì' | 'Martedì' | 'Mercoledì' | 'Giovedì' | 'Venerdì' | '';
@@ -29,6 +54,7 @@ export interface RivenditaExtra {
   noteOrdine?: string;
   dataOrdine?: string;
   ordineEvaso?: boolean;
+  note?: string;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -56,6 +82,620 @@ const formatGoogleCalendarDate = (dateString: string, timeString?: string) => {
   return `${start}/${end}`;
 };
 
+const getRivenditaId = (res: SearchResult) => {
+  return `${res['Prov.']}_${res['Comune']}_${res['Num. Rivendita']}`;
+};
+
+interface RivenditaCardProps {
+  res: SearchResult;
+  idx: number;
+  isCrmTab?: boolean;
+  activeTab: string;
+  expandedCardId: string | null;
+  isSaved: (res: SearchResult) => boolean;
+  rubrica: RubricaData;
+  enrichedData: Record<string, EnrichedDetails>;
+  enrichingId: string | null;
+  toggleSave: (res: SearchResult) => void;
+  removeFromCrm: (res: SearchResult) => void;
+  initiateVisitToggle: (id: string) => void;
+  handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: string | boolean) => void;
+  toggleExpandCard: (id: string) => void;
+  handleEnrich: (id: string, res: SearchResult) => void;
+  addToCrm: (res: SearchResult) => void;
+  setExpandedCardId: (id: string | null) => void;
+  dragHandleProps?: any;
+}
+
+interface SortableCardProps extends RivenditaCardProps {}
+
+const RivenditaCard: React.FC<RivenditaCardProps> = ({
+  res,
+  idx,
+  isCrmTab = false,
+  activeTab,
+  expandedCardId,
+  isSaved,
+  rubrica,
+  enrichedData,
+  enrichingId,
+  toggleSave,
+  removeFromCrm,
+  initiateVisitToggle,
+  handleRubricaUpdate,
+  toggleExpandCard,
+  handleEnrich,
+  addToCrm,
+  setExpandedCardId,
+  dragHandleProps
+}) => {
+  const id = getRivenditaId(res);
+  const isExpanded = expandedCardId === id;
+  const isInGiro = isSaved(res);
+  const extra = rubrica[id] || {
+    stato: '',
+    visitata: '',
+    giornoLevata: '',
+    riferimento: '',
+    telefono: '',
+    pIva: '',
+    mail: ''
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
+      <div className="flex justify-between items-start">
+        <div className="flex items-start gap-2">
+          {activeTab === 'giro' && (
+            <div className="mt-1 text-slate-300 cursor-grab active:cursor-grabbing p-1 -m-1" {...dragHandleProps}>
+              <GripVertical className="w-4 h-4" />
+            </div>
+          )}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
+                Riv. {res['Num. Rivendita']}
+              </span>
+              <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {res['Stato']}
+              </span>
+              {isCrmTab && extra.stato && (
+                <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
+                  extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
+                  extra.stato === 'RIP' ? 'bg-slate-100 text-slate-700' :
+                  'bg-amber-100 text-amber-700'
+                }`}>
+                  {extra.stato} (CRM)
+                </span>
+              )}
+            </div>
+            <h3 className="font-medium text-slate-900 truncate pr-4">
+              {res['Comune']} ({res['Prov.']})
+            </h3>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {activeTab === 'search' && (
+            <button
+              onClick={() => toggleSave(res)}
+              className={`p-2 rounded-xl transition-all ${
+                isInGiro 
+                  ? 'bg-brand-100 text-brand-600' 
+                  : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
+              }`}
+              title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
+            >
+              <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
+            </button>
+          )}
+          
+          {(isCrmTab || activeTab === 'rip') && (
+            <>
+              <button
+                onClick={() => toggleSave(res)}
+                className={`p-2 rounded-xl transition-all ${
+                  isInGiro 
+                    ? 'bg-brand-100 text-brand-600' 
+                    : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
+                }`}
+                title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
+              >
+                <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
+              </button>
+              <button
+                onClick={() => removeFromCrm(res)}
+                className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all shrink-0"
+                title="Elimina dal CRM"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </>
+          )}
+
+          {activeTab === 'giro' && (
+            <button
+              onClick={() => toggleSave(res)}
+              className="p-2 bg-pink-50 text-pink-500 rounded-xl hover:bg-pink-100 transition-all shrink-0"
+              title="Rimuovi dal giro visite"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
+        <div className="flex items-start gap-2">
+          <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+          <span className="leading-snug">{res['Indirizzo']}</span>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-50 mt-1">
+        <div className="text-xs">
+          <span className="text-slate-400 block mb-0.5">Tipo</span>
+          <span className="font-medium text-slate-700">{res['Tipo Rivendita']}</span>
+        </div>
+        <div className="text-xs">
+          <span className="text-slate-400 block mb-0.5">Distr. Automatico</span>
+          <span className="font-medium text-slate-700">{res['Distr. Automatico']}</span>
+        </div>
+        {isCrmTab && extra.visitata && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Visitata</span>
+            <span className="font-medium text-slate-700">{extra.visitata}</span>
+          </div>
+        )}
+        {isCrmTab && extra.dataVisita && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Data Visita</span>
+            <span className="font-medium text-slate-700">
+              {new Date(extra.dataVisita).toLocaleDateString('it-IT')}
+              {extra.oraVisita ? ` alle ${extra.oraVisita}` : ''}
+            </span>
+          </div>
+        )}
+        {isCrmTab && extra.dataRivisita && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Data Rivisita</span>
+            <span className="font-medium text-slate-700">
+              {new Date(extra.dataRivisita).toLocaleDateString('it-IT')}
+              {extra.oraRivisita ? ` alle ${extra.oraRivisita}` : ''}
+            </span>
+          </div>
+        )}
+        {isCrmTab && extra.giornoLevata && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Giorno Levata</span>
+            <span className="font-medium text-slate-700">{extra.giornoLevata}</span>
+          </div>
+        )}
+        {isCrmTab && extra.riferimento && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Riferimento</span>
+            <span className="font-medium text-slate-700">{extra.riferimento}</span>
+          </div>
+        )}
+        {isCrmTab && extra.telefono && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Telefono</span>
+            <span className="font-medium text-slate-700">{extra.telefono}</span>
+          </div>
+        )}
+        {isCrmTab && extra.pIva && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">P. IVA</span>
+            <span className="font-medium text-slate-700">{extra.pIva}</span>
+          </div>
+        )}
+        
+        {(extra.visitata === 'Si' || extra.lastDataVisita) && (
+          <div className={`text-xs col-span-2 p-2 rounded-lg ${extra.visitata === 'Si' ? 'bg-emerald-50 border border-emerald-100' : 'bg-slate-50 border border-slate-100'}`}>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <Clock className={`w-3 h-3 ${extra.visitata === 'Si' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span className={`font-bold uppercase tracking-wider text-[9px] ${extra.visitata === 'Si' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}
+              </span>
+            </div>
+            <span className="font-medium text-slate-700">
+              {extra.visitata === 'Si' 
+                ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
+                : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
+              }
+              {extra.visitata === 'Si' 
+                ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '')
+                : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')
+              }
+            </span>
+          </div>
+        )}
+
+        {isCrmTab && extra.richiestaOrdine && (
+          <div className="text-xs col-span-2">
+            <span className="text-slate-400 block mb-0.5">Richiesta Ordine</span>
+            <span className="font-medium text-slate-700">
+              {extra.dataOrdine ? `Inserito il ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
+              {extra.ordineEvaso ? (
+                <span className="text-emerald-600 font-bold">Evaso</span>
+              ) : (
+                <span className="text-amber-600 font-bold">Da evadere</span>
+              )}
+            </span>
+            {extra.noteOrdine && (
+              <div className="mt-1 p-2 bg-slate-100 rounded text-slate-600 italic">
+                {extra.noteOrdine}
+              </div>
+            )}
+          </div>
+        )}
+        {isCrmTab && extra.mail && (
+          <div className="text-xs col-span-2">
+            <span className="text-slate-400 block mb-0.5">Mail</span>
+            <span className="font-medium text-slate-700">{extra.mail}</span>
+          </div>
+        )}
+      </div>
+
+      {enrichedData[id] && (
+        <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-brand-600" />
+            </div>
+            <div className="flex-1">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
+              <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-line">
+                {enrichedData[id].openingHours}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
+                <Phone className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
+                <a href={`tel:${enrichedData[id].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
+                  {enrichedData[id].phone}
+                </a>
+              </div>
+            </div>
+
+            {enrichedData[id].email && enrichedData[id].email !== 'Non disponibile' && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4 text-brand-600" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
+                  <a href={`mailto:${enrichedData[id].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
+                    {enrichedData[id].email}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {enrichedData[id].notes && enrichedData[id].notes !== 'Non disponibile' && (
+            <div className="pt-3 border-t border-slate-200/60">
+              <div className="flex gap-2 items-start">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-slate-500 italic leading-normal">
+                  {enrichedData[id].notes}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-2 pt-4 border-t border-slate-50 flex flex-col gap-2">
+        {activeTab === 'giro' && (
+          <button
+            onClick={() => initiateVisitToggle(id)}
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
+              extra.visitata === 'Si' 
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100' 
+                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            {extra.visitata === 'Si' ? 'Aggiorna Orario Visita' : 'Rivendita visitata'}
+          </button>
+        )}
+        {!enrichedData[id] && (
+          enrichingId === id ? (
+            <button
+              disabled
+              className="w-full text-center text-sm font-semibold text-slate-400 bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Caricamento dettagli...
+            </button>
+          ) : (
+            <button
+              onClick={() => handleEnrich(id, res)}
+              className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
+            >
+              <Clock className="w-4 h-4" />
+              Mostra orari e contatti
+            </button>
+          )
+        )}
+        {isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso && (
+          <button
+            onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm"
+          >
+            <Check className="w-4 h-4" />
+            Segna Ordine come Evaso
+          </button>
+        )}
+        {isCrmTab && extra.dataRivisita && (
+          <a
+            href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+          >
+            <Calendar className="w-4 h-4" />
+            Aggiungi a Google Calendar
+          </a>
+        )}
+        <div className="flex gap-2">
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
+          >
+            <Navigation className="w-4 h-4" />
+            Naviga
+          </a>
+          <button
+            onClick={() => toggleExpandCard(id)}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
+              isExpanded ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {isExpanded ? 'Chiudi Dettagli' : (isCrmTab ? 'Modifica Dettagli' : 'Dettagli CRM')}
+          </button>
+        </div>
+      </div>
+
+      {/* Expandable Form */}
+      {isExpanded && (
+        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
+          <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
+            <BookOpen className="w-4 h-4 text-brand-600" />
+            Informazioni Extra
+          </h4>
+          
+          {(extra.lastDataVisita || (extra.visitata === 'Si' && extra.dataVisita)) && (
+            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-2">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-[10px] uppercase tracking-wider mb-1">
+                <Clock className="w-3.5 h-3.5" />
+                {extra.visitata === 'Si' ? 'VISITATA IL' : 'ULTIMA VISITA'}
+              </div>
+              <p className="text-xs text-emerald-700">
+                Data: <span className="font-bold">
+                  {extra.visitata === 'Si' 
+                    ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
+                    : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
+                  }
+                </span> alle <span className="font-bold">
+                  {extra.visitata === 'Si' ? extra.oraVisita : extra.lastOraVisita}
+                </span>
+              </p>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Stato</label>
+              <select
+                value={extra.stato}
+                onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              >
+                <option value="">Seleziona</option>
+                <option value="Attivata">Attivata</option>
+                <option value="Non Attiva">Non Attiva</option>
+                <option value="Basso Rendente">Basso Rendente</option>
+                <option value="RIP">RIP</option>
+              </select>
+            </div>
+
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Data e Ora Prossima Visita (Programmata)</label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={extra.dataRivisita || ''}
+                  onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
+                  className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                />
+                <select
+                  value={extra.oraRivisita || ''}
+                  onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
+                  className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                >
+                  <option value="">Ora</option>
+                  {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
+                    const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
+                    const m = ((i % 4) * 15).toString().padStart(2, '0');
+                    const time = `${h}:${m}`;
+                    return <option key={time} value={time}>{time}</option>;
+                  })}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Giorno Levata</label>
+              <select
+                value={extra.giornoLevata}
+                onChange={(e) => handleRubricaUpdate(id, 'giornoLevata', e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              >
+                <option value="">Seleziona</option>
+                <option value="Lunedì">Lunedì</option>
+                <option value="Martedì">Martedì</option>
+                <option value="Mercoledì">Mercoledì</option>
+                <option value="Giovedì">Giovedì</option>
+                <option value="Venerdì">Venerdì</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Riferimento (Referente)</label>
+              <input
+                type="text"
+                value={extra.riferimento}
+                onChange={(e) => handleRubricaUpdate(id, 'riferimento', e.target.value)}
+                placeholder="Nome del referente"
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Telefono</label>
+              <input
+                type="tel"
+                value={extra.telefono}
+                onChange={(e) => handleRubricaUpdate(id, 'telefono', e.target.value)}
+                placeholder="Numero di telefono"
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">P. IVA</label>
+              <input
+                type="text"
+                value={extra.pIva}
+                onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
+                placeholder="Partita IVA (solo numeri)"
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Mail</label>
+              <input
+                type="email"
+                value={extra.mail}
+                onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
+                placeholder="Indirizzo email"
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Note</label>
+              <textarea
+                value={extra.note || ''}
+                onChange={(e) => handleRubricaUpdate(id, 'note', e.target.value)}
+                placeholder="Inserisci note libere..."
+                className="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
+              />
+            </div>
+
+            <div className="pt-2 border-t border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={extra.richiestaOrdine || false}
+                  onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
+                  className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                />
+                <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
+              </label>
+            </div>
+
+            {extra.richiestaOrdine && (
+              <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
+                  <input
+                    type="date"
+                    value={extra.dataOrdine || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Note ordine (articoli da ordinare)</label>
+                  <textarea
+                    value={extra.noteOrdine || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
+                    placeholder="Inserisci qui gli articoli da ordinare..."
+                    rows={3}
+                    className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={extra.ordineEvaso || false}
+                    onChange={(e) => handleRubricaUpdate(id, 'ordineEvaso', e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
+                </label>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => {
+              if (!isCrmTab && activeTab !== 'rip') {
+                addToCrm(res);
+              }
+              setExpandedCardId(null);
+            }}
+            className="w-full mt-4 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
+          >
+            {(isCrmTab || activeTab === 'rip') ? 'Salva Modifiche' : 'Salva nel CRM'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SortableCard: React.FC<SortableCardProps> = (props) => {
+  const id = getRivenditaId(props.res);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <RivenditaCard {...props} dragHandleProps={listeners} />
+    </div>
+  );
+};
+
 export default function App() {
   const [session, setSession] = useState<{ viewState: string; cookies: string; submitName: string } | null>(null);
   
@@ -80,9 +720,15 @@ export default function App() {
   const [enrichedData, setEnrichedData] = useState<Record<string, EnrichedDetails>>({});
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
-  const [activeTab, setActiveTab] = useState<'search' | 'saved' | 'crm' | 'crm_br' | 'rip'>('search');
-  const [savedRivendite, setSavedRivendite] = useState<SearchResult[]>(() => {
-    const saved = localStorage.getItem('savedRivendite');
+  const [activeTab, setActiveTab] = useState<string>('search');
+  const [rivenditaFilter, setRivenditaFilter] = useState('');
+  const [comuneFilter, setComuneFilter] = useState('');
+  const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => {
+    const saved = localStorage.getItem('giroVisite');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => {
+    const saved = localStorage.getItem('crmAnagrafiche');
     return saved ? JSON.parse(saved) : [];
   });
   const [rubrica, setRubrica] = useState<RubricaData>(() => {
@@ -90,6 +736,10 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [revisitModalId, setRevisitModalId] = useState<string | null>(null);
+  const [showConfirmVisitModal, setShowConfirmVisitModal] = useState(false);
+  const [showClearGiroConfirmModal, setShowClearGiroConfirmModal] = useState(false);
+  const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
   const [rubricaSort, setRubricaSort] = useState<string>('none');
   const [loading, setLoading] = useState(false);
@@ -98,8 +748,12 @@ export default function App() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('savedRivendite', JSON.stringify(savedRivendite));
-  }, [savedRivendite]);
+    localStorage.setItem('giroVisite', JSON.stringify(giroVisite));
+  }, [giroVisite]);
+
+  useEffect(() => {
+    localStorage.setItem('crmAnagrafiche', JSON.stringify(crmAnagrafiche));
+  }, [crmAnagrafiche]);
 
   useEffect(() => {
     localStorage.setItem('rubrica', JSON.stringify(rubrica));
@@ -185,7 +839,27 @@ export default function App() {
       if (!res.ok) throw new Error('Failed to fetch comuni');
       const data = await res.json();
       setSession(prev => prev ? { ...prev, viewState: data.viewState } : null);
-      setComuni(data.comuni);
+      
+      // Trova il nome della provincia selezionata
+      const provinceOption = provinces.find(p => p.value === province);
+      const provinceLabel = provinceOption?.label || '';
+      
+      // Cerca il capoluogo nell'elenco dei comuni (solitamente ha lo stesso nome della provincia)
+      const capoluogo = data.comuni.find((c: Option) => 
+        c.label.toUpperCase() === provinceLabel.toUpperCase()
+      );
+
+      if (capoluogo) {
+        // Crea l'elenco con il capoluogo in cima, un separatore e poi l'elenco completo
+        const modifiedComuni = [
+          { value: capoluogo.value, label: capoluogo.label },
+          { value: 'separator', label: '──────────' },
+          ...data.comuni
+        ];
+        setComuni(modifiedComuni);
+      } else {
+        setComuni(data.comuni);
+      }
     } catch (err) {
       setError('Errore nel caricamento dei comuni.');
     } finally {
@@ -296,7 +970,7 @@ export default function App() {
   };
 
   const isSaved = (res: SearchResult) => {
-    return savedRivendite.some(s => 
+    return giroVisite.some(s => 
       s['Num. Rivendita'] === res['Num. Rivendita'] && 
       s['Comune'] === res['Comune'] && 
       s['Prov.'] === res['Prov.']
@@ -304,19 +978,27 @@ export default function App() {
   };
 
   const toggleSave = (res: SearchResult) => {
+    const id = getRivenditaId(res);
     if (isSaved(res)) {
-      setSavedRivendite(prev => prev.filter(s => 
+      setGiroVisite(prev => prev.filter(s => 
         !(s['Num. Rivendita'] === res['Num. Rivendita'] && 
           s['Comune'] === res['Comune'] && 
           s['Prov.'] === res['Prov.'])
       ));
     } else {
-      setSavedRivendite(prev => [...prev, res]);
+      setGiroVisite(prev => [...prev, res]);
+      // Reset visit status when re-planned
+      const existing = rubrica[id];
+      if (existing?.visitata === 'Si') {
+        handleRubricaMultiUpdate(id, {
+          visitata: 'No',
+          lastDataVisita: existing.dataVisita,
+          lastOraVisita: existing.oraVisita
+        });
+      } else {
+        handleRubricaUpdate(id, 'visitata', 'No');
+      }
     }
-  };
-
-  const getRivenditaId = (res: SearchResult) => {
-    return `${res['Prov.']}_${res['Comune']}_${res['Num. Rivendita']}`;
   };
 
   const handleRubricaUpdate = (id: string, field: keyof RivenditaExtra, value: string | boolean) => {
@@ -351,13 +1033,90 @@ export default function App() {
             dataOrdine: '',
             ordineEvaso: false,
             oraVisita: '',
-            oraRivisita: ''
+            oraRivisita: '',
+            lastDataVisita: '',
+            lastOraVisita: ''
           }),
           [field]: value,
           isSavedToRubrica
         }
       };
     });
+  };
+
+  const handleRubricaMultiUpdate = (id: string, updates: Partial<RivenditaExtra>) => {
+    setRubrica(prev => {
+      const existing = prev[id];
+      let isSavedToRubrica = existing?.isSavedToRubrica;
+      
+      if (isSavedToRubrica === undefined) {
+        if (updates.isSavedToRubrica !== undefined) {
+          isSavedToRubrica = updates.isSavedToRubrica as boolean;
+        } else {
+          const hadData = existing ? Object.entries(existing).some(([key, val]) => key !== 'isSavedToRubrica' && val !== '') : false;
+          isSavedToRubrica = hadData;
+        }
+      } else if (updates.isSavedToRubrica !== undefined) {
+        isSavedToRubrica = updates.isSavedToRubrica as boolean;
+      }
+
+      return {
+        ...prev,
+        [id]: {
+          ...(existing || {
+            stato: '',
+            visitata: '',
+            giornoLevata: '',
+            riferimento: '',
+            telefono: '',
+            pIva: '',
+            mail: '',
+            richiestaOrdine: false,
+            noteOrdine: '',
+            dataOrdine: '',
+            ordineEvaso: false,
+            oraVisita: '',
+            oraRivisita: '',
+            lastDataVisita: '',
+            lastOraVisita: ''
+          }),
+          ...updates,
+          isSavedToRubrica
+        }
+      };
+    });
+  };
+
+  const initiateVisitToggle = (id: string) => {
+    setPendingVisitId(id);
+    setShowConfirmVisitModal(true);
+  };
+
+  const confirmVisit = () => {
+    if (!pendingVisitId) return;
+    const id = pendingVisitId;
+    const existing = rubrica[id];
+    
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    
+    const updates: Partial<RivenditaExtra> = {
+      visitata: 'Si',
+      dataVisita: dateStr,
+      oraVisita: timeStr
+    };
+
+    // If there was a previous visit, move it to lastDataVisita
+    if (existing?.dataVisita) {
+      updates.lastDataVisita = existing.dataVisita;
+      updates.lastOraVisita = existing.oraVisita || '';
+    }
+
+    handleRubricaMultiUpdate(id, updates);
+    setRevisitModalId(id);
+    setShowConfirmVisitModal(false);
+    setPendingVisitId(null);
   };
 
   const toggleExpandCard = (id: string) => {
@@ -377,7 +1136,7 @@ export default function App() {
 
     const rows = rubricaEntries.map(([id, extra]) => {
       const [prov, comune, num] = id.split('_');
-      const savedRes = savedRivendite.find(r => getRivenditaId(r) === id);
+      const savedRes = giroVisite.find(r => getRivenditaId(r) === id);
       
       return [
         prov || '',
@@ -425,36 +1184,130 @@ export default function App() {
     return extra.isSavedToRubrica === true;
   };
 
-  const salvatiList = savedRivendite.filter(res => !hasRubricaData(getRivenditaId(res)));
+  useEffect(() => {
+    // Migration: if crmAnagrafiche is empty but giroVisite has items with rubrica data,
+    // populate crmAnagrafiche. This handles the transition from the old 'savedRivendite' system.
+    if (crmAnagrafiche.length === 0 && giroVisite.length > 0) {
+      const itemsWithData = giroVisite.filter(res => {
+        const id = getRivenditaId(res);
+        return rubrica[id]?.isSavedToRubrica === true;
+      });
+      if (itemsWithData.length > 0) {
+        setCrmAnagrafiche(itemsWithData);
+      }
+    }
+  }, []);
+
+  const removeFromCrm = (res: SearchResult) => {
+    const id = getRivenditaId(res);
+    if (window.confirm(`Sei sicuro di voler eliminare la rivendita ${res['Num. Rivendita']} dal CRM? Verranno eliminati anche tutti i dati salvati.`)) {
+      setCrmAnagrafiche(prev => prev.filter(s => getRivenditaId(s) !== id));
+      setRubrica(prev => {
+        const newRubrica = { ...prev };
+        delete newRubrica[id];
+        return newRubrica;
+      });
+      setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
+    }
+  };
+
+  const addToCrm = (res: SearchResult) => {
+    const id = getRivenditaId(res);
+    if (!crmAnagrafiche.some(s => getRivenditaId(s) === id)) {
+      setCrmAnagrafiche(prev => [...prev, res]);
+    }
+    handleRubricaUpdate(id, 'isSavedToRubrica', true);
+    // Remove from Giro Visite automatically when saved to CRM
+    setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
+  };
+
+  const clearGiro = () => {
+    setGiroVisite([]);
+    setShowClearGiroConfirmModal(false);
+  };
+
+  const giroVisiteList = giroVisite;
   
-  const allCrmList = savedRivendite.filter(res => hasRubricaData(getRivenditaId(res)));
+  const allCrmList = crmAnagrafiche;
   
   const crmList = allCrmList.filter(res => {
     const stato = rubrica[getRivenditaId(res)]?.stato;
-    return stato !== 'RIP' && stato !== 'Basso Rendente';
-  });
-
-  const crmBrList = allCrmList.filter(res => {
-    return rubrica[getRivenditaId(res)]?.stato === 'Basso Rendente';
+    return stato !== 'RIP';
   });
 
   const ripList = allCrmList.filter(res => {
     return rubrica[getRivenditaId(res)]?.stato === 'RIP';
   });
 
-  const getCurrentCrmList = () => {
-    if (activeTab === 'crm_br') return crmBrList;
-    if (activeTab === 'rip') return ripList;
-    return crmList;
+  // Province dinamiche dal CRM
+  const provincesInCrm = Array.from(new Set(crmList.map(res => res['Prov.']))).sort();
+
+  const getOrderedTabs = () => {
+    const tabs = ['search', 'giro', 'crm'];
+    provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
+    tabs.push('rip');
+    return tabs;
   };
-  
-  const filteredAndSortedCrmList = getCurrentCrmList()
-    .filter(res => {
-      if (activeTab !== 'crm') return true;
-      if (!rubricaFilterStato) return true;
-      return rubrica[getRivenditaId(res)]?.stato === rubricaFilterStato;
-    })
-    .sort((a, b) => {
+
+  const handleSwipe = (direction: 'left' | 'right') => {
+    const tabs = getOrderedTabs();
+    const currentIndex = tabs.indexOf(activeTab);
+    if (direction === 'left' && currentIndex < tabs.length - 1) {
+      setActiveTab(tabs[currentIndex + 1]);
+      setRivenditaFilter('');
+      setComuneFilter('');
+    } else if (direction === 'right' && currentIndex > 0) {
+      setActiveTab(tabs[currentIndex - 1]);
+      setRivenditaFilter('');
+      setComuneFilter('');
+    }
+  };
+
+  const getUniqueComuniForTab = () => {
+    let list: SearchResult[] = [];
+    if (activeTab === 'search') return [];
+    if (activeTab === 'giro') list = giroVisiteList;
+    else if (activeTab === 'crm') list = crmList;
+    else if (activeTab === 'rip') list = ripList;
+    else if (activeTab.startsWith('prov_')) {
+      const prov = activeTab.replace('prov_', '');
+      list = crmList.filter(res => res['Prov.'] === prov);
+    }
+    
+    // Create strings like "Comune (Prov.)"
+    const formattedComuni = list.map(res => `${res['Comune']} (${res['Prov.']})`);
+    return Array.from(new Set(formattedComuni)).sort();
+  };
+
+  const getCurrentList = () => {
+    let list: SearchResult[] = [];
+    if (activeTab === 'search') return results || [];
+    if (activeTab === 'giro') list = giroVisiteList;
+    else if (activeTab === 'crm') list = crmList;
+    else if (activeTab === 'rip') list = ripList;
+    else if (activeTab.startsWith('prov_')) {
+      const prov = activeTab.replace('prov_', '');
+      list = crmList.filter(res => res['Prov.'] === prov);
+    }
+
+    // Filtro per numero rivendita
+    if (rivenditaFilter) {
+      list = list.filter(res => res['Num. Rivendita'].toString().includes(rivenditaFilter));
+    }
+
+    // Filtro per comune
+    if (comuneFilter) {
+      list = list.filter(res => `${res['Comune']} (${res['Prov.']})` === comuneFilter);
+    }
+
+    return list;
+  };
+
+  const getSortedList = () => {
+    const list = getCurrentList();
+    if (activeTab === 'search') return list;
+    
+    return [...list].sort((a, b) => {
       if (rubricaSort === 'none') return 0;
       const idA = getRivenditaId(a);
       const idB = getRivenditaId(b);
@@ -473,477 +1326,49 @@ export default function App() {
       }
       return 0;
     });
+  };
 
-  const renderCard = (res: SearchResult, idx: number, isCrmTab: boolean = false) => {
-    const id = getRivenditaId(res);
-    const isExpanded = expandedCardId === id;
-    const extra = rubrica[id] || {
-      stato: '',
-      visitata: '',
-      giornoLevata: '',
-      riferimento: '',
-      telefono: '',
-      pIva: '',
-      mail: ''
-    };
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-    return (
-      <div key={id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
-                Riv. {res['Num. Rivendita']}
-              </span>
-              <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-              }`}>
-                {res['Stato']}
-              </span>
-              {isCrmTab && extra.stato && (
-                <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
-                  extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
-                  extra.stato === 'RIP' ? 'bg-slate-100 text-slate-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
-                  {extra.stato} (CRM)
-                </span>
-              )}
-            </div>
-            <h3 className="font-medium text-slate-900 truncate pr-4">
-              {res['Comune']} ({res['Prov.']})
-            </h3>
-          </div>
-          <button
-            onClick={() => toggleSave(res)}
-            className="p-2 bg-pink-50 text-pink-500 rounded-xl hover:bg-pink-100 transition-all shrink-0"
-            title={isCrmTab ? "Rimuovi dalla rubrica e dai salvati" : "Rimuovi dai salvati"}
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-        </div>
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      setGiroVisite((items) => {
+        const oldIndex = items.findIndex(item => getRivenditaId(item) === active.id);
+        const newIndex = items.findIndex(item => getRivenditaId(item) === over.id);
         
-        <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
-          <div className="flex items-start gap-2">
-            <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-            <span className="leading-snug">{res['Indirizzo']}</span>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-50 mt-1">
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Tipo</span>
-            <span className="font-medium text-slate-700">{res['Tipo Rivendita']}</span>
-          </div>
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Distr. Automatico</span>
-            <span className="font-medium text-slate-700">{res['Distr. Automatico']}</span>
-          </div>
-          {isCrmTab && extra.visitata && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Visitata</span>
-              <span className="font-medium text-slate-700">{extra.visitata}</span>
-            </div>
-          )}
-          {isCrmTab && extra.dataVisita && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Data Visita</span>
-              <span className="font-medium text-slate-700">
-                {new Date(extra.dataVisita).toLocaleDateString('it-IT')}
-                {extra.oraVisita ? ` alle ${extra.oraVisita}` : ''}
-              </span>
-            </div>
-          )}
-          {isCrmTab && extra.dataRivisita && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Data Rivisita</span>
-              <span className="font-medium text-slate-700">
-                {new Date(extra.dataRivisita).toLocaleDateString('it-IT')}
-                {extra.oraRivisita ? ` alle ${extra.oraRivisita}` : ''}
-              </span>
-            </div>
-          )}
-          {isCrmTab && extra.giornoLevata && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Giorno Levata</span>
-              <span className="font-medium text-slate-700">{extra.giornoLevata}</span>
-            </div>
-          )}
-          {isCrmTab && extra.riferimento && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Riferimento</span>
-              <span className="font-medium text-slate-700">{extra.riferimento}</span>
-            </div>
-          )}
-          {isCrmTab && extra.telefono && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">Telefono</span>
-              <span className="font-medium text-slate-700">{extra.telefono}</span>
-            </div>
-          )}
-          {isCrmTab && extra.pIva && (
-            <div className="text-xs">
-              <span className="text-slate-400 block mb-0.5">P. IVA</span>
-              <span className="font-medium text-slate-700">{extra.pIva}</span>
-            </div>
-          )}
-          {isCrmTab && extra.richiestaOrdine && (
-            <div className="text-xs col-span-2">
-              <span className="text-slate-400 block mb-0.5">Richiesta Ordine</span>
-              <span className="font-medium text-slate-700">
-                {extra.dataOrdine ? `Inserito il ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
-                {extra.ordineEvaso ? (
-                  <span className="text-emerald-600 font-bold">Evaso</span>
-                ) : (
-                  <span className="text-amber-600 font-bold">Da evadere</span>
-                )}
-              </span>
-              {extra.noteOrdine && (
-                <div className="mt-1 p-2 bg-slate-100 rounded text-slate-600 italic">
-                  {extra.noteOrdine}
-                </div>
-              )}
-            </div>
-          )}
-          {isCrmTab && extra.mail && (
-            <div className="text-xs col-span-2">
-              <span className="text-slate-400 block mb-0.5">Mail</span>
-              <span className="font-medium text-slate-700">{extra.mail}</span>
-            </div>
-          )}
-        </div>
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
-        {enrichedData[id] && (
-          <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                <Clock className="w-4 h-4 text-brand-600" />
-              </div>
-              <div className="flex-1">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
-                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-line">
-                  {enrichedData[id].openingHours}
-                </p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                  <Phone className="w-4 h-4 text-brand-600" />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                  <a href={`tel:${enrichedData[id].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
-                    {enrichedData[id].phone}
-                  </a>
-                </div>
-              </div>
-
-              {enrichedData[id].email && enrichedData[id].email !== 'Non disponibile' && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                    <Mail className="w-4 h-4 text-brand-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                    <a href={`mailto:${enrichedData[id].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
-                      {enrichedData[id].email}
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {enrichedData[id].notes && enrichedData[id].notes !== 'Non disponibile' && (
-              <div className="pt-3 border-t border-slate-200/60">
-                <div className="flex gap-2 items-start">
-                  <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-slate-500 italic leading-normal">
-                    {enrichedData[id].notes}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-2 pt-4 border-t border-slate-50 flex flex-col gap-2">
-          {!enrichedData[id] && (
-            enrichingId === id ? (
-              <button
-                disabled
-                className="w-full text-center text-sm font-semibold text-slate-400 bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-              >
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Caricamento dettagli...
-              </button>
-            ) : (
-              <button
-                onClick={() => handleEnrich(id, res)}
-                className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
-              >
-                <Clock className="w-4 h-4" />
-                Mostra orari e contatti
-              </button>
-            )
-          )}
-          {isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso && (
-            <button
-              onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm"
-            >
-              <Check className="w-4 h-4" />
-              Segna Ordine come Evaso
-            </button>
-          )}
-          {isCrmTab && extra.dataRivisita && (
-            <a
-              href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-            >
-              <Calendar className="w-4 h-4" />
-              Aggiungi a Google Calendar
-            </a>
-          )}
-          <div className="flex gap-2">
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-            >
-              <Navigation className="w-4 h-4" />
-              Naviga
-            </a>
-            <button
-              onClick={() => toggleExpandCard(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
-                isExpanded ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              {isExpanded ? 'Chiudi Dettagli' : (isCrmTab ? 'Modifica Dettagli' : 'Dettagli CRM')}
-            </button>
-          </div>
-        </div>
-
-        {/* Expandable Form */}
-        {isExpanded && (
-          <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
-            <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
-              <BookOpen className="w-4 h-4 text-brand-600" />
-              Informazioni Extra
-            </h4>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Stato</label>
-                <select
-                  value={extra.stato}
-                  onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                >
-                  <option value="">Seleziona</option>
-                  <option value="Attivata">Attivata</option>
-                  <option value="Non Attiva">Non Attiva</option>
-                  <option value="Basso Rendente">Basso Rendente</option>
-                  <option value="RIP">RIP</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Visitata</label>
-                <select
-                  value={extra.visitata}
-                  onChange={(e) => handleRubricaUpdate(id, 'visitata', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                >
-                  <option value="">Seleziona</option>
-                  <option value="Si">Si</option>
-                  <option value="Da Rivisitare">Da Rivisitare</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-
-              {extra.visitata === 'Si' && (
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Data e Ora Visita</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={extra.dataVisita || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'dataVisita', e.target.value)}
-                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    />
-                    <select
-                      value={extra.oraVisita || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'oraVisita', e.target.value)}
-                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    >
-                      <option value="">Ora</option>
-                      {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
-                        const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
-                        const m = ((i % 4) * 15).toString().padStart(2, '0');
-                        const time = `${h}:${m}`;
-                        return <option key={time} value={time}>{time}</option>;
-                      })}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {extra.visitata === 'Da Rivisitare' && (
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Data e Ora Nuovo Appuntamento</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={extra.dataRivisita || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
-                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    />
-                    <select
-                      value={extra.oraRivisita || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
-                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    >
-                      <option value="">Ora</option>
-                      {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
-                        const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
-                        const m = ((i % 4) * 15).toString().padStart(2, '0');
-                        const time = `${h}:${m}`;
-                        return <option key={time} value={time}>{time}</option>;
-                      })}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Giorno Levata</label>
-                <select
-                  value={extra.giornoLevata}
-                  onChange={(e) => handleRubricaUpdate(id, 'giornoLevata', e.target.value)}
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                >
-                  <option value="">Seleziona</option>
-                  <option value="Lunedì">Lunedì</option>
-                  <option value="Martedì">Martedì</option>
-                  <option value="Mercoledì">Mercoledì</option>
-                  <option value="Giovedì">Giovedì</option>
-                  <option value="Venerdì">Venerdì</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Riferimento (Referente)</label>
-                <input
-                  type="text"
-                  value={extra.riferimento}
-                  onChange={(e) => handleRubricaUpdate(id, 'riferimento', e.target.value)}
-                  placeholder="Nome del referente"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Telefono</label>
-                <input
-                  type="tel"
-                  value={extra.telefono}
-                  onChange={(e) => handleRubricaUpdate(id, 'telefono', e.target.value)}
-                  placeholder="Numero di telefono"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">P. IVA</label>
-                <input
-                  type="text"
-                  value={extra.pIva}
-                  onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value)}
-                  placeholder="Partita IVA"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Mail</label>
-                <input
-                  type="email"
-                  value={extra.mail}
-                  onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
-                  placeholder="Indirizzo email"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-slate-200">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={extra.richiestaOrdine || false}
-                    onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
-                    className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-                  />
-                  <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
-                </label>
-              </div>
-
-              {extra.richiestaOrdine && (
-                <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
-                    <input
-                      type="date"
-                      value={extra.dataOrdine || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-600">Note ordine (articoli da ordinare)</label>
-                    <textarea
-                      value={extra.noteOrdine || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
-                      placeholder="Inserisci qui gli articoli da ordinare..."
-                      rows={3}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={extra.ordineEvaso || false}
-                      onChange={(e) => handleRubricaUpdate(id, 'ordineEvaso', e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                    />
-                    <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
-                  </label>
-                </div>
-              )}
-            </div>
-            
-            <button
-              onClick={() => {
-                if (!isCrmTab) {
-                  handleRubricaUpdate(id, 'isSavedToRubrica', true);
-                }
-                setExpandedCardId(null);
-              }}
-              className="w-full mt-4 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
-            >
-              {isCrmTab ? 'Salva Modifiche' : 'Salva i dettagli'}
-            </button>
-          </div>
-        )}
-      </div>
-    );
+  const cardProps = {
+    activeTab,
+    expandedCardId,
+    isSaved,
+    rubrica,
+    enrichedData,
+    enrichingId,
+    toggleSave,
+    removeFromCrm,
+    initiateVisitToggle,
+    handleRubricaUpdate,
+    toggleExpandCard,
+    handleEnrich,
+    addToCrm,
+    setExpandedCardId
   };
 
   return (
@@ -953,7 +1378,7 @@ export default function App() {
         <div className="max-w-md mx-auto">
           <div className="flex bg-brand-700/50 p-1 rounded-xl overflow-x-auto [&::-webkit-scrollbar]:hidden">
             <button
-              onClick={() => setActiveTab('search')}
+              onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); }}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
                 activeTab === 'search' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
@@ -962,16 +1387,16 @@ export default function App() {
               Cerca
             </button>
             <button
-              onClick={() => setActiveTab('saved')}
+              onClick={() => { setActiveTab('giro'); setRivenditaFilter(''); setComuneFilter(''); }}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'saved' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+                activeTab === 'giro' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
             >
-              <Bookmark className="w-4 h-4" />
-              Salvati ({salvatiList.length})
+              <Navigation className="w-4 h-4" />
+              Giro Visite ({giroVisiteList.length})
             </button>
             <button
-              onClick={() => setActiveTab('crm')}
+              onClick={() => { setActiveTab('crm'); setRivenditaFilter(''); setComuneFilter(''); }}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
                 activeTab === 'crm' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
@@ -979,17 +1404,22 @@ export default function App() {
               <BookOpen className="w-4 h-4" />
               CRM ({crmList.length})
             </button>
+            
+            {provincesInCrm.map(prov => (
+              <button
+                key={prov}
+                onClick={() => { setActiveTab(`prov_${prov}`); setRivenditaFilter(''); setComuneFilter(''); }}
+                className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
+                  activeTab === `prov_${prov}` ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+                }`}
+              >
+                <MapPin className="w-4 h-4" />
+                {prov} ({crmList.filter(r => r['Prov.'] === prov).length})
+              </button>
+            ))}
+
             <button
-              onClick={() => setActiveTab('crm_br')}
-              className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'crm_br' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
-              }`}
-            >
-              <Store className="w-4 h-4" />
-              CRM BR ({crmBrList.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('rip')}
+              onClick={() => { setActiveTab('rip'); setRivenditaFilter(''); setComuneFilter(''); }}
               className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
                 activeTab === 'rip' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
               }`}
@@ -1001,7 +1431,20 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-4 space-y-6">
+      <main className="max-w-md mx-auto p-4 space-y-6 overflow-hidden">
+        <div 
+          className="min-h-[calc(100vh-140px)]"
+          onTouchStart={(e) => {
+            (window as any).touchStartX = e.touches[0].clientX;
+          }}
+          onTouchEnd={(e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const diff = (window as any).touchStartX - touchEndX;
+            if (Math.abs(diff) > 70) {
+              handleSwipe(diff > 0 ? 'left' : 'right');
+            }
+          }}
+        >
         {activeTab === 'search' ? (
           <>
             {error && (
@@ -1060,8 +1503,14 @@ export default function App() {
               className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all disabled:opacity-50 text-base"
             >
               <option value="">Seleziona</option>
-              {comuni.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+              {comuni.map((c, idx) => (
+                <option 
+                  key={`${c.value}-${idx}`} 
+                  value={c.value}
+                  disabled={c.value === 'separator'}
+                >
+                  {c.label}
+                </option>
               ))}
             </select>
           </div>
@@ -1198,12 +1647,12 @@ export default function App() {
                             onClick={() => toggleSave(res)}
                             className={`p-2 rounded-xl transition-all ${
                               isSaved(res) 
-                                ? 'bg-pink-50 text-pink-500' 
-                                : 'bg-slate-50 text-slate-400 hover:text-pink-500 hover:bg-pink-50'
+                                ? 'bg-brand-100 text-brand-600' 
+                                : 'bg-slate-50 text-slate-400 hover:text-brand-600 hover:bg-brand-50'
                             }`}
-                            title={isSaved(res) ? "Rimuovi dai salvati" : "Salva rivendita"}
+                            title={isSaved(res) ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
                           >
-                            <Heart className={`w-5 h-5 ${isSaved(res) ? 'fill-current' : ''}`} />
+                            <ClipboardList className={`w-5 h-5 ${isSaved(res) ? 'fill-current' : ''}`} />
                           </button>
                         </div>
                         
@@ -1356,56 +1805,70 @@ export default function App() {
                 )}
               </div>
             )}
-
           </>
-        ) : activeTab === 'saved' ? (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-lg font-semibold text-slate-800">
-                Rivendite Salvate ({salvatiList.length})
-              </h2>
-            </div>
-
-            {salvatiList.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
-                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
-                  <Heart className="w-10 h-10 text-slate-200" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-slate-800 font-bold">Ancora nulla qui</p>
-                  <p className="text-slate-500 text-sm">Salva le rivendite che ti interessano durante la ricerca per ritrovarle qui velocemente.</p>
-                </div>
-                <button
-                  onClick={() => setActiveTab('search')}
-                  className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
-                >
-                  Vai alla ricerca
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {salvatiList.map((res, idx) => renderCard(res, idx, false))}
-              </div>
-            )}
-          </div>
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-lg font-semibold text-slate-800">
-                {activeTab === 'crm' ? `CRM (${crmList.length})` : activeTab === 'crm_br' ? `CRM BR (${crmBrList.length})` : `RIP (${ripList.length})`}
-              </h2>
-              {getCurrentCrmList().length > 0 && (
-                <button
-                  onClick={exportToCSV}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-xl text-sm font-bold transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  Esporta CSV
-                </button>
-              )}
+            <div className="flex flex-col gap-4 px-1">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-800">
+                  {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
+                   activeTab === 'crm' ? `CRM (${crmList.length})` : 
+                   activeTab === 'rip' ? `RIP (${ripList.length})` : 
+                   `${activeTab.replace('prov_', '')} (${getCurrentList().length})`}
+                </h2>
+                {activeTab === 'giro' && giroVisite.length > 0 && (
+                  <button
+                    onClick={() => setShowClearGiroConfirmModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl text-sm font-bold transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Svuota Giro
+                  </button>
+                )}
+                {activeTab !== 'giro' && getCurrentList().length > 0 && (
+                  <button
+                    onClick={exportToCSV}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-xl text-sm font-bold transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                    Esporta CSV
+                  </button>
+                )}
+              </div>
+
+              {/* Filtri Comuni */}
+              <div className="flex flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Num. Riv."
+                    value={rivenditaFilter}
+                    onChange={(e) => setRivenditaFilter(e.target.value)}
+                    className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm"
+                  />
+                </div>
+
+                <div className="relative flex-[1.5]">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <select
+                    value={comuneFilter}
+                    onChange={(e) => setComuneFilter(e.target.value)}
+                    className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm appearance-none"
+                  >
+                    <option value="">Tutti i Comuni</option>
+                    {getUniqueComuniForTab().map(comune => (
+                      <option key={comune} value={comune}>{comune}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {getCurrentCrmList().length > 0 && (
+            {getCurrentList().length > 0 && activeTab !== 'giro' && (
               <div className="flex flex-row gap-3 px-1">
                 {activeTab === 'crm' && (
                   <div className="flex-1">
@@ -1436,34 +1899,198 @@ export default function App() {
               </div>
             )}
 
-            {getCurrentCrmList().length === 0 ? (
+            {getCurrentList().length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                   <BookOpen className="w-10 h-10 text-slate-200" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-slate-800 font-bold">Nessun dato CRM</p>
-                  <p className="text-slate-500 text-sm">Aggiungi dettagli extra alle rivendite salvate per ritrovarle qui.</p>
+                  <p className="text-slate-800 font-bold">Nessun dato</p>
+                  <p className="text-slate-500 text-sm">Non ci sono elementi che corrispondono ai criteri di ricerca.</p>
                 </div>
-                <button
-                  onClick={() => setActiveTab('saved')}
-                  className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
-                >
-                  Vai ai salvati
-                </button>
+                {activeTab === 'giro' && (
+                  <button
+                    onClick={() => setActiveTab('search')}
+                    className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
+                  >
+                    Vai alla ricerca
+                  </button>
+                )}
               </div>
-            ) : filteredAndSortedCrmList.length === 0 ? (
+            ) : activeTab === 'giro' ? (
+              <DndContext 
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext 
+                  items={giroVisite.map(res => getRivenditaId(res))}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-3">
+                    {giroVisite.map((res: SearchResult, idx: number) => (
+                      <div key={getRivenditaId(res)}>
+                        <SortableCard 
+                          res={res} 
+                          idx={idx} 
+                          isCrmTab={activeTab !== 'giro'}
+                          {...cardProps}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            ) : getSortedList().length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <p className="text-slate-500 text-sm">Nessuna rivendita trovata con i filtri selezionati.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredAndSortedCrmList.map((res, idx) => renderCard(res, idx, true))}
+                {getSortedList().map((res: SearchResult, idx: number) => (
+                  <div key={getRivenditaId(res)}>
+                    <RivenditaCard 
+                      res={res}
+                      idx={idx}
+                      isCrmTab={activeTab !== 'giro'}
+                      {...cardProps}
+                    />
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
+        </div>
       </main>
+
+      {/* Confirm Visit Modal */}
+      {showConfirmVisitModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Conferma Visita</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Sei sicuro di voler registrare la visita per questa rivendita in questo momento?
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowConfirmVisitModal(false);
+                  setPendingVisitId(null);
+                }}
+                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={confirmVisit}
+                className="flex-1 py-3 px-4 bg-emerald-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-100 active:scale-95 transition-all"
+              >
+                Conferma
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Clear Giro Modal */}
+      {showClearGiroConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Svuota Giro Visite</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Sei sicuro di voler svuotare l'intero giro visite? Questa azione non può essere annullata.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 flex gap-3">
+              <button
+                onClick={() => setShowClearGiroConfirmModal(false)}
+                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={clearGiro}
+                className="flex-1 py-3 px-4 bg-red-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-red-100 active:scale-95 transition-all"
+              >
+                Svuota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revisit Modal */}
+      {revisitModalId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 text-brand-600 mb-2">
+                <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center">
+                  <Calendar className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800">Programma Rivisita?</h3>
+              </div>
+              
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Hai segnato la rivendita come visitata. Vuoi programmare un nuovo appuntamento?
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Prossima Visita</label>
+                  <input
+                    type="date"
+                    value={rubrica[revisitModalId]?.dataRivisita || ''}
+                    onChange={(e) => handleRubricaUpdate(revisitModalId, 'dataRivisita', e.target.value)}
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ora Appuntamento</label>
+                  <select
+                    value={rubrica[revisitModalId]?.oraRivisita || ''}
+                    onChange={(e) => handleRubricaUpdate(revisitModalId, 'oraRivisita', e.target.value)}
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                  >
+                    <option value="">Seleziona Ora</option>
+                    {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
+                      const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
+                      const m = ((i % 4) * 15).toString().padStart(2, '0');
+                      const time = `${h}:${m}`;
+                      return <option key={time} value={time}>{time}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setRevisitModalId(null)}
+                  className="flex-1 py-3.5 bg-slate-100 text-slate-700 font-bold rounded-2xl text-sm hover:bg-slate-200 active:scale-95 transition-all"
+                >
+                  Chiudi
+                </button>
+                <button
+                  onClick={() => setRevisitModalId(null)}
+                  className="flex-1 py-3.5 bg-brand-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+                >
+                  Salva
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

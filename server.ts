@@ -92,7 +92,7 @@ app.post('/api/provinces', async (req, res) => {
 });
 
 app.post('/api/comuni', async (req, res) => {
-  const { cookies, viewState, region, province } = req.body;
+  const { cookies, viewState, region, province, provinceLabel } = req.body;
   
   const params = new URLSearchParams();
   params.append('javax.faces.partial.ajax', 'true');
@@ -126,7 +126,20 @@ app.post('/api/comuni', async (req, res) => {
     const newViewState = viewStateMatch ? viewStateMatch[1] : viewState;
     
     const comuneMatch = xml.match(/<update id="j_idt16:comune"><!\[CDATA\[(.*?)\]\]><\/update>/s);
-    const comuni = comuneMatch ? extractOptions(comuneMatch[1]) : [];
+    let comuni = comuneMatch ? extractOptions(comuneMatch[1]) : [];
+    
+    if (provinceLabel) {
+      const provUpper = provinceLabel.toUpperCase();
+      // Sort alphabetically
+      comuni.sort((a, b) => a.label.localeCompare(b.label));
+      
+      // Find the province name in the list
+      const provIndex = comuni.findIndex(c => c.label.toUpperCase() === provUpper);
+      if (provIndex !== -1) {
+        const provOption = comuni.splice(provIndex, 1)[0];
+        comuni.unshift(provOption);
+      }
+    }
     
     res.json({ viewState: newViewState, comuni });
   } catch (error) {
@@ -134,6 +147,58 @@ app.post('/api/comuni', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch comuni' });
   }
 });
+
+async function fetchPage(cookies: string, viewState: string, tableId: string, first: number, rows: number = 10) {
+  const params = new URLSearchParams();
+  params.append('javax.faces.partial.ajax', 'true');
+  params.append('javax.faces.source', tableId);
+  params.append('javax.faces.partial.execute', tableId);
+  params.append('javax.faces.partial.render', tableId);
+  params.append(tableId, tableId);
+  params.append(`${tableId}_pagination`, 'true');
+  params.append(`${tableId}_first`, first.toString());
+  params.append(`${tableId}_rows`, rows.toString());
+  params.append(`${tableId}_encodeFeature`, 'true');
+  params.append('javax.faces.ViewState', viewState || '');
+
+  const response = await fetch(BASE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Faces-Request': 'partial/ajax',
+      'Cookie': cookies || ''
+    },
+    body: params.toString()
+  });
+  
+  const xml = await response.text();
+  const viewStateMatch = xml.match(/<update id="javax\.faces\.ViewState"><!\[CDATA\[(.*?)\]\]><\/update>/);
+  const newViewState = viewStateMatch ? viewStateMatch[1] : viewState;
+  
+  const tableMatch = xml.match(new RegExp(`<update id="${tableId}"><!\\[CDATA\\[(.*?)\\]\\]><\\/update>`, 's'));
+  const tableHtml = tableMatch ? tableMatch[1] : '';
+  
+  const dom = new JSDOM(`<table>${tableHtml}</table>`);
+  const results: any[] = [];
+  const table = dom.window.document.querySelector('table');
+
+  if (table) {
+    const headers = Array.from(table.querySelectorAll('thead th')).map((th: any) => th.textContent?.trim() || '');
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    
+    for (const row of rows) {
+      const cells = Array.from((row as any).querySelectorAll('td')).map((td: any) => td.textContent?.trim() || '');
+      if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') continue;
+      
+      const rowData: any = {};
+      headers.forEach((header, index) => {
+        rowData[header] = cells[index];
+      });
+      results.push(rowData);
+    }
+  }
+  return { results, viewState: newViewState };
+}
 
 app.post('/api/search', async (req, res) => {
   const { cookies, viewState, region, province, comune, numRivendita, tipoRiv, statoRiv, submitName } = req.body;
@@ -163,11 +228,11 @@ app.post('/api/search', async (req, res) => {
     const html = await response.text();
     const dom = new JSDOM(html);
     
-    const newViewState = dom.window.document.querySelector('input[name="javax.faces.ViewState"]')?.getAttribute('value') || viewState;
+    let currentViewState = dom.window.document.querySelector('input[name="javax.faces.ViewState"]')?.getAttribute('value') || viewState;
 
     const results: any[] = [];
     const table = dom.window.document.querySelector('table[role="grid"]');
-    let pagination = null;
+    let totalPages = 1;
     let tableId = '';
 
     if (table) {
@@ -189,20 +254,21 @@ app.post('/api/search', async (req, res) => {
       const paginator = dom.window.document.querySelector('.ui-paginator');
       if (paginator) {
         const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
-        const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/);
-        const pages = Array.from(paginator.querySelectorAll('.ui-paginator-page'));
-        const activePage = paginator.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '1';
-        
-        pagination = {
-          currentText,
-          currentPage: parseInt(activePage),
-          totalPages: pages.length,
-          tableId
-        };
+        const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/) || currentText.match(/Pagina\s+(\d+)\s+di\s+(\d+)/i);
+        totalPages = match ? parseInt(match[2]) : 1;
+      }
+      
+      // Scrape all other pages
+      if (totalPages > 1) {
+        for (let i = 1; i < totalPages; i++) {
+          const pageData = await fetchPage(cookies, currentViewState, tableId, i * 10);
+          results.push(...pageData.results);
+          currentViewState = pageData.viewState;
+        }
       }
     }
     
-    res.json({ results, pagination, viewState: newViewState });
+    res.json({ results, viewState: currentViewState });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to perform search' });
@@ -265,13 +331,13 @@ app.post('/api/paginate', async (req, res) => {
       const paginator = dom.window.document.querySelector('.ui-paginator');
       if (paginator) {
         const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
+        const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/) || currentText.match(/Pagina\s+(\d+)\s+di\s+(\d+)/i);
         const activePage = paginator.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '1';
-        const pages = Array.from(paginator.querySelectorAll('.ui-paginator-page'));
 
         pagination = {
           currentText,
           currentPage: parseInt(activePage),
-          totalPages: pages.length,
+          totalPages: match ? parseInt(match[2]) : 1,
           tableId
         };
       }
