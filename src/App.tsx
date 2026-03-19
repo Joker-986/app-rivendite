@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
+import packageVersion from './version.json';
 
 interface Option {
   value: string;
@@ -90,7 +91,7 @@ const formatGoogleCalendarDate = (dateString: string, timeString?: string) => {
   return `${start}/${end}`;
 };
 
-const DATA_VERSION = '1.1';
+const DATA_VERSION = packageVersion.version;
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
