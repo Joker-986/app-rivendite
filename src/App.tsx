@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent
@@ -26,12 +27,19 @@ interface Option {
 }
 
 interface SearchResult {
+  uid?: string;
   'Prov.': string;
   'Comune': string;
   'Num. Rivendita': string;
   'Indirizzo': string;
   'Tipo Rivendita'?: string;
   'Stato'?: string;
+  'Distr. Automatico'?: string;
+  isStore?: boolean;
+  storeName?: string;
+  storeNumber?: string;
+  isChain?: boolean;
+  chainCount?: number;
   [key: string]: any;
 }
 
@@ -82,8 +90,24 @@ const formatGoogleCalendarDate = (dateString: string, timeString?: string) => {
   return `${start}/${end}`;
 };
 
+const DATA_VERSION = '1.1';
+
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) return defaultValue;
+    return JSON.parse(saved) as T;
+  } catch (err) {
+    console.error(`Error loading ${key} from storage:`, err);
+    return defaultValue;
+  }
+};
+
 const getRivenditaId = (res: SearchResult) => {
-  return `${res['Prov.']}_${res['Comune']}_${res['Num. Rivendita']}`;
+  if (res.uid) return res.uid;
+  // Per gli store usiamo il numero store se presente, altrimenti il numero rivendita
+  const num = res.isStore ? (res.storeNumber || res['Num. Rivendita']) : res['Num. Rivendita'];
+  return `${res['Prov.']}_${res['Comune']}_${num}`;
 };
 
 interface RivenditaCardProps {
@@ -98,12 +122,14 @@ interface RivenditaCardProps {
   enrichingId: string | null;
   toggleSave: (res: SearchResult) => void;
   removeFromCrm: (res: SearchResult) => void;
+  removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: string | boolean) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
   setExpandedCardId: (id: string | null) => void;
+  handleStoreUpdate?: (id: string, field: string, value: any) => void;
   dragHandleProps?: any;
 }
 
@@ -121,17 +147,20 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   enrichingId,
   toggleSave,
   removeFromCrm,
+  removeStore,
   initiateVisitToggle,
   handleRubricaUpdate,
   toggleExpandCard,
   handleEnrich,
   addToCrm,
   setExpandedCardId,
+  handleStoreUpdate,
   dragHandleProps
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
   const isInGiro = isSaved(res);
+  const [showNavPicker, setShowNavPicker] = useState(false);
   const extra = rubrica[id] || {
     stato: '',
     visitata: '',
@@ -140,6 +169,60 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     telefono: '',
     pIva: '',
     mail: ''
+  };
+
+  const encodedAddress = encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']}), Italy`);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  const navOptions = [
+    { name: 'Google Maps', icon: <MapIcon className="w-5 h-5 text-blue-600" />, url: `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}` },
+    { name: 'Waze', icon: <Navigation className="w-5 h-5 text-sky-500" />, url: `https://waze.com/ul?q=${encodedAddress}&navigate=yes` },
+    ...(isIOS ? [{ name: 'Apple Maps', icon: <MapPin className="w-5 h-5 text-slate-900" />, url: `http://maps.apple.com/?daddr=${encodedAddress}` }] : []),
+  ];
+
+  const handleShare = async () => {
+    const enriched = enrichedData[id];
+    let shareText = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
+    if (res.isStore && res.storeName) shareText += `Nome: ${res.storeName}\n`;
+    shareText += `Stato: ${res['Stato']}\n`;
+    if (extra.stato) shareText += `Stato CRM: ${extra.stato}\n`;
+    shareText += `Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\n`;
+    
+    if (extra.visitata === 'Si' && extra.dataVisita) {
+      shareText += `Ultima visita: ${new Date(extra.dataVisita).toLocaleDateString('it-IT')}${extra.oraVisita ? ` alle ${extra.oraVisita}` : ''}\n`;
+    } else if (extra.lastDataVisita) {
+      shareText += `Ultima visita: ${new Date(extra.lastDataVisita).toLocaleDateString('it-IT')}${extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : ''}\n`;
+    }
+
+    const phone = extra.telefono || enriched?.phone;
+    const email = extra.mail || enriched?.email;
+
+    if (phone && phone !== 'Non disponibile') shareText += `Tel: ${phone}\n`;
+    if (email && email !== 'Non disponibile') shareText += `Mail: ${email}\n`;
+    if (enriched && enriched.openingHours && enriched.openingHours !== 'Non disponibile') shareText += `Orari: ${enriched.openingHours}\n`;
+    if (extra.note) shareText += `Note: ${extra.note}\n`;
+    
+    if (extra.richiestaOrdine) {
+      shareText += `\n*ORDINE*\n`;
+      shareText += `Stato: ${extra.ordineEvaso ? 'Evaso' : 'Da evadere'}\n`;
+      if (extra.noteOrdine) shareText += `Note Ordine: ${extra.noteOrdine}\n`;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Info ${res.isStore ? 'Store' : 'Rivendita'} ${res.storeNumber || res['Num. Rivendita']}`,
+          text: shareText,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        alert('Informazioni copiate negli appunti!');
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Errore durante la condivisione:', err);
+      }
+    }
   };
 
   return (
@@ -152,11 +235,23 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </div>
           )}
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
-                Riv. {res['Num. Rivendita']}
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${
+                res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'
+              }`}>
+                {res.isStore ? (
+                  <span className="flex items-center gap-1">
+                    <Store className="w-3 h-3" />
+                    STORE #{res.storeNumber || res['Num. Rivendita']}
+                  </span>
+                ) : `RIV. ${res['Num. Rivendita']}`}
               </span>
-              <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+              {res.isStore && res.isChain && (
+                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
+                  <Layers className="w-3 h-3" /> Catena ({res.chainCount || 1})
+                </span>
+              )}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                 res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
               }`}>
                 {res['Stato']}
@@ -173,11 +268,26 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               )}
             </div>
             <h3 className="font-medium text-slate-900 truncate pr-4">
-              {res['Comune']} ({res['Prov.']})
+              {res.isStore ? (
+                <span className="flex flex-col">
+                  <span className="text-sm font-bold text-brand-700">{res.storeName || 'Senza Nome'}</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">{res['Comune']} ({res['Prov.']})</span>
+                </span>
+              ) : (
+                `${res['Comune']} (${res['Prov.']})`
+              )}
             </h3>
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleShare}
+            className="p-2 bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600 rounded-xl transition-all shrink-0"
+            title="Condividi informazioni"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+
           {activeTab === 'search' && (
             <button
               onClick={() => toggleSave(res)}
@@ -192,7 +302,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </button>
           )}
           
-          {(isCrmTab || activeTab === 'rip') && (
+          {(isCrmTab || activeTab === 'rip' || activeTab === 'store') && (
             <>
               <button
                 onClick={() => toggleSave(res)}
@@ -206,9 +316,9 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                 <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
               </button>
               <button
-                onClick={() => removeFromCrm(res)}
+                onClick={() => res.isStore ? removeStore(res) : removeFromCrm(res)}
                 className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all shrink-0"
-                title="Elimina dal CRM"
+                title={res.isStore ? "Elimina Store" : "Elimina dal CRM"}
               >
                 <Trash2 className="w-5 h-5" />
               </button>
@@ -233,6 +343,42 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
           <span className="leading-snug">{res['Indirizzo']}</span>
         </div>
       </div>
+
+      {(extra.visitata === 'Si' || extra.lastDataVisita) && (
+        <div className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 ${
+          extra.visitata === 'Si' 
+            ? 'bg-emerald-50 border-emerald-500 text-emerald-900' 
+            : 'bg-slate-50 border-slate-300 text-slate-700'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className={`w-3.5 h-3.5 ${extra.visitata === 'Si' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span className="font-bold uppercase tracking-wider text-[10px]">
+                {extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}
+              </span>
+            </div>
+            <span className="font-bold text-sm">
+              {extra.visitata === 'Si' 
+                ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
+                : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
+              }
+              {extra.visitata === 'Si' 
+                ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '')
+                : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')
+              }
+            </span>
+          </div>
+        </div>
+      )}
+
+      {extra.note && (
+        <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-slate-600 italic">
+          <div className="flex items-center gap-1.5 mb-1 text-amber-700 font-bold uppercase tracking-wider text-[9px]">
+            <BookOpen className="w-3 h-3" /> Note
+          </div>
+          <p className="leading-relaxed">{extra.note}</p>
+        </div>
+      )}
       
       <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-50 mt-1">
         <div className="text-xs">
@@ -291,28 +437,13 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             <span className="font-medium text-slate-700">{extra.pIva}</span>
           </div>
         )}
-        
-        {(extra.visitata === 'Si' || extra.lastDataVisita) && (
-          <div className={`text-xs col-span-2 p-2 rounded-lg ${extra.visitata === 'Si' ? 'bg-emerald-50 border border-emerald-100' : 'bg-slate-50 border border-slate-100'}`}>
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <Clock className={`w-3 h-3 ${extra.visitata === 'Si' ? 'text-emerald-600' : 'text-slate-400'}`} />
-              <span className={`font-bold uppercase tracking-wider text-[9px] ${extra.visitata === 'Si' ? 'text-emerald-700' : 'text-slate-500'}`}>
-                {extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}
-              </span>
-            </div>
-            <span className="font-medium text-slate-700">
-              {extra.visitata === 'Si' 
-                ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
-                : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
-              }
-              {extra.visitata === 'Si' 
-                ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '')
-                : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')
-              }
-            </span>
+        {isCrmTab && extra.mail && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5">Mail</span>
+            <span className="font-medium text-slate-700">{extra.mail}</span>
           </div>
         )}
-
+        
         {isCrmTab && extra.richiestaOrdine && (
           <div className="text-xs col-span-2">
             <span className="text-slate-400 block mb-0.5">Richiesta Ordine</span>
@@ -329,12 +460,6 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                 {extra.noteOrdine}
               </div>
             )}
-          </div>
-        )}
-        {isCrmTab && extra.mail && (
-          <div className="text-xs col-span-2">
-            <span className="text-slate-400 block mb-0.5">Mail</span>
-            <span className="font-medium text-slate-700">{extra.mail}</span>
           </div>
         )}
       </div>
@@ -408,65 +533,111 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             {extra.visitata === 'Si' ? 'Aggiorna Orario Visita' : 'Rivendita visitata'}
           </button>
         )}
+
+        {/* Azioni Prioritarie: Ordine e Calendar */}
+        {( (isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso) || (isCrmTab && extra.dataRivisita) ) && (
+          <div className="grid grid-cols-2 gap-2">
+            {isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso && (
+              <button
+                onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
+                className={`${extra.dataRivisita ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
+              >
+                <Check className="w-3.5 h-3.5" /> Evadi Ordine
+              </button>
+            )}
+
+            {isCrmTab && extra.dataRivisita && (
+              <a
+                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${(extra.richiestaOrdine && !extra.ordineEvaso) ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm`}
+              >
+                <Calendar className="w-3.5 h-3.5" /> Aggiungi a Calendar
+              </a>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowNavPicker(true)}
+            className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm"
+          >
+            <Navigation className="w-3.5 h-3.5" />
+            Naviga
+          </button>
+          <button
+            onClick={() => toggleExpandCard(id)}
+            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm ${
+              isExpanded ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {isExpanded ? 'Chiudi' : 'Dettagli'}
+          </button>
+        </div>
+
+        {/* Navigation Picker Modal */}
+        {showNavPicker && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-slate-900">Scegli Navigatore</h3>
+                  <button 
+                    onClick={() => setShowNavPicker(false)}
+                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {navOptions.map((opt) => (
+                    <a
+                      key={opt.name}
+                      href={opt.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowNavPicker(false)}
+                      className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-brand-50 border border-slate-100 hover:border-brand-200 rounded-2xl transition-all group"
+                    >
+                      <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                        {opt.icon}
+                      </div>
+                      <span className="font-bold text-slate-700 group-hover:text-brand-700">{opt.name}</span>
+                      <ChevronRight className="w-4 h-4 text-slate-300 ml-auto group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100">
+                <button
+                  onClick={() => setShowNavPicker(false)}
+                  className="w-full py-4 bg-white text-slate-600 font-bold rounded-2xl text-sm hover:bg-slate-100 transition-all border border-slate-200"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!enrichedData[id] && (
           enrichingId === id ? (
-            <button
-              disabled
-              className="w-full text-center text-sm font-semibold text-slate-400 bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-            >
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Caricamento dettagli...
+            <button disabled className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all">
+              <Loader2 className="w-3 h-3 animate-spin" /> Caricamento...
             </button>
           ) : (
             <button
               onClick={() => handleEnrich(id, res)}
-              className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
+              className="w-full text-center text-[11px] font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
             >
-              <Clock className="w-4 h-4" />
-              Mostra orari e contatti
+              <Clock className="w-3.5 h-3.5" /> Orari e contatti
             </button>
           )
         )}
-        {isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso && (
-          <button
-            onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
-            className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm"
-          >
-            <Check className="w-4 h-4" />
-            Segna Ordine come Evaso
-          </button>
-        )}
-        {isCrmTab && extra.dataRivisita && (
-          <a
-            href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-          >
-            <Calendar className="w-4 h-4" />
-            Aggiungi a Google Calendar
-          </a>
-        )}
-        <div className="flex gap-2">
-          <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-3 px-4 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-          >
-            <Navigation className="w-4 h-4" />
-            Naviga
-          </a>
-          <button
-            onClick={() => toggleExpandCard(id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
-              isExpanded ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {isExpanded ? 'Chiudi Dettagli' : (isCrmTab ? 'Modifica Dettagli' : 'Dettagli CRM')}
-          </button>
-        </div>
       </div>
 
       {/* Expandable Form */}
@@ -476,6 +647,118 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             <BookOpen className="w-4 h-4 text-brand-600" />
             Informazioni Extra
           </h4>
+
+          {res.isStore ? (
+            <div className="space-y-4">
+              {/* Sezione Identità */}
+              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
+                  <Store className="w-4 h-4 text-brand-600" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1 col-span-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Insegna</label>
+                    <input
+                      type="text"
+                      value={res.storeName || ''}
+                      onChange={(e) => handleStoreUpdate?.(id, 'storeName', e.target.value)}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Identificativo</label>
+                    <input
+                      type="text"
+                      value={res.storeNumber || res['Num. Rivendita'] || ''}
+                      onChange={(e) => handleStoreUpdate?.(id, 'storeNumber', e.target.value)}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipologia</label>
+                    <select
+                      value={res.isChain ? 'true' : 'false'}
+                      onChange={(e) => handleStoreUpdate?.(id, 'isChain', e.target.value === 'true')}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                    >
+                      <option value="false">Punto Vendita Singolo</option>
+                      <option value="true">Parte di una Catena</option>
+                    </select>
+                  </div>
+                  {res.isChain && (
+                    <div className="space-y-1 col-span-1 sm:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Totale Punti Vendita</label>
+                      <input
+                        type="number"
+                        value={res.chainCount || 1}
+                        onChange={(e) => handleStoreUpdate?.(id, 'chainCount', parseInt(e.target.value) || 1)}
+                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sezione Localizzazione */}
+              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
+                  <MapPin className="w-4 h-4 text-brand-600" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Localizzazione</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia</label>
+                    <input
+                      type="text"
+                      value={res['Prov.']}
+                      onChange={(e) => handleStoreUpdate?.(id, 'Prov.', e.target.value.toUpperCase())}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune</label>
+                    <input
+                      type="text"
+                      value={res['Comune']}
+                      onChange={(e) => handleStoreUpdate?.(id, 'Comune', e.target.value)}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo Completo</label>
+                    <input
+                      type="text"
+                      value={res['Indirizzo']}
+                      onChange={(e) => handleStoreUpdate?.(id, 'Indirizzo', e.target.value)}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
+                <input
+                  type="text"
+                  value={res['Distr. Automatico'] || ''}
+                  onChange={(e) => handleStoreUpdate?.(id, 'Distr. Automatico', e.target.value)}
+                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stato (Attiva/Chiusa)</label>
+                <input
+                  type="text"
+                  value={res['Stato'] || ''}
+                  onChange={(e) => handleStoreUpdate?.(id, 'Stato', e.target.value)}
+                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                />
+              </div>
+            </div>
+          )}
           
           {(extra.lastDataVisita || (extra.visitata === 'Si' && extra.dataVisita)) && (
             <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-2">
@@ -577,23 +860,23 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">P. IVA</label>
-              <input
-                type="text"
-                value={extra.pIva}
-                onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
-                placeholder="Partita IVA (solo numeri)"
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              />
-            </div>
-
-            <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Mail</label>
               <input
                 type="email"
                 value={extra.mail}
                 onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
                 placeholder="Indirizzo email"
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">P. IVA</label>
+              <input
+                type="text"
+                value={extra.pIva}
+                onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
+                placeholder="Partita IVA (solo numeri)"
                 className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
               />
             </div>
@@ -723,22 +1006,16 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('search');
   const [rivenditaFilter, setRivenditaFilter] = useState('');
   const [comuneFilter, setComuneFilter] = useState('');
-  const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => {
-    const saved = localStorage.getItem('giroVisite');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => {
-    const saved = localStorage.getItem('crmAnagrafiche');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [rubrica, setRubrica] = useState<RubricaData>(() => {
-    const saved = localStorage.getItem('rubrica');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
+  const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => loadFromStorage('crmAnagrafiche', []));
+  const [stores, setStores] = useState<SearchResult[]>(() => loadFromStorage('stores', []));
+  const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [revisitModalId, setRevisitModalId] = useState<string | null>(null);
   const [showConfirmVisitModal, setShowConfirmVisitModal] = useState(false);
   const [showClearGiroConfirmModal, setShowClearGiroConfirmModal] = useState(false);
+  const [showCreateStoreModal, setShowCreateStoreModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
   const [rubricaSort, setRubricaSort] = useState<string>('none');
@@ -756,12 +1033,92 @@ export default function App() {
   }, [crmAnagrafiche]);
 
   useEffect(() => {
+    localStorage.setItem('stores', JSON.stringify(stores));
+  }, [stores]);
+
+  useEffect(() => {
     localStorage.setItem('rubrica', JSON.stringify(rubrica));
   }, [rubrica]);
 
   useEffect(() => {
+    // Automatic Data Migration & Persistence Check
+    const currentVersion = localStorage.getItem('app_data_version');
+    
+    if (currentVersion !== DATA_VERSION) {
+      console.log(`Auto-migrating data from ${currentVersion || 'legacy'} to ${DATA_VERSION}`);
+      
+      // Migrate stores to include storeNumber if missing
+      setStores(prev => prev.map(s => {
+        if (s.isStore && !s.storeNumber) {
+          return { ...s, storeNumber: s['Num. Rivendita'] || '' };
+        }
+        return s;
+      }));
+
+      localStorage.setItem('app_data_version', DATA_VERSION);
+    }
+    
     initSession();
   }, []);
+
+  const handleExportData = () => {
+    const data = {
+      giroVisite,
+      crmAnagrafiche,
+      stores,
+      rubrica,
+      version: DATA_VERSION,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_vape_crm_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        
+        // Basic validation
+        if (typeof data !== 'object' || data === null) throw new Error('Invalid format');
+        
+        if (data.giroVisite && Array.isArray(data.giroVisite)) setGiroVisite(data.giroVisite);
+        if (data.crmAnagrafiche && Array.isArray(data.crmAnagrafiche)) setCrmAnagrafiche(data.crmAnagrafiche);
+        if (data.stores && Array.isArray(data.stores)) setStores(data.stores);
+        if (data.rubrica && typeof data.rubrica === 'object') setRubrica(data.rubrica);
+        
+        alert('Dati importati con successo!');
+        setShowSettingsModal(false);
+      } catch (err) {
+        alert('Errore durante l\'importazione del file. Assicurati che sia un file di backup valido.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleClearAllData = () => {
+    if (window.confirm('ATTENZIONE: Questa operazione cancellerà DEFINITIVAMENTE tutti i tuoi dati (Giro, Rubrica, Store). Sei sicuro di voler procedere?')) {
+      setGiroVisite([]);
+      setCrmAnagrafiche([]);
+      setStores([]);
+      setRubrica({});
+      localStorage.clear();
+      localStorage.setItem('app_data_version', DATA_VERSION);
+      alert('Tutti i dati sono stati cancellati.');
+      setShowSettingsModal(false);
+    }
+  };
 
   const initSession = async () => {
     try {
@@ -1211,6 +1568,19 @@ export default function App() {
     }
   };
 
+  const removeStore = (res: SearchResult) => {
+    const id = getRivenditaId(res);
+    if (window.confirm(`Sei sicuro di voler eliminare lo store ${res['Num. Rivendita']}? Verranno eliminati anche tutti i dati salvati.`)) {
+      setStores(prev => prev.filter(s => getRivenditaId(s) !== id));
+      setRubrica(prev => {
+        const newRubrica = { ...prev };
+        delete newRubrica[id];
+        return newRubrica;
+      });
+      setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
+    }
+  };
+
   const addToCrm = (res: SearchResult) => {
     const id = getRivenditaId(res);
     if (!crmAnagrafiche.some(s => getRivenditaId(s) === id)) {
@@ -1239,11 +1609,16 @@ export default function App() {
     return rubrica[getRivenditaId(res)]?.stato === 'RIP';
   });
 
-  // Province dinamiche dal CRM
-  const provincesInCrm = Array.from(new Set(crmList.map(res => res['Prov.']))).sort();
+  const storeList = stores;
+
+  // Province dinamiche dal CRM e dagli Store
+  const provincesInCrm = Array.from(new Set([
+    ...crmList.map(res => res['Prov.']),
+    ...storeList.map(res => res['Prov.'])
+  ])).sort();
 
   const getOrderedTabs = () => {
-    const tabs = ['search', 'giro', 'crm'];
+    const tabs = ['search', 'giro', 'crm', 'store'];
     provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
     tabs.push('rip');
     return tabs;
@@ -1268,10 +1643,11 @@ export default function App() {
     if (activeTab === 'search') return [];
     if (activeTab === 'giro') list = giroVisiteList;
     else if (activeTab === 'crm') list = crmList;
+    else if (activeTab === 'store') list = storeList;
     else if (activeTab === 'rip') list = ripList;
     else if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
-      list = crmList.filter(res => res['Prov.'] === prov);
+      list = [...crmList, ...storeList].filter(res => res['Prov.'] === prov);
     }
     
     // Create strings like "Comune (Prov.)"
@@ -1284,10 +1660,11 @@ export default function App() {
     if (activeTab === 'search') return results || [];
     if (activeTab === 'giro') list = giroVisiteList;
     else if (activeTab === 'crm') list = crmList;
+    else if (activeTab === 'store') list = storeList;
     else if (activeTab === 'rip') list = ripList;
     else if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
-      list = crmList.filter(res => res['Prov.'] === prov);
+      list = [...crmList, ...storeList].filter(res => res['Prov.'] === prov);
     }
 
     // Filtro per numero rivendita
@@ -1331,6 +1708,11 @@ export default function App() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
         delay: 250,
         tolerance: 5,
       },
@@ -1354,6 +1736,24 @@ export default function App() {
   };
 
 
+  const handleStoreUpdate = (id: string, field: string, value: any) => {
+    setStores(prev => prev.map(s => getRivenditaId(s) === id ? { ...s, [field]: value } : s));
+  };
+
+  const handleCreateStore = (newStore: Partial<SearchResult>) => {
+    const storeWithUid: SearchResult = {
+      'Prov.': '',
+      'Comune': '',
+      'Num. Rivendita': '',
+      'Indirizzo': '',
+      ...newStore,
+      uid: `store_${Date.now()}`,
+      isStore: true
+    } as SearchResult;
+    setStores(prev => [...prev, storeWithUid]);
+    setShowCreateStoreModal(false);
+  };
+
   const cardProps = {
     activeTab,
     expandedCardId,
@@ -1368,80 +1768,112 @@ export default function App() {
     toggleExpandCard,
     handleEnrich,
     addToCrm,
-    setExpandedCardId
+    setExpandedCardId,
+    handleStoreUpdate,
+    removeStore
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-12">
-     {/* Header (Solo Tab di navigazione) */}
-      <header className="bg-brand-600 p-3 shadow-md sticky top-0 z-20">
-        <div className="max-w-md mx-auto">
-          <div className="flex bg-brand-700/50 p-1 rounded-xl overflow-x-auto [&::-webkit-scrollbar]:hidden">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      {/* Top Navigation Bar */}
+      <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
+        <div className="max-w-md mx-auto px-3 py-3">
+          <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1">
             <button
-              onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); }}
-              className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'search' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+              onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               <Search className="w-4 h-4" />
               Cerca
             </button>
             <button
-              onClick={() => { setActiveTab('giro'); setRivenditaFilter(''); setComuneFilter(''); }}
-              className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'giro' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+              onClick={() => { setActiveTab('giro'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               <Navigation className="w-4 h-4" />
-              Giro Visite ({giroVisiteList.length})
+              Giro ({giroVisiteList.length})
             </button>
             <button
-              onClick={() => { setActiveTab('crm'); setRivenditaFilter(''); setComuneFilter(''); }}
-              className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'crm' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+              onClick={() => { setActiveTab('crm'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               <BookOpen className="w-4 h-4" />
               CRM ({crmList.length})
             </button>
+            <button
+              onClick={() => { setActiveTab('store'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Store className="w-4 h-4" />
+              Store ({storeList.length})
+            </button>
             
             {provincesInCrm.map(prov => (
               <button
                 key={prov}
-                onClick={() => { setActiveTab(`prov_${prov}`); setRivenditaFilter(''); setComuneFilter(''); }}
-                className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                  activeTab === `prov_${prov}` ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+                onClick={() => { setActiveTab(`prov_${prov}`); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+                className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                  activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 <MapPin className="w-4 h-4" />
-                {prov} ({crmList.filter(r => r['Prov.'] === prov).length})
+                {prov}
               </button>
             ))}
 
             <button
-              onClick={() => { setActiveTab('rip'); setRivenditaFilter(''); setComuneFilter(''); }}
-              className={`flex-none px-4 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'rip' ? 'bg-white text-brand-700 shadow-sm' : 'text-brand-100 hover:bg-brand-700/50'
+              onClick={() => { setActiveTab('rip'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               <AlertCircle className="w-4 h-4" />
               RIP ({ripList.length})
             </button>
+
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
+            >
+              <Settings className="w-4 h-4" />
+              Impostazioni
+            </button>
+
+            <button
+              onClick={handleReset}
+              className="flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Reset
+            </button>
           </div>
         </div>
-      </header>
+      </nav>
 
       <main className="max-w-md mx-auto p-4 space-y-6 overflow-hidden">
         <div 
           className="min-h-[calc(100vh-140px)]"
           onTouchStart={(e) => {
             (window as any).touchStartX = e.touches[0].clientX;
+            (window as any).touchStartY = e.touches[0].clientY;
           }}
           onTouchEnd={(e) => {
             const touchEndX = e.changedTouches[0].clientX;
-            const diff = (window as any).touchStartX - touchEndX;
-            if (Math.abs(diff) > 70) {
-              handleSwipe(diff > 0 ? 'left' : 'right');
+            const touchEndY = e.changedTouches[0].clientY;
+            const deltaX = (window as any).touchStartX - touchEndX;
+            const deltaY = (window as any).touchStartY - touchEndY;
+            
+            // Solo se lo swipe è prevalentemente orizzontale e supera la soglia
+            if (Math.abs(deltaX) > Math.abs(deltaY) * 2 && Math.abs(deltaX) > 100) {
+              handleSwipe(deltaX > 0 ? 'left' : 'right');
             }
           }}
         >
@@ -1813,9 +2245,19 @@ export default function App() {
                 <h2 className="text-lg font-semibold text-slate-800">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
                    activeTab === 'crm' ? `CRM (${crmList.length})` : 
+                   activeTab === 'store' ? `Store (${storeList.length})` :
                    activeTab === 'rip' ? `RIP (${ripList.length})` : 
                    `${activeTab.replace('prov_', '')} (${getCurrentList().length})`}
                 </h2>
+                {activeTab === 'store' && (
+                  <button
+                    onClick={() => setShowCreateStoreModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white hover:bg-brand-700 rounded-xl text-sm font-bold transition-all shadow-md shadow-brand-100"
+                  >
+                    <Store className="w-4 h-4" />
+                    Aggiungi Store
+                  </button>
+                )}
                 {activeTab === 'giro' && giroVisite.length > 0 && (
                   <button
                     onClick={() => setShowClearGiroConfirmModal(true)}
@@ -2087,6 +2529,190 @@ export default function App() {
                   Salva
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings & Backup Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Impostazioni & Backup</h3>
+                <button 
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <Save className="w-4 h-4 text-brand-600" />
+                    Sicurezza Dati
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                    I tuoi dati sono salvati localmente su questo dispositivo. Per sicurezza, ti consigliamo di scaricare periodicamente un backup.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 gap-3">
+                    <button
+                      onClick={handleExportData}
+                      className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      Esporta Backup (.json)
+                    </button>
+                    
+                    <label className="flex items-center justify-center gap-2 py-3 bg-brand-50 border border-brand-100 text-brand-700 font-bold rounded-xl text-sm hover:bg-brand-100 active:scale-95 transition-all shadow-sm cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      Importa Backup
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        onChange={handleImportData} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                  <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Info Sistema
+                  </h4>
+                  <div className="space-y-1 text-[11px] text-amber-700">
+                    <p>Versione Database: <span className="font-bold">{DATA_VERSION}</span></p>
+                    <p>Stato: <span className="font-bold">Offline (Local Storage)</span></p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                  <h4 className="text-sm font-bold text-red-800 mb-2 flex items-center gap-2">
+                    <Trash2 className="w-4 h-4" />
+                    Zona Pericolo
+                  </h4>
+                  <p className="text-[10px] text-red-600 mb-3">
+                    Questa azione è irreversibile e cancellerà ogni informazione salvata.
+                  </p>
+                  <button
+                    onClick={handleClearAllData}
+                    className="w-full py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs hover:bg-red-700 active:scale-95 transition-all shadow-sm"
+                  >
+                    Cancella Tutto
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-2xl text-sm hover:bg-slate-800 transition-all"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Store Modal */}
+      {showCreateStoreModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Nuovo Store</h3>
+                <button 
+                  onClick={() => setShowCreateStoreModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                handleCreateStore({
+                  'Prov.': formData.get('prov') as string,
+                  'Comune': formData.get('comune') as string,
+                  'Num. Rivendita': formData.get('num') as string,
+                  storeNumber: formData.get('num') as string,
+                  'Indirizzo': formData.get('indirizzo') as string,
+                  'Tipo Rivendita': formData.get('tipo') as string,
+                  'Distr. Automatico': formData.get('distr') as string,
+                  storeName: formData.get('storeName') as string,
+                  isChain: formData.get('isChain') === 'true',
+                  chainCount: parseInt(formData.get('chainCount') as string) || 1
+                });
+              }} className="space-y-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Store *</label>
+                  <input name="storeName" required placeholder="Es. Svapo World" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Store *</label>
+                    <input name="num" required placeholder="Es. 101" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo Attività</label>
+                    <select name="isChain" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium">
+                      <option value="false">Attività Singola</option>
+                      <option value="true">Catena</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia *</label>
+                    <input name="prov" required placeholder="Es. MI" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune *</label>
+                    <input name="comune" required placeholder="Es. Milano" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo *</label>
+                  <input name="indirizzo" required placeholder="Via Roma 1" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo Rivendita</label>
+                    <input name="tipo" placeholder="Es. SVAPO STORE" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
+                    <input name="distr" placeholder="SI/NO" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                  </div>
+                </div>
+                
+                <div className="pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateStoreModal(false)}
+                    className="flex-1 py-4 bg-slate-100 text-slate-700 font-bold rounded-2xl text-sm hover:bg-slate-200 transition-all"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-4 bg-brand-600 text-white font-bold rounded-2xl text-sm shadow-xl shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+                  >
+                    Crea Store
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
