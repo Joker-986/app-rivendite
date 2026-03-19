@@ -179,38 +179,37 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
   const handleShare = async () => {
     const enriched = enrichedData[id];
+    
+    // Funzione dinamica per formattare i dati
+    const formatData = (obj: any, title: string) => {
+      let text = `--- ${title} ---\n`;
+      const skip = ['id', 'location', 'viewport', 'photos', 'exportedAt', 'version', 'isStore', 'storeNumber', 'lastDataVisita', 'lastOraVisita'];
+      
+      Object.entries(obj).forEach(([key, value]) => {
+        if (value && !skip.includes(key) && typeof value !== 'object') {
+          text += `${key}: ${value}\n`;
+        }
+      });
+      return text;
+    };
+
     let shareText = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    if (res.isStore && res.storeName) shareText += `Nome: ${res.storeName}\n`;
-    shareText += `Stato: ${res['Stato']}\n`;
-    if (extra.stato) shareText += `Stato CRM: ${extra.stato}\n`;
-    shareText += `Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\n`;
+    shareText += formatData(res, "DATI BASE");
     
-    if (extra.visitata === 'Si' && extra.dataVisita) {
-      shareText += `Ultima visita: ${new Date(extra.dataVisita).toLocaleDateString('it-IT')}${extra.oraVisita ? ` alle ${extra.oraVisita}` : ''}\n`;
-    } else if (extra.lastDataVisita) {
-      shareText += `Ultima visita: ${new Date(extra.lastDataVisita).toLocaleDateString('it-IT')}${extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : ''}\n`;
+    if (extra && Object.keys(extra).length > 0) {
+      shareText += "\n" + formatData(extra, "INFO CRM");
+    }
+    
+    if (enriched && Object.keys(enriched).length > 0) {
+      shareText += "\n" + formatData(enriched, "INFO EXTRA");
     }
 
-    const phone = extra.telefono || enriched?.phone;
-    const email = extra.mail || enriched?.email;
-
-    if (phone && phone !== 'Non disponibile') shareText += `Tel: ${phone}\n`;
-    if (email && email !== 'Non disponibile') shareText += `Mail: ${email}\n`;
-    if (enriched && enriched.openingHours && enriched.openingHours !== 'Non disponibile') shareText += `Orari: ${enriched.openingHours}\n`;
-    if (extra.note) shareText += `Note: ${extra.note}\n`;
-    
-    if (extra.richiestaOrdine) {
-      shareText += `\n*ORDINE*\n`;
-      shareText += `Stato: ${extra.ordineEvaso ? 'Evaso' : 'Da evadere'}\n`;
-      if (extra.noteOrdine) shareText += `Note Ordine: ${extra.noteOrdine}\n`;
-    }
+    const finalString = shareText.trim();
 
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `Info ${res.isStore ? 'Store' : 'Rivendita'} ${res.storeNumber || res['Num. Rivendita']}`,
-          text: shareText,
-          url: window.location.href
+          text: finalString
         });
       } else {
         throw new Error('Web Share API not supported');
@@ -218,7 +217,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       try {
-        await navigator.clipboard.writeText(shareText);
+        await navigator.clipboard.writeText(finalString);
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
       } catch (clipErr) {
@@ -1077,16 +1076,24 @@ export default function App() {
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `backup_tgest_${new Date().toISOString().split('T')[0]}.json`;
+      
+      // Nome file automatico con data YYYYMMDD
+      const now = new Date();
+      const dateStr = now.getFullYear().toString() + 
+                      (now.getMonth() + 1).toString().padStart(2, '0') + 
+                      now.getDate().toString().padStart(2, '0');
+      a.download = `TgesT_Backup_${dateStr}.json`;
+      
       document.body.appendChild(a);
       a.click();
+      
+      // Pulizia
       setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }, 100);
     } catch (err) {
       console.error('Errore durante l\'esportazione:', err);
-      alert('Errore durante l\'esportazione dei dati.');
     }
   };
 
@@ -2581,16 +2588,20 @@ export default function App() {
                       Esporta Backup (.json)
                     </button>
                     
-                    <label className="flex items-center justify-center gap-2 py-3 bg-brand-50 border border-brand-100 text-brand-700 font-bold rounded-xl text-sm hover:bg-brand-100 active:scale-95 transition-all shadow-sm cursor-pointer">
+                    <label 
+                      htmlFor="import-backup"
+                      className="flex items-center justify-center gap-2 py-3 bg-brand-50 border border-brand-100 text-brand-700 font-bold rounded-xl text-sm hover:bg-brand-100 active:scale-95 transition-all shadow-sm cursor-pointer"
+                    >
                       <Upload className="w-4 h-4" />
                       Importa Backup
-                      <input 
-                        type="file" 
-                        accept=".json,application/json" 
-                        onChange={handleImportData} 
-                        className="hidden" 
-                      />
                     </label>
+                    <input 
+                      id="import-backup"
+                      type="file" 
+                      accept=".json,application/json" 
+                      onChange={handleImportData} 
+                      className="hidden" 
+                    />
                   </div>
                 </div>
 

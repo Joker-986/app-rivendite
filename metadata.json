@@ -1,5 +1,5 @@
 {
   "name": "TgesT",
   "description": "TgesT - Sales Management & CRM for Tabacchi and Stores.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["geolocation"]
 }
