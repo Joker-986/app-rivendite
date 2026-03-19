@@ -171,7 +171,11 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     mail: ''
   };
 
-  const encodedAddress = encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']}), Italy`);
+  const street = res['Indirizzo']?.trim() || '';
+  const city = res['Comune']?.trim() || '';
+  const prov = res['Prov.']?.trim() || '';
+  const fullAddress = [street, city, prov].filter(Boolean).join(', ').trim();
+  const encodedAddress = encodeURIComponent(fullAddress);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   const navOptions = [
@@ -213,14 +217,18 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         await navigator.share({
           title: `Info ${res.isStore ? 'Store' : 'Rivendita'} ${res.storeNumber || res['Num. Rivendita']}`,
           text: shareText,
+          url: window.location.href
         });
       } else {
-        await navigator.clipboard.writeText(shareText);
-        alert('Informazioni copiate negli appunti!');
+        throw new Error('Web Share API not supported');
       }
     } catch (err) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        console.error('Errore durante la condivisione:', err);
+      if (err instanceof Error && err.name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(shareText);
+        // Fallback silenzioso o con feedback non invasivo se necessario
+      } catch (clipErr) {
+        console.error('Errore durante la copia negli appunti:', clipErr);
       }
     }
   };
@@ -548,7 +556,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
             {isCrmTab && extra.dataRivisita && (
               <a
-                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${res['Indirizzo']}, ${res['Comune']} (${res['Prov.']})\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
+                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${fullAddress}\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(fullAddress)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`${(extra.richiestaOrdine && !extra.ordineEvaso) ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm`}
@@ -990,6 +998,7 @@ export default function App() {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedComune, setSelectedComune] = useState('');
   const [numRivendita, setNumRivendita] = useState('');
+  const [navPickerRes, setNavPickerRes] = useState<any>(null);
   const [tipoRiv, setTipoRiv] = useState('');
   const [statoRiv, setStatoRiv] = useState('');
   
@@ -2197,15 +2206,13 @@ export default function App() {
                             )
                           )}
                           
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => setNavPickerRes(res)}
                             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                           >
                             <Navigation className="w-4 h-4" />
                             Naviga
-                          </a>
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -2713,6 +2720,56 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Navigation Picker Modal for Search Results */}
+      {navPickerRes && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Scegli Navigatore</h3>
+                <button 
+                  onClick={() => setNavPickerRes(null)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                {[
+                  { name: 'Google Maps', icon: <MapIcon className="w-5 h-5 text-blue-600" />, url: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}` },
+                  { name: 'Waze', icon: <Navigation className="w-5 h-5 text-sky-500" />, url: `https://waze.com/ul?q=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}&navigate=yes` },
+                  ...(/iPad|iPhone|iPod/.test(navigator.userAgent) ? [{ name: 'Apple Maps', icon: <MapPin className="w-5 h-5 text-slate-900" />, url: `http://maps.apple.com/?daddr=${encodeURIComponent([navPickerRes['Indirizzo'], navPickerRes['Comune'], navPickerRes['Prov.']].filter(Boolean).join(', '))}` }] : []),
+                ].map((opt) => (
+                  <a
+                    key={opt.name}
+                    href={opt.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setNavPickerRes(null)}
+                    className="flex items-center gap-4 p-4 bg-slate-50 hover:bg-brand-50 border border-slate-100 hover:border-brand-200 rounded-2xl transition-all group"
+                  >
+                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                      {opt.icon}
+                    </div>
+                    <span className="font-bold text-slate-700 group-hover:text-brand-700">{opt.name}</span>
+                    <ChevronRight className="w-4 h-4 text-slate-300 ml-auto group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
+                  </a>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => setNavPickerRes(null)}
+                className="w-full py-4 bg-white text-slate-600 font-bold rounded-2xl text-sm hover:bg-slate-100 transition-all border border-slate-200"
+              >
+                Chiudi
+              </button>
             </div>
           </div>
         </div>
