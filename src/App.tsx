@@ -207,23 +207,26 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
     const finalString = shareText.trim();
 
-    try {
-      if (navigator.share) {
+    // PRIMA E UNICA AZIONE PRINCIPALE: navigator.share
+    if (navigator.share) {
+      try {
         await navigator.share({
           text: finalString
         });
-      } else {
-        throw new Error('Web Share API not supported');
+        return; // Successo
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        console.error('Errore condivisione nativa:', err);
       }
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      try {
-        await navigator.clipboard.writeText(finalString);
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
-      } catch (clipErr) {
-        console.error('Errore durante la copia negli appunti:', clipErr);
-      }
+    }
+
+    // FALLBACK SOLO IN CASO DI ERRORE O MANCANZA SUPPORTO
+    try {
+      await navigator.clipboard.writeText(finalString);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (clipErr) {
+      console.error('Errore durante la copia negli appunti:', clipErr);
     }
   };
 
@@ -1062,6 +1065,23 @@ export default function App() {
     initSession();
   }, []);
 
+  useEffect(() => {
+    let wasHidden = false;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true;
+      } else if (document.visibilityState === 'visible' && wasHidden) {
+        // Forza ricaricamento per aggiornare dati e codice da Render
+        window.location.reload();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   const handleExportData = () => {
     try {
       const data = {
@@ -1798,7 +1818,7 @@ export default function App() {
       {/* Top Navigation Bar */}
       <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
         <div className="max-w-md mx-auto px-3 py-3">
-          <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1">
+          <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] [will-change:scroll-position] whitespace-nowrap">
             <button
               onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
