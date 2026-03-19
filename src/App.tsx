@@ -982,6 +982,48 @@ export default function App() {
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [storageSize, setStorageSize] = useState('0 KB');
+  const [swActive, setSwActive] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      setSwActive(true);
+    }
+
+    const calculateStorage = () => {
+      try {
+        let total = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key) {
+            total += (localStorage.getItem(key)?.length || 0) + key.length;
+          }
+        }
+        // UTF-16 characters take 2 bytes
+        const bytes = total * 2;
+        if (bytes < 1024) setStorageSize(`${bytes} B`);
+        else if (bytes < 1024 * 1024) setStorageSize(`${(bytes / 1024).toFixed(2)} KB`);
+        else setStorageSize(`${(bytes / (1024 * 1024)).toFixed(2)} MB`);
+      } catch (e) {
+        setStorageSize('N/D');
+      }
+    };
+
+    if (showSettingsModal) {
+      calculateStorage();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [showSettingsModal]);
 
   useEffect(() => {
     localStorage.setItem('giroVisite', JSON.stringify(giroVisite));
@@ -1021,23 +1063,31 @@ export default function App() {
   }, []);
 
   const handleExportData = () => {
-    const data = {
-      giroVisite,
-      crmAnagrafiche,
-      stores,
-      rubrica,
-      version: DATA_VERSION,
-      exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `backup_vape_crm_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const data = {
+        giroVisite,
+        crmAnagrafiche,
+        stores,
+        rubrica,
+        version: DATA_VERSION,
+        exportedAt: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `backup_tgest_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    } catch (err) {
+      console.error('Errore durante l\'esportazione:', err);
+      alert('Errore durante l\'esportazione dei dati.');
+    }
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1047,19 +1097,22 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
+        const result = event.target?.result as string;
+        const data = JSON.parse(result);
         
-        // Basic validation
-        if (typeof data !== 'object' || data === null) throw new Error('Invalid format');
+        if (typeof data !== 'object' || data === null) throw new Error('Formato non valido');
         
-        if (data.giroVisite && Array.isArray(data.giroVisite)) setGiroVisite(data.giroVisite);
-        if (data.crmAnagrafiche && Array.isArray(data.crmAnagrafiche)) setCrmAnagrafiche(data.crmAnagrafiche);
-        if (data.stores && Array.isArray(data.stores)) setStores(data.stores);
-        if (data.rubrica && typeof data.rubrica === 'object') setRubrica(data.rubrica);
+        // Sovrascrittura Local Storage per persistenza immediata prima del reload
+        if (data.giroVisite) localStorage.setItem('giroVisite', JSON.stringify(data.giroVisite));
+        if (data.crmAnagrafiche) localStorage.setItem('crmAnagrafiche', JSON.stringify(data.crmAnagrafiche));
+        if (data.stores) localStorage.setItem('stores', JSON.stringify(data.stores));
+        if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
+        if (data.version) localStorage.setItem('app_data_version', data.version);
         
-        alert('Dati importati con successo!');
-        setShowSettingsModal(false);
+        alert('Backup ripristinato con successo! L\'app verrà ricaricata.');
+        window.location.reload();
       } catch (err) {
+        console.error('Errore importazione:', err);
         alert('Errore durante l\'importazione del file. Assicurati che sia un file di backup valido.');
       }
     };
@@ -2533,7 +2586,7 @@ export default function App() {
                       Importa Backup
                       <input 
                         type="file" 
-                        accept=".json" 
+                        accept=".json,application/json" 
                         onChange={handleImportData} 
                         className="hidden" 
                       />
@@ -2547,8 +2600,10 @@ export default function App() {
                     Info Sistema
                   </h4>
                   <div className="space-y-1 text-[11px] text-amber-700">
-                    <p>Versione Database: <span className="font-bold">{DATA_VERSION}</span></p>
-                    <p>Stato: <span className="font-bold">Offline (Local Storage)</span></p>
+                    <p>Rivendite Salvate: <span className="font-bold">{crmAnagrafiche.length}</span></p>
+                    <p>Spazio Occupato: <span className="font-bold">{storageSize}</span></p>
+                    <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
+                    <p>Versione App: <span className="font-bold">{DATA_VERSION} {swActive ? '(PWA Attiva)' : ''}</span></p>
                   </div>
                 </div>
 
