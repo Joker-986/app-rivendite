@@ -191,27 +191,23 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     return text.trim();
   }, [res, extra, enrichedData, id]);
 
-  const handleShare = async () => {
-    // PRIMA E UNICA AZIONE PRINCIPALE: navigator.share
+  const handleShare = () => {
     if (navigator.share) {
-      try {
-        await navigator.share({
-          text: shareText
-        });
-        return; // Successo
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return;
-        console.error('Errore condivisione nativa:', err);
-      }
-    }
-
-    // FALLBACK SOLO IN CASO DI ERRORE O MANCANZA SUPPORTO
-    try {
-      await navigator.clipboard.writeText(shareText);
+      navigator.share({
+        text: shareText
+      }).catch((err) => {
+        // Fallback attivato SOLO se l'utente annulla o se c'è un errore interno di sistema
+        if (err.name !== 'AbortError') {
+          navigator.clipboard.writeText(shareText);
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        }
+      });
+    } else {
+      // Fallback per PC o browser non compatibili
+      navigator.clipboard.writeText(shareText);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-    } catch (clipErr) {
-      console.error('Errore durante la copia negli appunti:', clipErr);
     }
   };
 
