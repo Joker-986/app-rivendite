@@ -191,23 +191,21 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     return text.trim();
   }, [res, extra, enrichedData, id]);
 
-  const handleShare = () => {
+  const handleShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     if (navigator.share) {
       navigator.share({
         text: shareText
       }).catch((err) => {
-        // Fallback attivato SOLO se l'utente annulla o se c'è un errore interno di sistema
         if (err.name !== 'AbortError') {
-          navigator.clipboard.writeText(shareText);
-          setIsCopied(true);
-          setTimeout(() => setIsCopied(false), 2000);
+          // NESSUNA COPIA. Vogliamo vedere l'errore in faccia.
+          alert(`Errore Android: ${err.name} - ${err.message}`);
         }
       });
     } else {
-      // Fallback per PC o browser non compatibili
-      navigator.clipboard.writeText(shareText);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      alert("Il tuo browser non supporta la condivisione nativa.");
     }
   };
 
@@ -267,7 +265,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={handleShare}
+            onClick={(e) => handleShare(e)}
             className={`p-2 rounded-xl transition-all shrink-0 flex items-center gap-1 ${
               isCopied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
             }`}
@@ -1089,11 +1087,15 @@ export default function App() {
       document.body.appendChild(a);
       a.click();
       
-      // Pulizia immediata per Android Native Flow
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // CRITICO: Ritardo di 1.5 secondi per dare tempo al Download Manager nativo 
+      // di Android di intercettare il Blob prima che venga distrutto.
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1500);
     } catch (err) {
       console.error('Errore durante l\'esportazione:', err);
+      alert('Si è verificato un errore durante il salvataggio del backup.');
     }
   };
 
