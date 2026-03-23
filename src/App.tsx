@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -998,6 +998,8 @@ export default function App() {
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
   const [rubricaSort, setRubricaSort] = useState<string>('none');
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [error, setError] = useState('');
@@ -1027,6 +1029,19 @@ export default function App() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
   };
 
+  useEffect(() => {
+    const seenVersion = localStorage.getItem('seen_changelog_version');
+    // Mostra il changelog se è la prima volta o se la versione è cambiata
+    if (seenVersion !== DATA_VERSION) {
+      setShowChangelog(true);
+    }
+  }, []);
+
+  const dismissChangelog = () => {
+    localStorage.setItem('seen_changelog_version', DATA_VERSION);
+    setShowChangelog(false);
+  };
+
   // Gestione PWA e Aggiornamenti (anti-loop iOS)
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -1051,6 +1066,13 @@ export default function App() {
         .catch((err) => console.error('Errore SW:', err));
     }
   }, []);
+
+  useEffect(() => {
+    const activeTabElement = document.getElementById(activeTab.startsWith('prov_') ? `tab-${activeTab}` : `tab-${activeTab}`);
+    if (activeTabElement) {
+      activeTabElement.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -1956,6 +1978,7 @@ export default function App() {
         <div className="max-w-md mx-auto px-3 py-3">
           <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] [will-change:scroll-position] whitespace-nowrap">
             <button
+              id="tab-search"
               onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1965,6 +1988,7 @@ export default function App() {
               Cerca
             </button>
             <button
+              id="tab-giro"
               onClick={() => { setActiveTab('giro'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1974,6 +1998,7 @@ export default function App() {
               Giro ({giroVisiteList.length})
             </button>
             <button
+              id="tab-crm"
               onClick={() => { setActiveTab('crm'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1983,6 +2008,7 @@ export default function App() {
               CRM ({crmList.length})
             </button>
             <button
+              id="tab-store"
               onClick={() => { setActiveTab('store'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -1995,6 +2021,7 @@ export default function App() {
             {provincesInCrm.map(prov => (
               <button
                 key={prov}
+                id={`tab-prov_${prov}`}
                 onClick={() => { setActiveTab(`prov_${prov}`); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
                 className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                   activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -2006,6 +2033,7 @@ export default function App() {
             ))}
 
             <button
+              id="tab-rip"
               onClick={() => { setActiveTab('rip'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -2739,6 +2767,20 @@ export default function App() {
               </div>
               
               <div className="space-y-6">
+                <button
+                  onClick={() => setShowGuideModal(true)}
+                  className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-brand-600 to-brand-500 text-white rounded-2xl shadow-md hover:opacity-95 transition-all mb-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="w-6 h-6" />
+                    <div className="text-left">
+                      <h4 className="font-bold">Manuale d'Uso</h4>
+                      <p className="text-xs text-brand-100">Scopri come usare tutte le funzioni</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                     <Save className="w-4 h-4 text-brand-600" />
@@ -3008,6 +3050,107 @@ export default function App() {
             {toast.type === 'success' && <CheckCircle2 className="w-4 h-4" />}
             {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
             <span className="text-xs font-bold uppercase tracking-wider">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Changelog Modal */}
+      {showChangelog && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-brand-100 rounded-full flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-6 h-6 text-brand-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">Novità dell'App</h3>
+                  <span className="text-sm font-medium text-brand-600">Versione {DATA_VERSION}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-4 mb-6 text-sm text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100 h-80 overflow-y-auto">
+                <div>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Layout className="w-4 h-4 text-brand-500"/> UX Header Dinamico</h4>
+                  <p className="mt-1">La barra di navigazione ora segue i tuoi movimenti. Quando cambi scheda (anche tramite swipe), il pulsante attivo si centra automaticamente per un accesso rapido.</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-brand-500"/> Manuale d'Uso Integrale</h4>
+                  <p className="mt-1">Abbiamo riscritto da zero la guida per spiegare ogni singola funzione, dal Drag & Drop alla logica di ricarica intelligente.</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><MapIcon className="w-4 h-4 text-brand-500"/> Esportazione My Maps</h4>
+                  <p className="mt-1">Ottimizzata la funzione di export CSV per una geolocalizzazione perfetta su Google My Maps (Versione 2.4/2.5).</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Settings className="w-4 h-4 text-brand-500"/> Stabilità iOS</h4>
+                  <p className="mt-1">Consolidati i fix per Safari su iPhone, eliminando definitivamente i loop di ricarica.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={dismissChangelog}
+                className="w-full py-3.5 bg-brand-600 text-white font-bold rounded-2xl text-sm shadow-lg shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+              >
+                Ho capito, non mostrare più
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guide Modal */}
+      {showGuideModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-brand-600" />
+                <h3 className="text-lg font-bold text-slate-900">Guida all'App</h3>
+              </div>
+              <button onClick={() => setShowGuideModal(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto space-y-6 text-sm text-slate-600">
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Search className="w-4 h-4"/> 1. Ricerca Intelligente</h4>
+                <p>Filtra per Regione, Provincia e Comune. L'app interroga il database centrale in tempo reale. Usa la scheda <strong>Cerca</strong> per trovare le rivendite e clicca sull'icona della <strong>Cartellina</strong> per aggiungerle al tuo giro.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><GripVertical className="w-4 h-4"/> 2. Giro Visite & Drag & Drop</h4>
+                <p>Nella scheda <strong>Giro</strong>, puoi riordinare le tappe tenendo premuto e trascinando le schede (Drag & Drop). Questo ti permette di ottimizzare il percorso manualmente.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Navigation className="w-4 h-4"/> 3. Navigatore Universale</h4>
+                <p>Il tasto <strong>Naviga</strong> rileva il tuo dispositivo. Su smartphone apre l'app mappe nativa (geo:), su PC apre Google Maps nel browser per una consultazione rapida.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Database className="w-4 h-4"/> 4. CRM & Persistenza</h4>
+                <p>Salva le rivendite nel CRM per non perderle. I dati come <strong>Referente, P.IVA e Note</strong> rimangono salvati localmente sul tuo dispositivo anche se chiudi l'app.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 5. Arricchimento AI</h4>
+                <p>Usa il tasto <strong>Orari e contatti</strong> per attivare l'intelligenza artificiale (Gemini) che cercherà per te informazioni aggiornate sul web, come orari di apertura e numeri di telefono mancanti.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><RefreshCw className="w-4 h-4"/> 6. Logica "4 Minuti"</h4>
+                <p>Se l'app rimane in background per più di 4 minuti, si ricaricherà automaticamente al tuo ritorno. Questo garantisce che la sessione e i dati siano sempre sincronizzati con il server.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Share2 className="w-4 h-4"/> 7. Condivisione Avanzata</h4>
+                <p>Il tasto <strong>Condividi</strong> genera un report professionale pronto per WhatsApp, includendo dettagli ordini, stato della visita e informazioni anagrafiche.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><MapIcon className="w-4 h-4"/> 8. Esportazione My Maps</h4>
+                <p>Nella scheda Giro, usa <strong>Esporta My Maps</strong> per scaricare un file CSV formattato appositamente per essere importato come nuovo livello su Google My Maps.</p>
+              </section>
+              <section>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Save className="w-4 h-4"/> 9. Backup & Sicurezza</h4>
+                <p>Esporta periodicamente il file di backup dalle Impostazioni per mettere al sicuro i tuoi dati CRM. Puoi reimportarli in qualsiasi momento o su un altro dispositivo.</p>
+              </section>
+            </div>
           </div>
         </div>
       )}
