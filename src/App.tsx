@@ -91,6 +91,20 @@ const formatGoogleCalendarDate = (dateString: string, timeString?: string) => {
   return `${start}/${end}`;
 };
 
+export const handleNavigation = (address: string) => {
+  const encoded = encodeURIComponent(address);
+  // Controllo per verificare se l'utente è su un dispositivo mobile
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    // Comportamento nativo intatto per Smartphone
+    window.location.href = 'geo:0,0?q=' + encoded;
+  } else {
+    // Fallback sicuro per PC (apre Google Maps in una nuova scheda)
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encoded}`, '_blank');
+  }
+};
+
 const DATA_VERSION = packageVersion.version;
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -572,7 +586,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => { window.location.href = 'geo:0,0?q=' + encodedAddress; }}
+            onClick={() => handleNavigation(fullAddress)}
             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm"
           >
             <Navigation className="w-3.5 h-3.5" />
@@ -1012,6 +1026,31 @@ export default function App() {
     setToast({ show: true, message, type });
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
   };
+
+  // Gestione PWA e Aggiornamenti (anti-loop iOS)
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      // Registrazione standard senza forzare update rapidi
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          // Controlla aggiornamenti solo all'avvio o ogni tanto, non in loop
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // Nuovo aggiornamento disponibile. Mostra un'apposita notifica UI (toast) 
+                  // invece di window.location.reload() forzato.
+                  // (Se non implementi un toast dedicato, per ora lascia solo il console.log)
+                  console.log('Nuovo aggiornamento PWA disponibile. Ricarica l\'app.');
+                }
+              });
+            }
+          });
+        })
+        .catch((err) => console.error('Errore SW:', err));
+    }
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -1688,6 +1727,50 @@ export default function App() {
     setShowClearGiroConfirmModal(false);
   };
 
+  const exportGiroForMyMaps = () => {
+    if (giroVisite.length === 0) return;
+
+    // Colonne ottimizzate per l'importazione perfetta su Google My Maps
+    const headers = ['Nome Punto Vendita', 'Indirizzo Completo', 'Tipo', 'Stato CRM', 'Referente', 'Telefono', 'Note'];
+
+    const rows = giroVisite.map(res => {
+      const id = getRivenditaId(res);
+      const extra = rubrica[id] || {};
+      
+      const nome = res.isStore ? `STORE ${res.storeName || res.storeNumber || ''}` : `RIVENDITA ${res['Num. Rivendita']}`;
+      
+      // Formattazione rigida per garantire la geolocalizzazione 100% esatta su Maps
+      const indirizzoCompleto = `${res['Indirizzo'] || ''}, ${res['Comune'] || ''}, ${res['Prov.'] || ''}, Italia`;
+      
+      return [
+        `"${nome}"`,
+        `"${indirizzoCompleto}"`,
+        `"${res['Tipo Rivendita'] || ''}"`,
+        `"${extra.stato || ''}"`,
+        `"${extra.riferimento || ''}"`,
+        `"${extra.telefono || ''}"`,
+        `"${(extra.note || '').replace(/"/g, '""')}"` // Escape delle virgolette interne per sicurezza CSV
+      ].join(',');
+    });
+
+    // Aggiungo il prefisso BOM (\uFEFF) per forzare UTF-8 e preservare le lettere accentate
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `GiroVisite_MyMaps_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Pulizia
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 1500);
+  };
+
   const giroVisiteList = giroVisite;
   
   const allCrmList = crmAnagrafiche;
@@ -2293,7 +2376,7 @@ export default function App() {
                           <button
                             onClick={() => {
                               const addr = [res['Indirizzo'], res['Comune'], res['Prov.']].filter(Boolean).join(', ');
-                              window.location.href = 'geo:0,0?q=' + encodeURIComponent(addr);
+                              handleNavigation(addr);
                             }}
                             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
                           >
@@ -2353,13 +2436,25 @@ export default function App() {
                   </button>
                 )}
                 {activeTab === 'giro' && giroVisite.length > 0 && (
-                  <button
-                    onClick={() => setShowClearGiroConfirmModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl text-sm font-bold transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Svuota Giro
-                  </button>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <button
+                      onClick={exportGiroForMyMaps}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-100 text-brand-700 hover:bg-brand-200 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm"
+                      title="Esporta per Google My Maps"
+                    >
+                      <MapIcon className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Esporta My Maps</span>
+                      <span className="sm:hidden">My Maps</span> {/* Testo breve per mobile */}
+                    </button>
+                    <button
+                      onClick={() => setShowClearGiroConfirmModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl text-xs sm:text-sm font-bold transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Svuota Giro</span>
+                      <span className="sm:hidden">Svuota</span> {/* Testo breve per mobile */}
+                    </button>
+                  </div>
                 )}
                 {activeTab !== 'giro' && getCurrentList().length > 0 && (
                   <button
