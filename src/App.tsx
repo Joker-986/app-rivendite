@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2 } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -130,6 +130,7 @@ interface RivenditaCardProps {
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
   setExpandedCardId: (id: string | null) => void;
+  setShareModal: (modal: { isOpen: boolean; text: string }) => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
   dragHandleProps?: any;
 }
@@ -155,6 +156,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   handleEnrich,
   addToCrm,
   setExpandedCardId,
+  setShareModal,
   handleStoreUpdate,
   dragHandleProps
 }) => {
@@ -183,11 +185,34 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
     text += `Indirizzo: ${res['Indirizzo']}\n`;
     text += `Comune: ${res['Comune']} (${res['Prov.']})\n`;
+    
     if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
+    if (extra.riferimento) text += `Referente: ${extra.riferimento}\n`;
+    if (extra.pIva) text += `P. IVA: ${extra.pIva}\n`;
     if (extra.telefono || (enriched && enriched.phone)) text += `Telefono: ${extra.telefono || enriched?.phone}\n`;
     if (extra.mail || (enriched && enriched.email)) text += `Email: ${extra.mail || enriched?.email}\n`;
     if (enriched && enriched.openingHours) text += `Orari: ${enriched.openingHours}\n`;
-    if (extra.note || (enriched && enriched.notes)) text += `Note: ${extra.note || enriched?.notes}\n`;
+
+    // Storico Visite
+    if (extra.visitata === 'Si' && extra.dataVisita) {
+      text += `Ultima Visita: ${new Date(extra.dataVisita).toLocaleDateString('it-IT')}${extra.oraVisita ? ' alle ' + extra.oraVisita : ''}\n`;
+    } else if (extra.lastDataVisita) {
+      text += `Ultima Visita: ${new Date(extra.lastDataVisita).toLocaleDateString('it-IT')}${extra.lastOraVisita ? ' alle ' + extra.lastOraVisita : ''}\n`;
+    }
+    if (extra.dataRivisita) {
+      text += `Prossima Visita: ${new Date(extra.dataRivisita).toLocaleDateString('it-IT')}${extra.oraRivisita ? ' alle ' + extra.oraRivisita : ''}\n`;
+    }
+
+    // Ordini
+    if (extra.richiestaOrdine) {
+      text += `\n--- ORDINE ---\n`;
+      text += `Stato: ${extra.ordineEvaso ? '✅ Evaso' : '⏳ DA EVADERE'}\n`;
+      if (extra.dataOrdine) text += `Inserito il: ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')}\n`;
+      if (extra.noteOrdine) text += `Articoli: ${extra.noteOrdine}\n`;
+    }
+
+    if (extra.note || (enriched && enriched.notes)) text += `\nNote: ${extra.note || enriched?.notes}\n`;
+
     return text.trim();
   }, [res, extra, enrichedData, id]);
 
@@ -200,12 +225,11 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         text: shareText
       }).catch((err) => {
         if (err.name !== 'AbortError') {
-          // NESSUNA COPIA. Vogliamo vedere l'errore in faccia.
-          alert(`Errore Android: ${err.name} - ${err.message}`);
+          setShareModal({ isOpen: true, text: shareText });
         }
       });
     } else {
-      alert("Il tuo browser non supporta la condivisione nativa.");
+      setShareModal({ isOpen: true, text: shareText });
     }
   };
 
@@ -967,6 +991,27 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [storageSize, setStorageSize] = useState('0 KB');
   const [swActive, setSwActive] = useState(false);
+  
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false });
+
+  const [shareModal, setShareModal] = useState({ isOpen: false, text: '' });
+
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({ show: false, message: '', type: 'info' });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+  };
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -1045,13 +1090,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let wasHidden = false;
+    let lastHiddenTime = 0;
+    const TIMEOUT_MS = 4 * 60 * 1000; // 4 minuti in millisecondi
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        wasHidden = true;
-      } else if (document.visibilityState === 'visible' && wasHidden) {
-        // Forza ricaricamento per aggiornare dati e codice da Render
-        window.location.reload();
+        lastHiddenTime = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        if (lastHiddenTime > 0 && (Date.now() - lastHiddenTime > TIMEOUT_MS)) {
+          window.location.reload();
+        }
       }
     };
 
@@ -1095,7 +1143,7 @@ export default function App() {
       }, 1500);
     } catch (err) {
       console.error('Errore durante l\'esportazione:', err);
-      alert('Si è verificato un errore durante il salvataggio del backup.');
+      showToast('Errore durante il salvataggio del backup.', 'error');
     }
   };
 
@@ -1118,27 +1166,34 @@ export default function App() {
         if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
         if (data.version) localStorage.setItem('app_data_version', data.version);
         
-        alert('Backup ripristinato con successo! L\'app verrà ricaricata.');
-        window.location.reload();
+        showToast('Backup ripristinato con successo! L\'app verrà ricaricata.');
+        setTimeout(() => window.location.reload(), 2000);
       } catch (err) {
         console.error('Errore importazione:', err);
-        alert('Errore durante l\'importazione del file. Assicurati che sia un file di backup valido.');
+        showToast('Errore durante l\'importazione del file.', 'error');
       }
     };
     reader.readAsText(file);
   };
 
   const handleClearAllData = () => {
-    if (window.confirm('ATTENZIONE: Questa operazione cancellerà DEFINITIVAMENTE tutti i tuoi dati (Giro, Rubrica, Store). Sei sicuro di voler procedere?')) {
-      setGiroVisite([]);
-      setCrmAnagrafiche([]);
-      setStores([]);
-      setRubrica({});
-      localStorage.clear();
-      localStorage.setItem('app_data_version', DATA_VERSION);
-      alert('Tutti i dati sono stati cancellati.');
-      setShowSettingsModal(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'CANCELLA TUTTO',
+      message: 'ATTENZIONE: Questa operazione cancellerà DEFINITIVAMENTE tutti i tuoi dati (Giro, Rubrica, Store). Sei sicuro di voler procedere?',
+      isDestructive: true,
+      onConfirm: () => {
+        setGiroVisite([]);
+        setCrmAnagrafiche([]);
+        setStores([]);
+        setRubrica({});
+        localStorage.clear();
+        localStorage.setItem('app_data_version', DATA_VERSION);
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        showToast('Tutti i dati sono stati cancellati.');
+        setShowSettingsModal(false);
+      }
+    });
   };
 
   const initSession = async () => {
@@ -1578,28 +1633,44 @@ export default function App() {
 
   const removeFromCrm = (res: SearchResult) => {
     const id = getRivenditaId(res);
-    if (window.confirm(`Sei sicuro di voler eliminare la rivendita ${res['Num. Rivendita']} dal CRM? Verranno eliminati anche tutti i dati salvati.`)) {
-      setCrmAnagrafiche(prev => prev.filter(s => getRivenditaId(s) !== id));
-      setRubrica(prev => {
-        const newRubrica = { ...prev };
-        delete newRubrica[id];
-        return newRubrica;
-      });
-      setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Elimina dal CRM',
+      message: `Sei sicuro di voler eliminare la rivendita ${res['Num. Rivendita']} dal CRM? Verranno eliminati anche tutti i dati salvati.`,
+      isDestructive: true,
+      onConfirm: () => {
+        setCrmAnagrafiche(prev => prev.filter(s => getRivenditaId(s) !== id));
+        setRubrica(prev => {
+          const newRubrica = { ...prev };
+          delete newRubrica[id];
+          return newRubrica;
+        });
+        setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        showToast('Rivendita rimossa dal CRM');
+      }
+    });
   };
 
   const removeStore = (res: SearchResult) => {
     const id = getRivenditaId(res);
-    if (window.confirm(`Sei sicuro di voler eliminare lo store ${res['Num. Rivendita']}? Verranno eliminati anche tutti i dati salvati.`)) {
-      setStores(prev => prev.filter(s => getRivenditaId(s) !== id));
-      setRubrica(prev => {
-        const newRubrica = { ...prev };
-        delete newRubrica[id];
-        return newRubrica;
-      });
-      setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Elimina Store',
+      message: `Sei sicuro di voler eliminare lo store ${res['Num. Rivendita']}? Verranno eliminati anche tutti i dati salvati.`,
+      isDestructive: true,
+      onConfirm: () => {
+        setStores(prev => prev.filter(s => getRivenditaId(s) !== id));
+        setRubrica(prev => {
+          const newRubrica = { ...prev };
+          delete newRubrica[id];
+          return newRubrica;
+        });
+        setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        showToast('Store eliminato');
+      }
+    });
   };
 
   const addToCrm = (res: SearchResult) => {
@@ -1791,7 +1862,8 @@ export default function App() {
     addToCrm,
     setExpandedCardId,
     handleStoreUpdate,
-    removeStore
+    removeStore,
+    setShareModal
   };
 
   return (
@@ -2742,6 +2814,105 @@ export default function App() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generic Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className={`w-16 h-16 ${confirmModal.isDestructive ? 'bg-red-100' : 'bg-brand-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                {confirmModal.isDestructive ? (
+                  <Trash2 className={`w-8 h-8 text-red-600`} />
+                ) : (
+                  <AlertCircle className={`w-8 h-8 text-brand-600`} />
+                )}
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 flex gap-3">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className={`flex-1 py-3 px-4 ${confirmModal.isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'} text-white font-bold rounded-xl text-sm transition-all shadow-lg`}
+              >
+                Conferma
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Fallback Modal */}
+      {shareModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Share2 className="w-8 h-8 text-brand-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Condividi</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-4">
+                Scegli come vuoi condividere le informazioni della rivendita.
+              </p>
+              
+              <div className="space-y-3">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(shareModal.text)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-4 bg-[#25D366] text-white font-bold rounded-2xl flex items-center justify-center gap-3 shadow-lg hover:opacity-90 transition-all"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Invia su WhatsApp
+                </a>
+                
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareModal.text);
+                    showToast('Testo copiato negli appunti');
+                    setShareModal({ isOpen: false, text: '' });
+                  }}
+                  className="w-full py-4 bg-slate-100 text-slate-700 font-bold rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-200 transition-all"
+                >
+                  <Copy className="w-5 h-5" />
+                  Copia Testo
+                </button>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50">
+              <button
+                onClick={() => setShareModal({ isOpen: false, text: '' })}
+                className="w-full py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-bottom-4 duration-300">
+          <div className={`px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border ${
+            toast.type === 'success' ? 'bg-emerald-600 border-emerald-500' : 
+            toast.type === 'error' ? 'bg-red-600 border-red-500' : 
+            'bg-slate-800 border-slate-700'
+          } text-white`}>
+            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4" />}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
+            <span className="text-xs font-bold uppercase tracking-wider">{toast.message}</span>
           </div>
         </div>
       )}
