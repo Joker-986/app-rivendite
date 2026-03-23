@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -1010,6 +1010,12 @@ export default function App() {
   const [showClearGiroConfirmModal, setShowClearGiroConfirmModal] = useState(false);
   const [showCreateStoreModal, setShowCreateStoreModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [syncCodeInput, setSyncCodeInput] = useState('');
+  const [generatedSyncCode, setGeneratedSyncCode] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
+  // Stato specifico per il caricamento sync dal FAB per non interferire con quello delle impostazioni
+  const [fabSyncLoading, setFabSyncLoading] = useState(false);
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
   const [showFilters, setShowFilters] = useState<boolean>(false);
@@ -1281,6 +1287,60 @@ export default function App() {
         setShowSettingsModal(false);
       }
     });
+  };
+
+  const handleGenerateSyncCode = async () => {
+    try {
+      setIsSyncing(true);
+      const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
+      
+      const res = await fetch('https://bytebin.lucko.me/post', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await res.json();
+      
+      if (result && result.key) {
+        setGeneratedSyncCode(result.key);
+        navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
+        showToast('Codice generato con successo!');
+      } else {
+        throw new Error('Impossibile recuperare il codice');
+      }
+    } catch (err) {
+      showToast('Errore durante la generazione del codice', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleImportFromSyncCode = async () => {
+    if (!syncCodeInput.trim()) return;
+    try {
+      setIsSyncing(true);
+      const res = await fetch(`https://bytebin.lucko.me/${syncCodeInput.trim()}`);
+      if (!res.ok) throw new Error('Codice non valido o scaduto');
+      
+      const data = await res.json();
+      
+      if (data.giroVisite) localStorage.setItem('giroVisite', JSON.stringify(data.giroVisite));
+      if (data.crmAnagrafiche) localStorage.setItem('crmAnagrafiche', JSON.stringify(data.crmAnagrafiche));
+      if (data.stores) localStorage.setItem('stores', JSON.stringify(data.stores));
+      if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
+      if (data.version) localStorage.setItem('app_data_version', data.version);
+      
+      showToast('Dati scaricati con successo! Riavvio in corso...');
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err) {
+      showToast('Codice errato, inesistente o scaduto', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const initSession = async () => {
@@ -1910,6 +1970,38 @@ export default function App() {
     return 0;
   };
 
+  const handleFabSyncGenerate = async () => {
+    try {
+      setFabSyncLoading(true);
+      setFabMenuOpen(false); // Chiude il menu per feedback visivo
+      
+      const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
+      const res = await fetch('https://bytebin.lucko.me/post', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      
+      const result = await res.json();
+      
+      if (result && result.key) {
+        navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
+        showToast('Codice Sync generato!');
+        setGeneratedSyncCode(result.key);
+        setShowSettingsModal(true);
+      } else {
+        throw new Error('Errore generazione codice');
+      }
+    } catch (err) {
+      showToast('Errore durante la sincronizzazione rapida', 'error');
+    } finally {
+      setFabSyncLoading(false);
+    }
+  };
+
   const getCurrentList = () => {
     let list: SearchResult[] = [];
     if (activeTab === 'search') return results || [];
@@ -2098,14 +2190,6 @@ export default function App() {
             >
               <AlertCircle className="w-4 h-4" />
               RIP ({ripList.length})
-            </button>
-
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
-            >
-              <Settings className="w-4 h-4" />
-              Impostazioni
             </button>
           </div>
         </div>
@@ -2729,14 +2813,52 @@ export default function App() {
         </div>
       </main>
 
-      {/* Floating Action Button (Reset) */}
-      <button
-        onClick={handleReset}
-        className="fixed bottom-6 right-6 z-40 p-3.5 bg-slate-800 text-white rounded-full shadow-xl hover:bg-slate-700 active:scale-90 transition-all"
-        title="Reset Ricerca"
-      >
-        <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-      </button>
+      {/* Multi-Function Floating Action Button (FAB) v2.13 */}
+      <div className="fixed bottom-6 right-6 z-40 h-16 w-16">
+        {/* Overlay scuro sullo sfondo quando il menu è aperto (opzionale, decommenta se desiderato) */}
+        {/* fabMenuOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[-1]" onClick={() => setFabMenuOpen(false)}></div> */}
+
+        {/* Contenitore pulsanti satellite - Posizionamento Assoluto rispetto al baricentro */}
+        <div className={`absolute inset-0 transition-transform duration-300 ease-out ${fabMenuOpen ? 'scale-100' : 'scale-0'}`}>
+          
+          {/* Azione 1: Reset/Refresh (In Alto) */}
+          <button
+            onClick={() => { handleReset(); setFabMenuOpen(false); }}
+            className={`absolute bottom-[76px] right-1 p-3.5 bg-slate-700 text-white rounded-full shadow-lg transition-all duration-300 delay-75 hover:bg-slate-600 active:scale-95 ${fabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-0 translate-y-10'}`}
+            title="Reset Ricerca e Filtri"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          {/* Azione 2: Impostazioni (In Alto a Sinistra - Diagonale) */}
+          <button
+            onClick={() => { setShowSettingsModal(true); setFabMenuOpen(false); }}
+            className={`absolute bottom-[60px] right-[60px] p-3.5 bg-white text-slate-700 rounded-full shadow-lg border border-slate-100 transition-all duration-300 delay-150 hover:bg-slate-100 active:scale-95 ${fabMenuOpen ? 'opacity-100 scale-100 translate-x-0 translate-y-0' : 'opacity-0 scale-0 translate-x-10 translate-y-10'}`}
+            title="Apri Impostazioni"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+
+          {/* Azione 3: Sync Volante Rapido (A Sinistra) */}
+          <button
+            onClick={handleFabSyncGenerate}
+            disabled={fabSyncLoading}
+            className={`absolute bottom-1 right-[76px] p-3.5 bg-brand-600 text-white rounded-full shadow-lg transition-all duration-300 delay-225 hover:bg-brand-700 active:scale-95 disabled:opacity-50 ${fabMenuOpen ? 'opacity-100 scale-100 translate-x-0' : 'opacity-0 scale-0 translate-x-10'}`}
+            title="Genera Codice Sync Rapido"
+          >
+            {fabSyncLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Cloud className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {/* Pulsante Trigger Principale (Il baricentro) */}
+        <button
+          onClick={() => setFabMenuOpen(!fabMenuOpen)}
+          className={`absolute bottom-0 right-0 h-14 w-14 flex items-center justify-center p-3.5 bg-slate-800 text-white rounded-full shadow-xl hover:bg-slate-700 transition-all duration-300 ease-in-out ${fabMenuOpen ? 'rotate-45 bg-slate-600 shadow-none' : ''}`}
+          title={fabMenuOpen ? "Chiudi Menu" : "Azioni Rapide"}
+        >
+          {fabMenuOpen ? <X className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+        </button>
+      </div>
 
       {/* Confirm Visit Modal */}
       {showConfirmVisitModal && (
@@ -2869,102 +2991,143 @@ export default function App() {
       {/* Settings & Backup Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Impostazioni & Backup</h3>
-                <button 
-                  onClick={() => setShowSettingsModal(false)}
-                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-              
-              <div className="space-y-6">
-                <button
-                  onClick={() => setShowGuideModal(true)}
-                  className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-brand-600 to-brand-500 text-white rounded-2xl shadow-md hover:opacity-95 transition-all mb-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <BookOpen className="w-6 h-6" />
-                    <div className="text-left">
-                      <h4 className="font-bold">Manuale d'Uso</h4>
-                      <p className="text-xs text-brand-100">Scopri come usare tutte le funzioni</p>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
+            
+            {/* Header Fisso del Modal */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h3 className="text-xl font-bold text-slate-900">Impostazioni</h3>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            {/* Corpo Scorrevole */}
+            <div className="p-5 overflow-y-auto space-y-6">
+              <button
+                onClick={() => setShowGuideModal(true)}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-brand-600 to-brand-500 text-white rounded-2xl shadow-md hover:opacity-95 transition-all mb-4"
+              >
+                <div className="flex items-center gap-3">
+                  <BookOpen className="w-6 h-6" />
+                  <div className="text-left">
+                    <h4 className="font-bold">Manuale d'Uso</h4>
+                    <p className="text-xs text-brand-100">Scopri come usare tutte le funzioni</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+
+              <div className="p-4 bg-brand-50 rounded-2xl border border-brand-100">
+                <h4 className="text-sm font-bold text-brand-800 mb-2 flex items-center gap-2">
+                  <Cloud className="w-4 h-4" />
+                  Sync Volante (PC ↔ Telefono)
+                </h4>
+                <p className="text-[11px] text-brand-600 mb-4 leading-relaxed">
+                  Trasferisci i tuoi dati tra dispositivi in un lampo. Genera un codice su un dispositivo e inseriscilo nell'altro.
+                </p>
+                
+                <div className="space-y-3">
+                  {generatedSyncCode ? (
+                    <div className="p-3 bg-white border border-brand-200 rounded-xl text-center">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Il tuo Codice Cloud</span>
+                      <div className="font-mono text-[11px] sm:text-sm font-black text-brand-700 select-all tracking-wider break-all">{generatedSyncCode}</div>
+                      <p className="text-[10px] text-brand-500 mt-1">Copiato negli appunti! Incollalo sull'altro dispositivo.</p>
                     </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                    <Save className="w-4 h-4 text-brand-600" />
-                    Sicurezza Dati
-                  </h4>
-                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                    I tuoi dati sono salvati localmente su questo dispositivo. Per sicurezza, ti consigliamo di scaricare periodicamente un backup.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 gap-3">
+                  ) : (
                     <button
-                      onClick={handleExportData}
-                      className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+                      onClick={handleGenerateSyncCode}
+                      disabled={isSyncing}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm hover:bg-brand-700 active:scale-95 transition-all shadow-sm disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />
-                      Esporta Backup (.json)
+                      {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      Genera Codice di Invio
                     </button>
-                    
-                    <label 
-                      htmlFor="import-backup"
-                      className="flex items-center justify-center gap-2 py-3 bg-brand-50 border border-brand-100 text-brand-700 font-bold rounded-xl text-sm hover:bg-brand-100 active:scale-95 transition-all shadow-sm cursor-pointer"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Importa Backup
-                    </label>
-                    <input 
-                      id="import-backup"
-                      type="file" 
-                      accept=".json,application/json" 
-                      onChange={handleImportData} 
-                      className="hidden" 
+                  )}
+
+                  <div className="flex gap-2 pt-3 border-t border-brand-100/50">
+                    <input
+                      type="text"
+                      placeholder="Incolla Codice qui..."
+                      value={syncCodeInput}
+                      onChange={(e) => setSyncCodeInput(e.target.value)}
+                      className="flex-1 h-11 px-3 bg-white border border-brand-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-[11px] font-medium placeholder:text-slate-300"
                     />
+                    <button
+                      onClick={handleImportFromSyncCode}
+                      disabled={isSyncing || !syncCodeInput.trim()}
+                      className="px-4 bg-white border border-brand-200 text-brand-700 font-bold rounded-xl text-sm hover:bg-brand-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      Ricevi
+                    </button>
                   </div>
                 </div>
+              </div>
 
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                  <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Info Sistema
-                  </h4>
-                  <div className="space-y-1 text-[11px] text-amber-700">
-                    <p>Rivendite Salvate: <span className="font-bold">{crmAnagrafiche.length}</span></p>
-                    <p>Spazio Occupato: <span className="font-bold">{storageSize}</span></p>
-                    <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
-                    <p>Versione App: <span className="font-bold">{packageVersion.version} {swActive ? '(PWA Attiva)' : ''}</span></p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
-                  <h4 className="text-sm font-bold text-red-800 mb-2 flex items-center gap-2">
-                    <Trash2 className="w-4 h-4" />
-                    Zona Pericolo
-                  </h4>
-                  <p className="text-[10px] text-red-600 mb-3">
-                    Questa azione è irreversibile e cancellerà ogni informazione salvata.
-                  </p>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <Save className="w-4 h-4 text-brand-600" />
+                  Sicurezza Dati
+                </h4>
+                <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                  I tuoi dati sono salvati localmente. Usa questa funzione se preferisci un salvataggio fisico su file.
+                </p>
+                
+                <div className="grid grid-cols-1 gap-3">
                   <button
-                    onClick={handleClearAllData}
-                    className="w-full py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs hover:bg-red-700 active:scale-95 transition-all shadow-sm"
+                    onClick={handleExportData}
+                    className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
                   >
-                    Cancella Tutto
+                    <Download className="w-4 h-4" />
+                    Esporta Backup (.json)
                   </button>
+                  
+                  <label 
+                    htmlFor="import-backup"
+                    className="flex items-center justify-center gap-2 py-3 bg-slate-200 border border-slate-300 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-300 active:scale-95 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Importa Backup
+                  </label>
+                  <input 
+                    id="import-backup"
+                    type="file" 
+                    accept=".json,application/json" 
+                    onChange={handleImportData} 
+                    className="hidden" 
+                  />
                 </div>
+              </div>
 
+              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                <h4 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Info Sistema
+                </h4>
+                <div className="space-y-1 text-[11px] text-amber-700">
+                  <p>Rivendite Salvate: <span className="font-bold">{crmAnagrafiche.length}</span></p>
+                  <p>Spazio Occupato: <span className="font-bold">{storageSize}</span></p>
+                  <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
+                  <p>Versione App: <span className="font-bold">{DATA_VERSION}</span></p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                <h4 className="text-sm font-bold text-red-800 mb-2 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Zona Pericolo
+                </h4>
+                <p className="text-[10px] text-red-600 mb-3">
+                  Questa azione è irreversibile e cancellerà ogni informazione salvata.
+                </p>
                 <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-2xl text-sm hover:bg-slate-800 transition-all"
+                  onClick={handleClearAllData}
+                  className="w-full py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs hover:bg-red-700 active:scale-95 transition-all shadow-sm"
                 >
-                  Chiudi
+                  Cancella Tutto
                 </button>
               </div>
             </div>
@@ -3202,8 +3365,8 @@ export default function App() {
                   <p className="mt-1">I numeri di telefono inseriti manualmente nel CRM ora sono link cliccabili. Sfiorali per far partire immediatamente la chiamata senza fare copia e incolla.</p>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Layout className="w-4 h-4 text-brand-500"/> Ottimizzazione Mobile</h4>
-                  <p className="mt-1">Aggiunto il blocco per evitare il ricaricamento accidentale scorrendo verso il basso (Pull-to-refresh) e inserito un comodo tasto galleggiante (FAB) in basso a destra per resettare la ricerca.</p>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Layout className="w-4 h-4 text-brand-500"/> FAB Multifunzione</h4>
+                  <p className="mt-1">Il tasto in basso a destra ora è un menu animato rapido per Reset, Impostazioni e Sync Volante.</p>
                 </div>
               </div>
 
