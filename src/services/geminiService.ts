@@ -24,6 +24,7 @@ export async function enrichRivendita(rivendita: any): Promise<EnrichedDetails> 
   const prompt = `Trova gli orari di apertura e le informazioni di contatto per la seguente rivendita di tabacchi in Italia:
   Numero Rivendita: ${rivendita['Num. Rivendita']}
   Indirizzo: ${rivendita['Indirizzo']}
+  CAP: ${rivendita['CAP'] || rivendita['Cap'] || ''}
   Comune: ${rivendita['Comune']}
   Provincia: ${rivendita['Prov.']}
   

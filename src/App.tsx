@@ -1,23 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -64,6 +46,7 @@ export interface RivenditaExtra {
   dataOrdine?: string;
   ordineEvaso?: boolean;
   note?: string;
+  manualCap?: string;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -146,10 +129,9 @@ interface RivenditaCardProps {
   setExpandedCardId: (id: string | null) => void;
   setShareModal: (modal: { isOpen: boolean; text: string }) => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
-  dragHandleProps?: any;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
-
-interface SortableCardProps extends RivenditaCardProps {}
 
 const RivenditaCard: React.FC<RivenditaCardProps> = ({
   res,
@@ -172,12 +154,16 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   setExpandedCardId,
   setShareModal,
   handleStoreUpdate,
-  dragHandleProps
+  onMoveUp,
+  onMoveDown
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
   const isInGiro = isSaved(res);
   const [isCopied, setIsCopied] = useState(false);
+  
+  // Per disabilitare il bottone down correttamente
+  const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
   const extra = rubrica[id] || {
     stato: '',
     visitata: '',
@@ -185,19 +171,23 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     riferimento: '',
     telefono: '',
     pIva: '',
-    mail: ''
+    mail: '',
+    manualCap: ''
   };
 
+  const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
   const street = res['Indirizzo']?.trim() || '';
   const city = res['Comune']?.trim() || '';
   const prov = res['Prov.']?.trim() || '';
-  const fullAddress = [street, city, prov].filter(Boolean).join(', ').trim();
+  const fullAddress = [street, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
   const encodedAddress = encodeURIComponent(fullAddress);
+  // Definisce se i dati del CRM devono essere mostrati (vero sia nel CRM che nel Giro)
+  const showCrmData = isCrmTab || activeTab === 'giro';
 
   const shareText = React.useMemo(() => {
     const enriched = enrichedData[id];
     let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    text += `Indirizzo: ${res['Indirizzo']}\n`;
+    text += `Indirizzo: ${res['Indirizzo']}${capToDisplay ? `, ${capToDisplay}` : ''}\n`;
     text += `Comune: ${res['Comune']} (${res['Prov.']})\n`;
     
     if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
@@ -252,8 +242,21 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       <div className="flex justify-between items-start">
         <div className="flex items-start gap-2">
           {activeTab === 'giro' && (
-            <div className="mt-1 text-slate-300 cursor-grab active:cursor-grabbing p-1 -m-1" {...dragHandleProps}>
-              <GripVertical className="w-4 h-4" />
+            <div className="flex flex-col gap-1 mr-2 mt-1 shrink-0">
+              <button 
+                onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} 
+                className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" 
+                disabled={idx === 0}
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} 
+                className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" 
+                disabled={isLastInGiro}
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
             </div>
           )}
           <div>
@@ -278,7 +281,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               }`}>
                 {res['Stato']}
               </span>
-              {isCrmTab && extra.stato && (
+              {showCrmData && extra.stato && (
                 <span className={`text-xs font-medium px-2 py-1 rounded-md ${
                   extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
                   extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
@@ -293,10 +296,16 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               {res.isStore ? (
                 <span className="flex flex-col">
                   <span className="text-sm font-bold text-brand-700">{res.storeName || 'Senza Nome'}</span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">{res['Comune']} ({res['Prov.']})</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
+                    {capToDisplay ? `${capToDisplay} ` : ''}
+                    {res['Comune']} ({res['Prov.']})
+                  </span>
                 </span>
               ) : (
-                `${res['Comune']} (${res['Prov.']})`
+                <>
+                  {capToDisplay ? `${capToDisplay} ` : ''}
+                  {res['Comune']} ({res['Prov.']})
+                </>
               )}
             </h3>
           </div>
@@ -365,7 +374,10 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-          <span className="leading-snug">{res['Indirizzo']}</span>
+          <span className="leading-snug">
+            {res['Indirizzo']}
+            {capToDisplay ? `, ${capToDisplay}` : ''}
+          </span>
         </div>
       </div>
 
@@ -414,13 +426,13 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
           <span className="text-slate-400 block mb-0.5">Distr. Automatico</span>
           <span className="font-medium text-slate-700">{res['Distr. Automatico']}</span>
         </div>
-        {isCrmTab && extra.visitata && (
+        {showCrmData && extra.visitata && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Visitata</span>
             <span className="font-medium text-slate-700">{extra.visitata}</span>
           </div>
         )}
-        {isCrmTab && extra.dataVisita && (
+        {showCrmData && extra.dataVisita && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Data Visita</span>
             <span className="font-medium text-slate-700">
@@ -429,7 +441,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </span>
           </div>
         )}
-        {isCrmTab && extra.dataRivisita && (
+        {showCrmData && extra.dataRivisita && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Data Rivisita</span>
             <span className="font-medium text-slate-700">
@@ -438,38 +450,44 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </span>
           </div>
         )}
-        {isCrmTab && extra.giornoLevata && (
+        {showCrmData && extra.giornoLevata && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Giorno Levata</span>
             <span className="font-medium text-slate-700">{extra.giornoLevata}</span>
           </div>
         )}
-        {isCrmTab && extra.riferimento && (
+        {showCrmData && extra.riferimento && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Riferimento</span>
             <span className="font-medium text-slate-700">{extra.riferimento}</span>
           </div>
         )}
-        {isCrmTab && extra.telefono && (
+        {showCrmData && extra.telefono && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Telefono</span>
-            <span className="font-medium text-slate-700">{extra.telefono}</span>
+            <a 
+              href={`tel:${extra.telefono.replace(/\s+/g, '')}`} 
+              className="font-bold text-brand-600 hover:text-brand-700 underline decoration-brand-200 underline-offset-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {extra.telefono}
+            </a>
           </div>
         )}
-        {isCrmTab && extra.pIva && (
+        {showCrmData && extra.pIva && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">P. IVA</span>
             <span className="font-medium text-slate-700">{extra.pIva}</span>
           </div>
         )}
-        {isCrmTab && extra.mail && (
+        {showCrmData && extra.mail && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5">Mail</span>
             <span className="font-medium text-slate-700">{extra.mail}</span>
           </div>
         )}
         
-        {isCrmTab && extra.richiestaOrdine && (
+        {showCrmData && extra.richiestaOrdine && (
           <div className="text-xs col-span-2">
             <span className="text-slate-400 block mb-0.5">Richiesta Ordine</span>
             <span className="font-medium text-slate-700">
@@ -560,9 +578,9 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         )}
 
         {/* Azioni Prioritarie: Ordine e Calendar */}
-        {( (isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso) || (isCrmTab && extra.dataRivisita) ) && (
+        {( (showCrmData && extra.richiestaOrdine && !extra.ordineEvaso) || (showCrmData && extra.dataRivisita) ) && (
           <div className="grid grid-cols-2 gap-2">
-            {isCrmTab && extra.richiestaOrdine && !extra.ordineEvaso && (
+            {showCrmData && extra.richiestaOrdine && !extra.ordineEvaso && (
               <button
                 onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
                 className={`${extra.dataRivisita ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
@@ -571,9 +589,9 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               </button>
             )}
 
-            {isCrmTab && extra.dataRivisita && (
+            {showCrmData && extra.dataRivisita && (
               <a
-                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${fullAddress}\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodeURIComponent(fullAddress)}`}
+                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${fullAddress}\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodedAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`${(extra.richiestaOrdine && !extra.ordineEvaso) ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm`}
@@ -636,6 +654,17 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1 col-span-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
+                    <input
+                      type="text"
+                      maxLength={5}
+                      value={extra.manualCap || ''}
+                      onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
+                      placeholder="Es. 80100"
+                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                    />
+                  </div>
                   <div className="space-y-1 col-span-1 sm:col-span-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Insegna</label>
                     <input
@@ -718,6 +747,17 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+              <div className="space-y-1 col-span-1 sm:col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
+                <input
+                  type="text"
+                  maxLength={5}
+                  value={extra.manualCap || ''}
+                  onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
+                  placeholder="Es. 80100"
+                  className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                />
+              </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
                 <input
@@ -933,31 +973,6 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   );
 };
 
-const SortableCard: React.FC<SortableCardProps> = (props) => {
-  const id = getRivenditaId(props.res);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : 'auto',
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <RivenditaCard {...props} dragHandleProps={listeners} />
-    </div>
-  );
-};
-
 export default function App() {
   const [session, setSession] = useState<{ viewState: string; cookies: string; submitName: string } | null>(null);
   
@@ -997,6 +1012,10 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
+  const [showFilters, setShowFilters] = useState<boolean>(false);
+  const [capFilter, setCapFilter] = useState<string>('');
+  const [filterVisitata, setFilterVisitata] = useState<string>('');
+  const [filterOrdine, setFilterOrdine] = useState<boolean>(false);
   const [rubricaSort, setRubricaSort] = useState<string>('none');
   const [showChangelog, setShowChangelog] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
@@ -1065,6 +1084,13 @@ export default function App() {
         })
         .catch((err) => console.error('Errore SW:', err));
     }
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overscrollBehaviorY = 'none';
+    return () => {
+      document.body.style.overscrollBehaviorY = 'auto';
+    };
   }, []);
 
   useEffect(() => {
@@ -1758,11 +1784,12 @@ export default function App() {
     const rows = giroVisite.map(res => {
       const id = getRivenditaId(res);
       const extra = rubrica[id] || {};
+      const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
       
       const nome = res.isStore ? `STORE ${res.storeName || res.storeNumber || ''}` : `RIVENDITA ${res['Num. Rivendita']}`;
       
       // Formattazione rigida per garantire la geolocalizzazione 100% esatta su Maps
-      const indirizzoCompleto = `${res['Indirizzo'] || ''}, ${res['Comune'] || ''}, ${res['Prov.'] || ''}, Italia`;
+      const indirizzoCompleto = `${res['Indirizzo'] || ''}, ${capToDisplay}, ${res['Comune'] || ''}, ${res['Prov.'] || ''}, Italia`;
       
       return [
         `"${nome}"`,
@@ -1798,12 +1825,19 @@ export default function App() {
   const allCrmList = crmAnagrafiche;
   
   const crmList = allCrmList.filter(res => {
-    const stato = rubrica[getRivenditaId(res)]?.stato;
+    const id = getRivenditaId(res);
+    const stato = rubrica[id]?.stato;
+    // Mantiene la scheda visibile nel CRM durante la modifica, anche se si seleziona RIP
+    if (activeTab === 'crm' && expandedCardId === id) return true;
     return stato !== 'RIP';
   });
 
   const ripList = allCrmList.filter(res => {
-    return rubrica[getRivenditaId(res)]?.stato === 'RIP';
+    const id = getRivenditaId(res);
+    const stato = rubrica[id]?.stato;
+    // Mantiene la scheda visibile nei RIP durante la modifica, anche se si toglie RIP
+    if (activeTab === 'rip' && expandedCardId === id) return true;
+    return stato === 'RIP';
   });
 
   const storeList = stores;
@@ -1824,15 +1858,28 @@ export default function App() {
   const handleSwipe = (direction: 'left' | 'right') => {
     const tabs = getOrderedTabs();
     const currentIndex = tabs.indexOf(activeTab);
-    if (direction === 'left' && currentIndex < tabs.length - 1) {
-      setActiveTab(tabs[currentIndex + 1]);
-      setRivenditaFilter('');
-      setComuneFilter('');
-    } else if (direction === 'right' && currentIndex > 0) {
-      setActiveTab(tabs[currentIndex - 1]);
-      setRivenditaFilter('');
-      setComuneFilter('');
+    
+    if (direction === 'left') {
+      const nextIndex = (currentIndex + 1) % tabs.length;
+      setActiveTab(tabs[nextIndex]);
+    } else if (direction === 'right') {
+      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      setActiveTab(tabs[prevIndex]);
     }
+    setRivenditaFilter('');
+    setComuneFilter('');
+  };
+
+  const moveCard = (index: number, direction: 'up' | 'down') => {
+    setGiroVisite(prev => {
+      const newArray = [...prev];
+      if (direction === 'up' && index > 0) {
+        [newArray[index - 1], newArray[index]] = [newArray[index], newArray[index - 1]];
+      } else if (direction === 'down' && index < newArray.length - 1) {
+        [newArray[index + 1], newArray[index]] = [newArray[index], newArray[index + 1]];
+      }
+      return newArray;
+    });
   };
 
   const getUniqueComuniForTab = () => {
@@ -1852,6 +1899,17 @@ export default function App() {
     return Array.from(new Set(formattedComuni)).sort();
   };
 
+  const getBaseListLength = () => {
+    if (activeTab === 'crm') return crmList.length;
+    if (activeTab === 'store') return storeList.length;
+    if (activeTab === 'rip') return ripList.length;
+    if (activeTab.startsWith('prov_')) {
+      const prov = activeTab.replace('prov_', '');
+      return [...crmList, ...storeList].filter(res => res['Prov.'] === prov).length;
+    }
+    return 0;
+  };
+
   const getCurrentList = () => {
     let list: SearchResult[] = [];
     if (activeTab === 'search') return results || [];
@@ -1864,14 +1922,44 @@ export default function App() {
       list = [...crmList, ...storeList].filter(res => res['Prov.'] === prov);
     }
 
-    // Filtro per numero rivendita
+    // Filtro Numero Rivendita
     if (rivenditaFilter) {
-      list = list.filter(res => res['Num. Rivendita'].toString().includes(rivenditaFilter));
+      list = list.filter(res => {
+        const num = res.isStore ? (res.storeNumber || res['Num. Rivendita']) : res['Num. Rivendita'];
+        return num?.toString().includes(rivenditaFilter);
+      });
     }
 
-    // Filtro per comune
+    // Filtro Comune
     if (comuneFilter) {
       list = list.filter(res => `${res['Comune']} (${res['Prov.']})` === comuneFilter);
+    }
+
+    // Filtro CAP
+    if (capFilter) {
+      list = list.filter(res => {
+        const id = getRivenditaId(res);
+        const manualCap = rubrica[id]?.manualCap || '';
+        return manualCap.toString().includes(capFilter);
+      });
+    }
+
+    // Filtro Stato CRM
+    if (rubricaFilterStato) {
+      list = list.filter(res => rubrica[getRivenditaId(res)]?.stato === rubricaFilterStato);
+    }
+
+    // Filtro Visita
+    if (filterVisitata) {
+      list = list.filter(res => rubrica[getRivenditaId(res)]?.visitata === filterVisitata);
+    }
+
+    // Filtro Ordini da Evadere
+    if (filterOrdine) {
+      list = list.filter(res => {
+        const extra = rubrica[getRivenditaId(res)];
+        return extra?.richiestaOrdine === true && extra?.ordineEvaso !== true;
+      });
     }
 
     return list;
@@ -1901,37 +1989,6 @@ export default function App() {
       return 0;
     });
   };
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 250,
-        tolerance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (over && active.id !== over.id) {
-      setGiroVisite((items) => {
-        const oldIndex = items.findIndex(item => getRivenditaId(item) === active.id);
-        const newIndex = items.findIndex(item => getRivenditaId(item) === over.id);
-        
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
-  };
-
 
   const handleStoreUpdate = (id: string, field: string, value: any) => {
     setStores(prev => prev.map(s => getRivenditaId(s) === id ? { ...s, [field]: value } : s));
@@ -2049,14 +2106,6 @@ export default function App() {
             >
               <Settings className="w-4 h-4" />
               Impostazioni
-            </button>
-
-            <button
-              onClick={handleReset}
-              className="flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Reset
             </button>
           </div>
         </div>
@@ -2261,7 +2310,10 @@ export default function App() {
                   <MapView results={results} />
                 ) : (
                   <div className="space-y-3">
-                    {results.map((res, idx) => (
+                    {results.map((res, idx) => {
+                      const id = getRivenditaId(res);
+                      const capToDisplay = rubrica[id]?.manualCap || res['CAP'] || res['Cap'] || '';
+                      return (
                       <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden group">
                         <div className="flex justify-between items-start">
                           <div>
@@ -2276,6 +2328,7 @@ export default function App() {
                               </span>
                             </div>
                             <h3 className="font-medium text-slate-900 truncate pr-4">
+                              {capToDisplay ? `${capToDisplay} ` : ''}
                               {res['Comune']} ({res['Prov.']})
                             </h3>
                           </div>
@@ -2295,7 +2348,10 @@ export default function App() {
                         <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
                           <div className="flex items-start gap-2">
                             <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-                            <span className="leading-snug">{res['Indirizzo']}</span>
+                            <span className="leading-snug">
+                              {res['Indirizzo']}
+                              {capToDisplay ? `, ${capToDisplay}` : ''}
+                            </span>
                           </div>
                           <button
                             onClick={() => handleCopyAddress(res['Indirizzo'], getRivenditaId(res))}
@@ -2403,7 +2459,7 @@ export default function App() {
                           
                           <button
                             onClick={() => {
-                              const addr = [res['Indirizzo'], res['Comune'], res['Prov.']].filter(Boolean).join(', ');
+                              const addr = [res['Indirizzo'], capToDisplay, res['Comune'], res['Prov.']].filter(Boolean).join(', ');
                               handleNavigation(addr);
                             }}
                             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
@@ -2413,7 +2469,8 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 )}
 
@@ -2527,34 +2584,88 @@ export default function App() {
               </div>
             </div>
 
-            {getCurrentList().length > 0 && activeTab !== 'giro' && (
-              <div className="flex flex-row gap-3 px-1">
-                {activeTab === 'crm' && (
-                  <div className="flex-1">
-                    <label className="text-xs font-medium text-slate-600 block mb-1">Filtra per Stato</label>
-                    <select
-                      value={rubricaFilterStato}
-                      onChange={(e) => setRubricaFilterStato(e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                    >
-                      <option value="">Tutti</option>
-                      <option value="Attivata">Attivata</option>
-                      <option value="Non Attiva">Non Attiva</option>
-                    </select>
+            {getBaseListLength() > 0 && activeTab !== 'search' && activeTab !== 'giro' && (
+              <div className="mt-2 bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden transition-all shadow-sm mx-1">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="w-full flex items-center justify-between p-3 text-brand-700 font-bold text-xs uppercase tracking-wider hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-3.5 h-3.5" /> Filtri Avanzati
+                    {/* Indicatore luminoso se c'è almeno un filtro attivo */}
+                    {(rubricaFilterStato || filterVisitata || filterOrdine || capFilter || rubricaSort !== 'none') && (
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
+                      </span>
+                    )}
+                  </div>
+                  {showFilters ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </button>
+                
+                {showFilters && (
+                  <div className="p-3 pt-0 grid grid-cols-2 gap-3 border-t border-slate-100 mt-1 pt-3 bg-white/50">
+                    <div className="space-y-1 col-span-2 sm:col-span-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P.</label>
+                      <input
+                        type="text"
+                        placeholder="Es. 00100"
+                        value={capFilter}
+                        onChange={(e) => setCapFilter(e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm placeholder:text-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Stato CRM</label>
+                      <select
+                        value={rubricaFilterStato}
+                        onChange={(e) => setRubricaFilterStato(e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                      >
+                        <option value="">Tutti</option>
+                        <option value="Attivata">Attivata</option>
+                        <option value="Non Attiva">Non Attiva</option>
+                        <option value="Basso Rendente">Basso Rendente</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Visite</label>
+                      <select
+                        value={filterVisitata}
+                        onChange={(e) => setFilterVisitata(e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                      >
+                        <option value="">Tutte</option>
+                        <option value="Si">Visitate</option>
+                        <option value="Da Rivisitare">Da Rivisitare</option>
+                        <option value="No">Non Visitate</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Ordini</label>
+                      <select
+                        value={filterOrdine ? 'true' : 'false'}
+                        onChange={(e) => setFilterOrdine(e.target.value === 'true')}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                      >
+                        <option value="false">Tutti</option>
+                        <option value="true">Da Evadere ⏳</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Ordina per</label>
+                      <select
+                        value={rubricaSort}
+                        onChange={(e) => setRubricaSort(e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                      >
+                        <option value="none">Nessun ordine</option>
+                        <option value="dataVisitaAsc">Ultima Visita</option>
+                        <option value="dataRivisitaAsc">Prossimo Appuntamento</option>
+                      </select>
+                    </div>
                   </div>
                 )}
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-slate-600 block mb-1">Ordina per</label>
-                  <select
-                    value={rubricaSort}
-                    onChange={(e) => setRubricaSort(e.target.value)}
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                  >
-                    <option value="none">Nessun ordine</option>
-                    <option value="dataVisitaAsc">Data Ultima Visita (Crescente)</option>
-                    <option value="dataRivisitaAsc">Prossimo Appuntamento (Crescente)</option>
-                  </select>
-                </div>
               </div>
             )}
 
@@ -2577,29 +2688,24 @@ export default function App() {
                 )}
               </div>
             ) : activeTab === 'giro' ? (
-              <DndContext 
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext 
-                  items={giroVisite.map(res => getRivenditaId(res))}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="space-y-3">
-                    {giroVisite.map((res: SearchResult, idx: number) => (
-                      <div key={getRivenditaId(res)}>
-                        <SortableCard 
-                          res={res} 
-                          idx={idx} 
-                          isCrmTab={activeTab !== 'giro'}
-                          {...cardProps}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+              <div className="space-y-3">
+                {getCurrentList().map((res: SearchResult) => {
+                  const id = getRivenditaId(res);
+                  const originalIdx = giroVisite.findIndex(r => getRivenditaId(r) === id);
+                  return (
+                    <div key={id}>
+                      <RivenditaCard 
+                        res={{...res, _giroLength: giroVisite.length}} 
+                        idx={originalIdx} 
+                        isCrmTab={false}
+                        onMoveUp={() => moveCard(originalIdx, 'up')}
+                        onMoveDown={() => moveCard(originalIdx, 'down')}
+                        {...cardProps}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             ) : getSortedList().length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <p className="text-slate-500 text-sm">Nessuna rivendita trovata con i filtri selezionati.</p>
@@ -2622,6 +2728,15 @@ export default function App() {
         )}
         </div>
       </main>
+
+      {/* Floating Action Button (Reset) */}
+      <button
+        onClick={handleReset}
+        className="fixed bottom-6 right-6 z-40 p-3.5 bg-slate-800 text-white rounded-full shadow-xl hover:bg-slate-700 active:scale-90 transition-all"
+        title="Reset Ricerca"
+      >
+        <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+      </button>
 
       {/* Confirm Visit Modal */}
       {showConfirmVisitModal && (
@@ -3071,20 +3186,24 @@ export default function App() {
               
               <div className="space-y-4 mb-6 text-sm text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100 h-80 overflow-y-auto">
                 <div>
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Layout className="w-4 h-4 text-brand-500"/> UX Header Dinamico</h4>
-                  <p className="mt-1">La barra di navigazione ora segue i tuoi movimenti. Quando cambi scheda (anche tramite swipe), il pulsante attivo si centra automaticamente per un accesso rapido.</p>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><MapPin className="w-4 h-4 text-brand-500"/> Gestione C.A.P. Manuale</h4>
+                  <p className="mt-1">Dato che i server esterni non forniscono il CAP, ora puoi inserirlo manualmente nei dettagli della rivendita. Una volta salvato, comparirà ovunque e potrai usarlo per filtrare le zone!</p>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-brand-500"/> Manuale d'Uso Integrale</h4>
-                  <p className="mt-1">Abbiamo riscritto da zero la guida per spiegare ogni singola funzione, dal Drag & Drop alla logica di ricarica intelligente.</p>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Filter className="w-4 h-4 text-brand-500"/> Filtri Avanzati a Scomparsa</h4>
+                  <p className="mt-1">I filtri nel CRM ora sono racchiusi in un elegante menu a tendina per salvare spazio sullo schermo. Un led luminoso ti avviserà se hai dei filtri attivi dimenticati.</p>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><MapIcon className="w-4 h-4 text-brand-500"/> Esportazione My Maps</h4>
-                  <p className="mt-1">Ottimizzata la funzione di export CSV per una geolocalizzazione perfetta su Google My Maps (Versione 2.4/2.5).</p>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><GripVertical className="w-4 h-4 text-brand-500"/> Nuovo Ordinamento Giro</h4>
+                  <p className="mt-1">Abbiamo sostituito il trascinamento (spesso impreciso sui telefoni) con delle precisissime Frecce Su/Giù per riordinare le tue visite in modo infallibile.</p>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Settings className="w-4 h-4 text-brand-500"/> Stabilità iOS</h4>
-                  <p className="mt-1">Consolidati i fix per Safari su iPhone, eliminando definitivamente i loop di ricarica.</p>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Phone className="w-4 h-4 text-brand-500"/> Chiamate Rapide One-Tap</h4>
+                  <p className="mt-1">I numeri di telefono inseriti manualmente nel CRM ora sono link cliccabili. Sfiorali per far partire immediatamente la chiamata senza fare copia e incolla.</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5"><Layout className="w-4 h-4 text-brand-500"/> Ottimizzazione Mobile</h4>
+                  <p className="mt-1">Aggiunto il blocco per evitare il ricaricamento accidentale scorrendo verso il basso (Pull-to-refresh) e inserito un comodo tasto galleggiante (FAB) in basso a destra per resettare la ricerca.</p>
                 </div>
               </div>
 
@@ -3115,40 +3234,28 @@ export default function App() {
             
             <div className="p-5 overflow-y-auto space-y-6 text-sm text-slate-600">
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Search className="w-4 h-4"/> 1. Ricerca Intelligente</h4>
-                <p>Filtra per Regione, Provincia e Comune. L'app interroga il database centrale in tempo reale. Usa la scheda <strong>Cerca</strong> per trovare le rivendite e clicca sull'icona della <strong>Cartellina</strong> per aggiungerle al tuo giro.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Search className="w-4 h-4"/> 1. Ricerca e Aggiunta</h4>
+                <p>Usa la scheda <strong>Cerca</strong> selezionando Regione e Provincia. Usa i filtri (Comune, Numero, ecc.) per restringere i risultati. Clicca sull'icona della <strong>Cartellina</strong> per aggiungere una rivendita al tuo Giro Visite quotidiano.</p>
               </section>
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><GripVertical className="w-4 h-4"/> 2. Giro Visite & Drag & Drop</h4>
-                <p>Nella scheda <strong>Giro</strong>, puoi riordinare le tappe tenendo premuto e trascinando le schede (Drag & Drop). Questo ti permette di ottimizzare il percorso manualmente.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Navigation className="w-4 h-4"/> 2. Il Giro Visite</h4>
+                <p>È la tua lista di lavoro. Usa le <strong>Frecce Su/Giù</strong> per riordinare le tappe. Clicca "Naviga" per aprire la mappa. Clicca "Rivendita Visitata" per segnare l'orario del passaggio. Usa il tasto <strong>Esporta My Maps</strong> se vuoi caricare il percorso su PC.</p>
               </section>
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Navigation className="w-4 h-4"/> 3. Navigatore Universale</h4>
-                <p>Il tasto <strong>Naviga</strong> rileva il tuo dispositivo. Su smartphone apre l'app mappe nativa (geo:), su PC apre Google Maps nel browser per una consultazione rapida.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><BookOpen className="w-4 h-4"/> 3. CRM e Filtri Avanzati</h4>
+                <p>Cliccando <strong>Dettagli</strong> puoi compilare la scheda completa (Referente, P.IVA, richieste d'ordine e <strong>C.A.P.</strong>). Cliccando "Salva nel CRM" la rivendita diventerà permanente. Usa la tendina <strong>Filtri Avanzati</strong> per trovare rapidamente rivendite da visitare o ordini in sospeso.</p>
               </section>
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Database className="w-4 h-4"/> 4. CRM & Persistenza</h4>
-                <p>Salva le rivendite nel CRM per non perderle. I dati come <strong>Referente, P.IVA e Note</strong> rimangono salvati localmente sul tuo dispositivo anche se chiudi l'app.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Phone className="w-4 h-4"/> 4. Contatti e Chiamate</h4>
+                <p>I numeri di telefono che inserisci nella scheda diventano <strong>link cliccabili</strong> per chiamare all'istante. Se non hai i contatti, usa il tasto "Orari e contatti" per farli cercare all'Intelligenza Artificiale su internet.</p>
               </section>
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 5. Arricchimento AI</h4>
-                <p>Usa il tasto <strong>Orari e contatti</strong> per attivare l'intelligenza artificiale (Gemini) che cercherà per te informazioni aggiornate sul web, come orari di apertura e numeri di telefono mancanti.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Share2 className="w-4 h-4"/> 5. Condivisione e Report</h4>
+                <p>Il tasto <strong>Condividi</strong> genera un resoconto formattato perfetto per WhatsApp, includendo tutto lo storico delle visite, le note, la P.IVA e lo stato degli ordini da evadere.</p>
               </section>
               <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><RefreshCw className="w-4 h-4"/> 6. Logica "4 Minuti"</h4>
-                <p>Se l'app rimane in background per più di 4 minuti, si ricaricherà automaticamente al tuo ritorno. Questo garantisce che la sessione e i dati siano sempre sincronizzati con il server.</p>
-              </section>
-              <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Share2 className="w-4 h-4"/> 7. Condivisione Avanzata</h4>
-                <p>Il tasto <strong>Condividi</strong> genera un report professionale pronto per WhatsApp, includendo dettagli ordini, stato della visita e informazioni anagrafiche.</p>
-              </section>
-              <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><MapIcon className="w-4 h-4"/> 8. Esportazione My Maps</h4>
-                <p>Nella scheda Giro, usa <strong>Esporta My Maps</strong> per scaricare un file CSV formattato appositamente per essere importato come nuovo livello su Google My Maps.</p>
-              </section>
-              <section>
-                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Save className="w-4 h-4"/> 9. Backup & Sicurezza</h4>
-                <p>Esporta periodicamente il file di backup dalle Impostazioni per mettere al sicuro i tuoi dati CRM. Puoi reimportarli in qualsiasi momento o su un altro dispositivo.</p>
+                <h4 className="font-bold text-brand-700 mb-2 flex items-center gap-2"><Save className="w-4 h-4"/> 6. Backup e Sicurezza Dati</h4>
+                <p>L'app salva tutto localmente sul tuo telefono. Ricordati di usare regolarmente il tasto <strong>Esporta Backup</strong> nelle Impostazioni per scaricare un salvataggio di sicurezza, utilissimo se cambi telefono o svuoti la memoria del browser.</p>
               </section>
             </div>
           </div>
