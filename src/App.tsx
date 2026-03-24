@@ -1261,22 +1261,21 @@ export default function App() {
       setIsSyncing(true);
       const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
       
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      const formData = new FormData();
-      formData.append('file', blob, 'sync.json');
-      
-      // expires=1d garantisce l'autodistruzione dopo 24h anche se non viene scaricato
-      const res = await fetch('https://file.io/?expires=1d', {
+      const res = await fetch('https://bytebin.lucko.me/post', {
         method: 'POST',
-        body: formData
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
       });
       
       const result = await res.json();
       
-      if (result.success && result.key) {
+      if (result && result.key) {
         setGeneratedSyncCode(result.key);
         navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
-        showToast('Codice usa-e-getta generato!');
+        showToast('Codice generato con successo!');
       } else {
         throw new Error('Impossibile recuperare il codice');
       }
@@ -1291,18 +1290,10 @@ export default function App() {
     if (!syncCodeInput.trim()) return;
     try {
       setIsSyncing(true);
-      const res = await fetch(`https://file.io/${syncCodeInput.trim()}`);
-      
-      if (!res.ok) {
-        throw new Error('Codice inesistente, già utilizzato o scaduto');
-      }
+      const res = await fetch(`https://bytebin.lucko.me/${syncCodeInput.trim()}`);
+      if (!res.ok) throw new Error('Codice non valido o scaduto');
       
       const data = await res.json();
-      
-      // Controllo di sicurezza se file.io restituisce un errore JSON formattato anziché il file
-      if (data.success === false) {
-          throw new Error('Il codice è stato già bruciato e i dati distrutti');
-      }
       
       if (data.giroVisite) localStorage.setItem('giroVisite', JSON.stringify(data.giroVisite));
       if (data.crmAnagrafiche) localStorage.setItem('crmAnagrafiche', JSON.stringify(data.crmAnagrafiche));
@@ -1310,10 +1301,10 @@ export default function App() {
       if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
       if (data.version) localStorage.setItem('app_data_version', data.version);
       
-      showToast('Dati importati! Il file sul server è stato distrutto.');
+      showToast('Dati scaricati con successo! Riavvio in corso...');
       setTimeout(() => window.location.reload(), 2000);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Codice errato o già utilizzato', 'error');
+      showToast('Codice errato, inesistente o scaduto', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -1949,23 +1940,23 @@ export default function App() {
   const handleFabSyncGenerate = async () => {
     try {
       setFabSyncLoading(true);
-      setFabMenuOpen(false); 
+      setFabMenuOpen(false); // Chiude il menu per feedback visivo
       
       const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      const formData = new FormData();
-      formData.append('file', blob, 'sync.json');
-      
-      const res = await fetch('https://file.io/?expires=1d', {
+      const res = await fetch('https://bytebin.lucko.me/post', {
         method: 'POST',
-        body: formData
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
       });
       
       const result = await res.json();
       
-      if (result.success && result.key) {
+      if (result && result.key) {
         navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
-        showToast('Codice usa-e-getta generato!');
+        showToast('Codice Sync generato!');
         setGeneratedSyncCode(result.key);
         setShowSettingsModal(true);
       } else {
