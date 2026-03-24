@@ -74,6 +74,22 @@ const formatGoogleCalendarDate = (dateString: string, timeString?: string) => {
   return `${start}/${end}`;
 };
 
+export const getAvailableTimes = (date: string, currentId: string, rubricaData: RubricaData) => {
+  const allTimes = Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
+    const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
+    const m = ((i % 4) * 15).toString().padStart(2, '0');
+    return `${h}:${m}`;
+  });
+  if (!date) return allTimes;
+  
+  // Trova tutti gli orari già prenotati in quella data (escludendo la rivendita corrente)
+  const bookedTimes = Object.entries(rubricaData)
+    .filter(([id, data]) => id !== currentId && data.dataRivisita === date && data.oraRivisita)
+    .map(([_, data]) => data.oraRivisita);
+    
+  return allTimes.filter(t => !bookedTimes.includes(t));
+};
+
 export const handleNavigation = (address: string) => {
   const encoded = encodeURIComponent(address);
   // Controllo per verificare se l'utente è su un dispositivo mobile
@@ -131,6 +147,7 @@ interface RivenditaCardProps {
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  openRevisitModal: (id: string) => void;
 }
 
 const RivenditaCard: React.FC<RivenditaCardProps> = ({
@@ -155,7 +172,8 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   setShareModal,
   handleStoreUpdate,
   onMoveUp,
-  onMoveDown
+  onMoveDown,
+  openRevisitModal
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
@@ -239,50 +257,33 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
 
   return (
     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
-      <div className="flex justify-between items-start">
-        <div className="flex items-start gap-2">
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
           {activeTab === 'giro' && (
-            <div className="flex flex-col gap-1 mr-2 mt-1 shrink-0">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} 
-                className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" 
-                disabled={idx === 0}
-              >
+            <div className="flex flex-col gap-1 mr-1 mt-1 shrink-0">
+              <button onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={idx === 0}>
                 <ChevronUp className="w-4 h-4" />
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} 
-                className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" 
-                disabled={isLastInGiro}
-              >
+              <button onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={isLastInGiro}>
                 <ChevronDown className="w-4 h-4" />
               </button>
             </div>
           )}
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${
-                res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'
-              }`}>
-                {res.isStore ? (
-                  <span className="flex items-center gap-1">
-                    <Store className="w-3 h-3" />
-                    STORE #{res.storeNumber || res['Num. Rivendita']}
-                  </span>
-                ) : `RIV. ${res['Num. Rivendita']}`}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
+                {res.isStore ? <span className="flex items-center gap-1"><Store className="w-3 h-3" />STORE #{res.storeNumber || res['Num. Rivendita']}</span> : `RIV. ${res['Num. Rivendita']}`}
               </span>
               {res.isStore && res.isChain && (
                 <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
                   <Layers className="w-3 h-3" /> Catena ({res.chainCount || 1})
                 </span>
               )}
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-              }`}>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                 {res['Stato']}
               </span>
               {showCrmData && extra.stato && (
-                <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                   extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
                   extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
                   extra.stato === 'RIP' ? 'bg-slate-100 text-slate-700' :
@@ -292,25 +293,24 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                 </span>
               )}
             </div>
-            <h3 className="font-medium text-slate-900 truncate pr-4">
+            {/* Aggiunto leading-snug e break-words per gestire città con nomi lunghissimi senza spaccare il layout */}
+            <h3 className="font-medium text-slate-900 leading-snug break-words pr-2">
               {res.isStore ? (
-                <span className="flex flex-col">
+                <span className="flex flex-col gap-0.5">
                   <span className="text-sm font-bold text-brand-700">{res.storeName || 'Senza Nome'}</span>
                   <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
-                    {capToDisplay ? `${capToDisplay} ` : ''}
-                    {res['Comune']} ({res['Prov.']})
+                    {capToDisplay ? `${capToDisplay} ` : ''}{res['Comune']} ({res['Prov.']})
                   </span>
                 </span>
               ) : (
                 <>
-                  {capToDisplay ? `${capToDisplay} ` : ''}
-                  {res['Comune']} ({res['Prov.']})
+                  {capToDisplay ? `${capToDisplay} ` : ''}{res['Comune']} ({res['Prov.']})
                 </>
               )}
             </h3>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <button
             onClick={(e) => handleShare(e)}
             className={`p-2 rounded-xl transition-all shrink-0 flex items-center gap-1 ${
@@ -382,127 +382,97 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       </div>
 
       {(extra.visitata === 'Si' || extra.lastDataVisita) && (
-        <div className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 ${
-          extra.visitata === 'Si' 
-            ? 'bg-emerald-50 border-emerald-500 text-emerald-900' 
-            : 'bg-slate-50 border-slate-300 text-slate-700'
-        }`}>
+        <div className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 ${extra.visitata === 'Si' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-700'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className={`w-3.5 h-3.5 ${extra.visitata === 'Si' ? 'text-emerald-600' : 'text-slate-400'}`} />
-              <span className="font-bold uppercase tracking-wider text-[10px]">
-                {extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}
-              </span>
+              <span className="font-bold uppercase tracking-wider text-[10px]">{extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}</span>
             </div>
             <span className="font-bold text-sm">
-              {extra.visitata === 'Si' 
-                ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
-                : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
-              }
-              {extra.visitata === 'Si' 
-                ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '')
-                : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')
-              }
+              {extra.visitata === 'Si' ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-') : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')}
+              {extra.visitata === 'Si' ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '') : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* BADGE ARANCIONE DATA RIVISITA CLICCABILE */}
+      {showCrmData && extra.dataRivisita && (
+        <div 
+          onClick={() => openRevisitModal(id)}
+          title="Modifica Appuntamento"
+          className="text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 bg-orange-50 border-orange-500 text-orange-900 cursor-pointer hover:bg-orange-100 active:scale-95 transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3.5 h-3.5 text-orange-600" />
+              <span className="font-bold uppercase tracking-wider text-[10px]">Da Rivisitare il</span>
+            </div>
+            <span className="font-bold text-sm">
+              {new Date(extra.dataRivisita).toLocaleDateString('it-IT')}
+              {extra.oraRivisita ? ` alle ${extra.oraRivisita}` : ''}
             </span>
           </div>
         </div>
       )}
 
       {extra.note && (
-        <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-slate-600 italic">
-          <div className="flex items-center gap-1.5 mb-1 text-amber-700 font-bold uppercase tracking-wider text-[9px]">
-            <BookOpen className="w-3 h-3" /> Note
-          </div>
+        <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-slate-600 italic mt-2">
+          <div className="flex items-center gap-1.5 mb-1 text-amber-700 font-bold uppercase tracking-wider text-[9px]"><BookOpen className="w-3 h-3" /> Note</div>
           <p className="leading-relaxed">{extra.note}</p>
         </div>
       )}
       
-      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-50 mt-1">
+      {/* GRIGLIA PULITA DALLE RIDONDANZE */}
+      <div className="grid grid-cols-2 gap-y-3 gap-x-2 pt-3 border-t border-slate-100 mt-2">
         <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5">Tipo</span>
-          <span className="font-medium text-slate-700">{res['Tipo Rivendita']}</span>
+          <span className="text-slate-400 block mb-0.5 font-medium">Tipo</span>
+          <span className="font-bold text-slate-700">{res['Tipo Rivendita']}</span>
         </div>
         <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5">Distr. Automatico</span>
-          <span className="font-medium text-slate-700">{res['Distr. Automatico']}</span>
+          <span className="text-slate-400 block mb-0.5 font-medium">Distr. Automatico</span>
+          <span className="font-bold text-slate-700">{res['Distr. Automatico']}</span>
         </div>
-        {showCrmData && extra.visitata && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Visitata</span>
-            <span className="font-medium text-slate-700">{extra.visitata}</span>
-          </div>
-        )}
-        {showCrmData && extra.dataVisita && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Data Visita</span>
-            <span className="font-medium text-slate-700">
-              {new Date(extra.dataVisita).toLocaleDateString('it-IT')}
-              {extra.oraVisita ? ` alle ${extra.oraVisita}` : ''}
-            </span>
-          </div>
-        )}
-        {showCrmData && extra.dataRivisita && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Data Rivisita</span>
-            <span className="font-medium text-slate-700">
-              {new Date(extra.dataRivisita).toLocaleDateString('it-IT')}
-              {extra.oraRivisita ? ` alle ${extra.oraRivisita}` : ''}
-            </span>
-          </div>
-        )}
         {showCrmData && extra.giornoLevata && (
           <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Giorno Levata</span>
-            <span className="font-medium text-slate-700">{extra.giornoLevata}</span>
+            <span className="text-slate-400 block mb-0.5 font-medium">Giorno Levata</span>
+            <span className="font-bold text-slate-700">{extra.giornoLevata}</span>
           </div>
         )}
         {showCrmData && extra.riferimento && (
           <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Riferimento</span>
-            <span className="font-medium text-slate-700">{extra.riferimento}</span>
+            <span className="text-slate-400 block mb-0.5 font-medium">Riferimento</span>
+            <span className="font-bold text-slate-700">{extra.riferimento}</span>
           </div>
         )}
         {showCrmData && extra.telefono && (
           <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Telefono</span>
-            <a 
-              href={`tel:${extra.telefono.replace(/\s+/g, '')}`} 
-              className="font-bold text-brand-600 hover:text-brand-700 underline decoration-brand-200 underline-offset-2"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <span className="text-slate-400 block mb-0.5 font-medium">Telefono</span>
+            <a href={`tel:${extra.telefono.replace(/\\s+/g, '')}`} className="font-black text-brand-600 hover:text-brand-700 underline decoration-brand-200 underline-offset-2" onClick={(e) => e.stopPropagation()}>
               {extra.telefono}
             </a>
           </div>
         )}
         {showCrmData && extra.pIva && (
           <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">P. IVA</span>
-            <span className="font-medium text-slate-700">{extra.pIva}</span>
+            <span className="text-slate-400 block mb-0.5 font-medium">P. IVA</span>
+            <span className="font-bold text-slate-700">{extra.pIva}</span>
           </div>
         )}
         {showCrmData && extra.mail && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5">Mail</span>
-            <span className="font-medium text-slate-700">{extra.mail}</span>
+          <div className="text-xs col-span-2">
+            <span className="text-slate-400 block mb-0.5 font-medium">Mail</span>
+            <span className="font-bold text-slate-700">{extra.mail}</span>
           </div>
         )}
-        
         {showCrmData && extra.richiestaOrdine && (
-          <div className="text-xs col-span-2">
-            <span className="text-slate-400 block mb-0.5">Richiesta Ordine</span>
-            <span className="font-medium text-slate-700">
-              {extra.dataOrdine ? `Inserito il ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
-              {extra.ordineEvaso ? (
-                <span className="text-emerald-600 font-bold">Evaso</span>
-              ) : (
-                <span className="text-amber-600 font-bold">Da evadere</span>
-              )}
+          <div className="text-xs col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
+            <span className="text-slate-400 block mb-1 font-bold uppercase tracking-wider text-[9px]">Stato Ordine</span>
+            <span className="font-medium text-slate-700 flex items-center gap-1.5">
+              {extra.dataOrdine ? `${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
+              {extra.ordineEvaso ? <span className="text-emerald-600 font-black">Evaso ✓</span> : <span className="text-amber-600 font-black animate-pulse">Da evadere ⏳</span>}
             </span>
-            {extra.noteOrdine && (
-              <div className="mt-1 p-2 bg-slate-100 rounded text-slate-600 italic">
-                {extra.noteOrdine}
-              </div>
-            )}
+            {extra.noteOrdine && <div className="mt-1.5 p-2 bg-white rounded border border-slate-200 text-slate-600 italic leading-snug">{extra.noteOrdine}</div>}
           </div>
         )}
       </div>
@@ -830,12 +800,9 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                   className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 >
                   <option value="">Ora</option>
-                  {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
-                    const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
-                    const m = ((i % 4) * 15).toString().padStart(2, '0');
-                    const time = `${h}:${m}`;
-                    return <option key={time} value={time}>{time}</option>;
-                  })}
+                  {getAvailableTimes(extra.dataRivisita || '', id, rubrica).map(time => (
+                    <option key={time} value={time}>{time}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1294,21 +1261,22 @@ export default function App() {
       setIsSyncing(true);
       const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
       
-      const res = await fetch('https://bytebin.lucko.me/post', {
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const formData = new FormData();
+      formData.append('file', blob, 'sync.json');
+      
+      // expires=1d garantisce l'autodistruzione dopo 24h anche se non viene scaricato
+      const res = await fetch('https://file.io/?expires=1d', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(data)
+        body: formData
       });
       
       const result = await res.json();
       
-      if (result && result.key) {
+      if (result.success && result.key) {
         setGeneratedSyncCode(result.key);
         navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
-        showToast('Codice generato con successo!');
+        showToast('Codice usa-e-getta generato!');
       } else {
         throw new Error('Impossibile recuperare il codice');
       }
@@ -1323,10 +1291,18 @@ export default function App() {
     if (!syncCodeInput.trim()) return;
     try {
       setIsSyncing(true);
-      const res = await fetch(`https://bytebin.lucko.me/${syncCodeInput.trim()}`);
-      if (!res.ok) throw new Error('Codice non valido o scaduto');
+      const res = await fetch(`https://file.io/${syncCodeInput.trim()}`);
+      
+      if (!res.ok) {
+        throw new Error('Codice inesistente, già utilizzato o scaduto');
+      }
       
       const data = await res.json();
+      
+      // Controllo di sicurezza se file.io restituisce un errore JSON formattato anziché il file
+      if (data.success === false) {
+          throw new Error('Il codice è stato già bruciato e i dati distrutti');
+      }
       
       if (data.giroVisite) localStorage.setItem('giroVisite', JSON.stringify(data.giroVisite));
       if (data.crmAnagrafiche) localStorage.setItem('crmAnagrafiche', JSON.stringify(data.crmAnagrafiche));
@@ -1334,10 +1310,10 @@ export default function App() {
       if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
       if (data.version) localStorage.setItem('app_data_version', data.version);
       
-      showToast('Dati scaricati con successo! Riavvio in corso...');
+      showToast('Dati importati! Il file sul server è stato distrutto.');
       setTimeout(() => window.location.reload(), 2000);
     } catch (err) {
-      showToast('Codice errato, inesistente o scaduto', 'error');
+      showToast(err instanceof Error ? err.message : 'Codice errato o già utilizzato', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -1973,23 +1949,23 @@ export default function App() {
   const handleFabSyncGenerate = async () => {
     try {
       setFabSyncLoading(true);
-      setFabMenuOpen(false); // Chiude il menu per feedback visivo
+      setFabMenuOpen(false); 
       
       const data = { giroVisite, crmAnagrafiche, stores, rubrica, version: DATA_VERSION };
-      const res = await fetch('https://bytebin.lucko.me/post', {
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const formData = new FormData();
+      formData.append('file', blob, 'sync.json');
+      
+      const res = await fetch('https://file.io/?expires=1d', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(data)
+        body: formData
       });
       
       const result = await res.json();
       
-      if (result && result.key) {
+      if (result.success && result.key) {
         navigator.clipboard.writeText(result.key).catch(() => console.log('Clipboard copy prevented'));
-        showToast('Codice Sync generato!');
+        showToast('Codice usa-e-getta generato!');
         setGeneratedSyncCode(result.key);
         setShowSettingsModal(true);
       } else {
@@ -2061,22 +2037,28 @@ export default function App() {
     const list = getCurrentList();
     if (activeTab === 'search') return list;
     
+    const getDateTime = (dateStr?: string, timeStr?: string) => {
+      if (!dateStr) return Infinity;
+      const date = new Date(dateStr);
+      if (timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          date.setHours(hours, minutes, 0, 0);
+        }
+      }
+      return date.getTime();
+    };
+
     return [...list].sort((a, b) => {
       if (rubricaSort === 'none') return 0;
-      const idA = getRivenditaId(a);
-      const idB = getRivenditaId(b);
-      const extraA = rubrica[idA];
-      const extraB = rubrica[idB];
+      const extraA = rubrica[getRivenditaId(a)];
+      const extraB = rubrica[getRivenditaId(b)];
       
       if (rubricaSort === 'dataVisitaAsc') {
-        const dateA = extraA?.dataVisita ? new Date(extraA.dataVisita).getTime() : Infinity;
-        const dateB = extraB?.dataVisita ? new Date(extraB.dataVisita).getTime() : Infinity;
-        return dateA - dateB;
+        return getDateTime(extraA?.dataVisita, extraA?.oraVisita) - getDateTime(extraB?.dataVisita, extraB?.oraVisita);
       }
       if (rubricaSort === 'dataRivisitaAsc') {
-        const dateA = extraA?.dataRivisita ? new Date(extraA.dataRivisita).getTime() : Infinity;
-        const dateB = extraB?.dataRivisita ? new Date(extraB.dataRivisita).getTime() : Infinity;
-        return dateA - dateB;
+        return getDateTime(extraA?.dataRivisita, extraA?.oraRivisita) - getDateTime(extraB?.dataRivisita, extraB?.oraRivisita);
       }
       return 0;
     });
@@ -2117,7 +2099,8 @@ export default function App() {
     setExpandedCardId,
     handleStoreUpdate,
     removeStore,
-    setShareModal
+    setShareModal,
+    openRevisitModal: setRevisitModalId
   };
 
   return (
@@ -2934,11 +2917,11 @@ export default function App() {
                 <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center">
                   <Calendar className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-800">Programma Rivisita?</h3>
+                <h3 className="text-lg font-bold text-slate-800">Programma / Modifica Appuntamento</h3>
               </div>
               
               <p className="text-sm text-slate-600 leading-relaxed">
-                Hai segnato la rivendita come visitata. Vuoi programmare un nuovo appuntamento?
+                Imposta o modifica la data e l'ora del prossimo appuntamento per questa rivendita.
               </p>
 
               <div className="space-y-3 pt-2">
@@ -2959,12 +2942,9 @@ export default function App() {
                     className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
                   >
                     <option value="">Seleziona Ora</option>
-                    {Array.from({ length: (20 - 8) * 4 + 1 }).map((_, i) => {
-                      const h = (Math.floor(i / 4) + 8).toString().padStart(2, '0');
-                      const m = ((i % 4) * 15).toString().padStart(2, '0');
-                      const time = `${h}:${m}`;
-                      return <option key={time} value={time}>{time}</option>;
-                    })}
+                    {getAvailableTimes(rubrica[revisitModalId]?.dataRivisita || '', revisitModalId, rubrica).map(time => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
                   </select>
                 </div>
               </div>
