@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
-import { JSDOM } from 'jsdom';
+import * as cheerio from 'cheerio';
 import { GoogleGenAI, Type } from "@google/genai";
 
 const app = express();
@@ -48,11 +48,16 @@ const BASE_URL = 'https://acciseonline8.adm.gov.it/ConsultazioneOnLineTabacchi/r
 
 // Helper to extract options from a select HTML string
 function extractOptions(htmlString: string) {
-  const dom = new JSDOM(htmlString);
-  const options = Array.from(dom.window.document.querySelectorAll('option')) as HTMLOptionElement[];
-  return options
-    .map(opt => ({ value: opt.value, label: opt.textContent?.trim() || '' }))
-    .filter(opt => opt.value !== '');
+  const $ = cheerio.load(htmlString);
+  const options: { value: string; label: string }[] = [];
+  $('option').each((_, el) => {
+    const val = $(el).val();
+    const label = $(el).text().trim();
+    if (val && val !== '') {
+      options.push({ value: val as string, label });
+    }
+  });
+  return options;
 }
 
 app.get('/api/init', async (req, res) => {
@@ -61,14 +66,14 @@ app.get('/api/init', async (req, res) => {
     const html = await response.text();
     const cookies = response.headers.get('set-cookie');
     
-    const dom = new JSDOM(html);
-    const viewState = dom.window.document.querySelector('input[name="javax.faces.ViewState"]')?.getAttribute('value');
+    const $ = cheerio.load(html);
+    const viewState = $('input[name="javax.faces.ViewState"]').val();
     
-    const regionSelect = dom.window.document.querySelector('select[name="j_idt16:regione"]');
-    const regions = regionSelect ? extractOptions(regionSelect.outerHTML) : [];
+    const regionSelect = $('select[name="j_idt16:regione"]');
+    const regions = regionSelect.length ? extractOptions(regionSelect.toString()) : [];
     
-    const submitButton = dom.window.document.querySelector('input[value="Cerca"]');
-    const submitName = submitButton ? submitButton.getAttribute('name') : 'j_idt16:j_idt65';
+    const submitButton = $('input[value="Cerca"]');
+    const submitName = submitButton.length ? submitButton.attr('name') : 'j_idt16:j_idt65';
 
     res.json({ viewState, cookies, regions, submitName });
   } catch (error) {
@@ -208,24 +213,24 @@ async function fetchPage(cookies: string, viewState: string, tableId: string, fi
   const tableMatch = xml.match(new RegExp(`<update id="${tableId}"><!\\[CDATA\\[(.*?)\\]\\]><\\/update>`, 's'));
   const tableHtml = tableMatch ? tableMatch[1] : '';
   
-  const dom = new JSDOM(`<table>${tableHtml}</table>`);
+  const $ = cheerio.load(`<table>${tableHtml}</table>`);
   const results: any[] = [];
-  const table = dom.window.document.querySelector('table');
+  const table = $('table');
 
-  if (table) {
-    const headers = Array.from(table.querySelectorAll('thead th')).map((th: any) => th.textContent?.trim() || '');
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
+  if (table.length) {
+    const headers = table.find('thead th').map((_, th) => $(th).text().trim()).get();
+    const rowsList = table.find('tbody tr');
     
-    for (const row of rows) {
-      const cells = Array.from((row as any).querySelectorAll('td')).map((td: any) => td.textContent?.trim() || '');
-      if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') continue;
+    rowsList.each((_, row) => {
+      const cells = $(row).find('td').map((_, td) => $(td).text().trim()).get();
+      if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') return;
       
       const rowData: any = {};
       headers.forEach((header, index) => {
         rowData[header] = cells[index];
       });
       results.push(rowData);
-    }
+    });
   }
   return { results, viewState: newViewState };
 }
@@ -256,34 +261,34 @@ app.post('/api/search', async (req, res) => {
     });
     
     const html = await response.text();
-    const dom = new JSDOM(html);
+    const $ = cheerio.load(html);
     
-    let currentViewState = dom.window.document.querySelector('input[name="javax.faces.ViewState"]')?.getAttribute('value') || viewState;
+    let currentViewState = $('input[name="javax.faces.ViewState"]').val() as string || viewState;
 
     const results: any[] = [];
-    const table = dom.window.document.querySelector('table[role="grid"]');
+    const table = $('table[role="grid"]');
     let totalPages = 1;
     let tableId = '';
 
-    if (table) {
-      tableId = table.getAttribute('id') || '';
-      const headers = Array.from(table.querySelectorAll('thead th')).map((th: any) => th.textContent?.trim() || '');
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
+    if (table.length) {
+      tableId = table.attr('id') || '';
+      const headers = table.find('thead th').map((_, th) => $(th).text().trim()).get();
+      const rowsList = table.find('tbody tr');
       
-      for (const row of rows) {
-        const cells = Array.from((row as any).querySelectorAll('td')).map((td: any) => td.textContent?.trim() || '');
-        if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') continue;
+      rowsList.each((_, row) => {
+        const cells = $(row).find('td').map((_, td) => $(td).text().trim()).get();
+        if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') return;
         
         const rowData: any = {};
         headers.forEach((header, index) => {
           rowData[header] = cells[index];
         });
         results.push(rowData);
-      }
+      });
 
-      const paginator = dom.window.document.querySelector('.ui-paginator');
-      if (paginator) {
-        const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
+      const paginator = $('.ui-paginator');
+      if (paginator.length) {
+        const currentText = paginator.find('.ui-paginator-current').text() || '';
         const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/) || currentText.match(/Pagina\s+(\d+)\s+di\s+(\d+)/i);
         totalPages = match ? parseInt(match[2]) : 1;
       }
@@ -338,31 +343,31 @@ app.post('/api/paginate', async (req, res) => {
     const tableMatch = xml.match(new RegExp(`<update id="${tableId}"><!\\[CDATA\\[(.*?)\\]\\]><\\/update>`, 's'));
     const tableHtml = tableMatch ? tableMatch[1] : '';
     
-    const dom = new JSDOM(`<table>${tableHtml}</table>`);
+    const $ = cheerio.load(`<table>${tableHtml}</table>`);
     const results: any[] = [];
-    const table = dom.window.document.querySelector('table');
+    const table = $('table');
     let pagination = null;
 
-    if (table) {
-      const headers = Array.from(table.querySelectorAll('thead th')).map((th: any) => th.textContent?.trim() || '');
-      const rowsList = Array.from(table.querySelectorAll('tbody tr'));
+    if (table.length) {
+      const headers = table.find('thead th').map((_, th) => $(th).text().trim()).get();
+      const rowsList = table.find('tbody tr');
       
-      for (const row of rowsList) {
-        const cells = Array.from((row as any).querySelectorAll('td')).map((td: any) => td.textContent?.trim() || '');
-        if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') continue;
+      rowsList.each((_, row) => {
+        const cells = $(row).find('td').map((_, td) => $(td).text().trim()).get();
+        if (cells.length <= 1 && cells[0] === 'Nessun record trovato.') return;
 
         const rowData: any = {};
         headers.forEach((header, index) => {
           rowData[header] = cells[index];
         });
         results.push(rowData);
-      }
+      });
 
-      const paginator = dom.window.document.querySelector('.ui-paginator');
-      if (paginator) {
-        const currentText = paginator.querySelector('.ui-paginator-current')?.textContent || '';
+      const paginator = $('.ui-paginator');
+      if (paginator.length) {
+        const currentText = paginator.find('.ui-paginator-current').text() || '';
         const match = currentText.match(/\((\d+)\s+di\s+(\d+)\)/) || currentText.match(/Pagina\s+(\d+)\s+di\s+(\d+)/i);
-        const activePage = paginator.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '1';
+        const activePage = paginator.find('.ui-paginator-page.ui-state-active').text() || '1';
 
         pagination = {
           currentText,
@@ -442,7 +447,7 @@ app.post('/api/enrich', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],

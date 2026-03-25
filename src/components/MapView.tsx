@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Navigation, AlertTriangle, MapPinOff, MapPin, Store, Info } from 'lucide-react';
@@ -24,14 +25,18 @@ interface GeocodedResult extends SearchResult {
   lon: number;
 }
 
-const MapBounds = ({ markers }: { markers: GeocodedResult[] }) => {
+const MapBounds = ({ markers, userLocation }: { markers: GeocodedResult[], userLocation: {lat: number, lon: number} | null }) => {
   const map = useMap();
   useEffect(() => {
-    if (markers.length > 0) {
-      const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lon]));
+    if (markers.length > 0 || userLocation) {
+      const points: L.LatLngExpression[] = markers.map(m => [m.lat, m.lon]);
+      if (userLocation) {
+        points.push([userLocation.lat, userLocation.lon]);
+      }
+      const bounds = L.latLngBounds(points);
       map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [markers, map]);
+  }, [markers, userLocation, map]);
   return null;
 };
 
@@ -39,6 +44,74 @@ export default function MapView({ results }: MapViewProps) {
   const [geocodedResults, setGeocodedResults] = useState<GeocodedResult[]>([]);
   const [notFoundResults, setNotFoundResults] = useState<SearchResult[]>([]);
   const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
+  const [userLocation, setUserLocation] = useState<{lat: number, lon: number} | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude
+        });
+      },
+      (error) => {
+        console.error("Error tracking location:", error);
+      },
+      { enableHighAccuracy: true }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  const userIcon = L.divIcon({
+    className: 'user-location-marker',
+    html: `
+      <div style="
+        width: 16px;
+        height: 16px;
+        background-color: #4285F4;
+        border: 2px solid white;
+        border-radius: 50%;
+        box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        position: relative;
+      ">
+        <div style="
+          position: absolute;
+          top: -2px;
+          left: -2px;
+          width: 16px;
+          height: 16px;
+          background-color: #4285F4;
+          border-radius: 50%;
+          opacity: 0.4;
+          animation: pulse 2s infinite;
+        "></div>
+      </div>
+      <style>
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 0.4; }
+          70% { transform: scale(2.5); opacity: 0; }
+          100% { transform: scale(2.5); opacity: 0; }
+        }
+      </style>
+    `,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+
+  const handleMapNavigation = useCallback((res: GeocodedResult) => {
+    const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
+    const encoded = encodeURIComponent(address);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      window.location.href = 'geo:0,0?q=' + encoded;
+    } else {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${res.lat},${res.lon}`, '_blank');
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -55,7 +128,6 @@ export default function MapView({ results }: MapViewProps) {
       const newGeocoded: GeocodedResult[] = [];
       const newNotFound: SearchResult[] = [];
       
-      // Funzione che chiama il NOSTRO server invece di OpenStreetMap direttamente
       const fetchGeocodeFromBackend = async (addr: string) => {
         try {
           const res = await fetch('/api/geocode', {
@@ -81,17 +153,14 @@ export default function MapView({ results }: MapViewProps) {
         const fallbackAddress = `${res['Comune']}, ${res['Prov.']}, Italy`;
         
         try {
-          // Pausa per non intasare il server
           if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
           
           let data = await fetchGeocodeFromBackend(address);
 
-          // Fallback 1: Indirizzo originale se quello pulito fallisce
           if ((!data || data.length === 0) && cleanIndirizzo !== res['Indirizzo']) {
             data = await fetchGeocodeFromBackend(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`);
           }
 
-          // Fallback 2: Solo Comune e Provincia
           if (!data || data.length === 0) {
             data = await fetchGeocodeFromBackend(fallbackAddress);
           }
@@ -102,10 +171,15 @@ export default function MapView({ results }: MapViewProps) {
               lat: parseFloat(data[0].lat),
               lon: parseFloat(data[0].lon)
             });
-            setGeocodedResults([...newGeocoded]);
+            // Batch update every 3 results or at the end to prevent mobile lag
+            if (newGeocoded.length % 3 === 0 || i === results.length - 1) {
+              setGeocodedResults([...newGeocoded]);
+            }
           } else {
             newNotFound.push(res);
-            setNotFoundResults([...newNotFound]);
+            if (newNotFound.length % 3 === 0 || i === results.length - 1) {
+              setNotFoundResults([...newNotFound]);
+            }
           }
         } catch (error) {
           console.error("Geocoding error for address:", address, error);
@@ -150,51 +224,70 @@ export default function MapView({ results }: MapViewProps) {
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           
-          {geocodedResults.map((res, idx) => (
-            <Marker key={idx} position={[res.lat, res.lon]}>
-              <Popup className="custom-popup">
-                <div className="p-2 min-w-[220px]">
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    <span className="bg-brand-100 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Store className="w-3 h-3" />
-                      Riv. {res['Num. Rivendita']}
-                    </span>
-                    {res['Tipo Rivendita'] && (
-                      <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                        {res['Tipo Rivendita']}
+          <MarkerClusterGroup chunkedLoading>
+            {geocodedResults.map((res, idx) => (
+              <Marker key={idx} position={[res.lat, res.lon]}>
+                <Popup className="custom-popup">
+                  <div className="p-2 min-w-[220px]">
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      <span className="bg-brand-100 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Store className="w-3 h-3" />
+                        Riv. {res['Num. Rivendita']}
                       </span>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-start gap-2 mb-3">
-                    <MapPin className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-slate-900 text-sm leading-tight">
-                        {res['Comune']} ({res['Prov.']})
-                      </div>
-                      <div className="text-slate-600 text-xs mt-1 leading-relaxed">
-                        {res['Indirizzo']}<br />
-                        {res['CAP']} {res['Comune']}
+                      {res['Tipo Rivendita'] && (
+                        <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {res['Tipo Rivendita']}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-start gap-2 mb-3">
+                      <MapPin className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm leading-tight">
+                          {res['Comune']} ({res['Prov.']})
+                        </div>
+                        <div className="text-slate-600 text-xs mt-1 leading-relaxed">
+                          {res['Indirizzo']}<br />
+                          {res['CAP']} {res['Comune']}
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const addr = `${res['Indirizzo']}, ${res['CAP'] || ''} ${res['Comune']}, ${res['Prov.']}, Italy`;
+                          const encoded = encodeURIComponent(addr);
+                          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                          if (isMobile) {
+                            window.location.href = 'geo:0,0?q=' + encoded;
+                          } else {
+                            window.open(`https://www.google.com/maps/search/?api=1&query=${encoded}`, '_blank');
+                          }
+                        }}
+                        className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all shadow-sm"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        Naviga
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div className="grid grid-cols-1 gap-2">
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=$${res.lat},${res.lon}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-                    >
-                      <Navigation className="w-4 h-4" />
-                      Naviga
-                    </a>
-                  </div>
-                </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MarkerClusterGroup>
+
+          {userLocation && (
+            <Marker position={[userLocation.lat, userLocation.lon]} icon={userIcon}>
+              <Popup>
+                <div className="font-bold text-brand-700">La tua posizione</div>
               </Popup>
             </Marker>
-          ))}
-          <MapBounds markers={geocodedResults} />
+          )}
+
+          <MapBounds markers={geocodedResults} userLocation={userLocation} />
         </MapContainer>
       </div>
       

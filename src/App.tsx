@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
@@ -104,6 +104,8 @@ export const handleNavigation = (address: string) => {
   }
 };
 
+const toTitleCase = (str: string) => { return str ? str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase()) : ''; };
+
 const DATA_VERSION = packageVersion.version;
 
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
@@ -130,9 +132,10 @@ interface RivenditaCardProps {
   isCrmTab?: boolean;
   activeTab: string;
   expandedCardId: string | null;
-  isSaved: (res: SearchResult) => boolean;
-  rubrica: RubricaData;
-  enrichedData: Record<string, EnrichedDetails>;
+  isInGiro: boolean;
+  extra: RivenditaExtra;
+  enrichedDetails?: EnrichedDetails;
+  rubrica?: RubricaData;
   enrichingId: string | null;
   toggleSave: (res: SearchResult) => void;
   removeFromCrm: (res: SearchResult) => void;
@@ -145,20 +148,20 @@ interface RivenditaCardProps {
   setExpandedCardId: (id: string | null) => void;
   setShareModal: (modal: { isOpen: boolean; text: string }) => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  moveCard?: (index: number, direction: 'up' | 'down') => void;
   openRevisitModal: (id: string) => void;
 }
 
-const RivenditaCard: React.FC<RivenditaCardProps> = ({
+const RivenditaCard = React.memo<RivenditaCardProps>(({
   res,
   idx,
   isCrmTab = false,
   activeTab,
   expandedCardId,
-  isSaved,
+  isInGiro,
+  extra,
+  enrichedDetails,
   rubrica,
-  enrichedData,
   enrichingId,
   toggleSave,
   removeFromCrm,
@@ -171,31 +174,19 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   setExpandedCardId,
   setShareModal,
   handleStoreUpdate,
-  onMoveUp,
-  onMoveDown,
+  moveCard,
   openRevisitModal
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
-  const isInGiro = isSaved(res);
   const [isCopied, setIsCopied] = useState(false);
   
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
-  const extra = rubrica[id] || {
-    stato: '',
-    visitata: '',
-    giornoLevata: '',
-    riferimento: '',
-    telefono: '',
-    pIva: '',
-    mail: '',
-    manualCap: ''
-  };
 
   const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
-  const street = res['Indirizzo']?.trim() || '';
-  const city = res['Comune']?.trim() || '';
+  const street = toTitleCase(res['Indirizzo']?.trim() || '');
+  const city = (res['Comune']?.trim() || '').toUpperCase();
   const prov = res['Prov.']?.trim() || '';
   const fullAddress = [street, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
   const encodedAddress = encodeURIComponent(fullAddress);
@@ -203,10 +194,10 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
   const showCrmData = isCrmTab || activeTab === 'giro';
 
   const shareText = React.useMemo(() => {
-    const enriched = enrichedData[id];
+    const enriched = enrichedDetails;
     let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    text += `Indirizzo: ${res['Indirizzo']}${capToDisplay ? `, ${capToDisplay}` : ''}\n`;
-    text += `Comune: ${res['Comune']} (${res['Prov.']})\n`;
+    text += `Indirizzo: ${toTitleCase(res['Indirizzo'])}${capToDisplay ? `, ${capToDisplay}` : ''}\n`;
+    text += `Comune: ${(res['Comune'] || '').toUpperCase()} (${res['Prov.']})\n`;
     
     if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
     if (extra.riferimento) text += `Referente: ${extra.riferimento}\n`;
@@ -236,7 +227,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
     if (extra.note || (enriched && enriched.notes)) text += `\nNote: ${extra.note || enriched?.notes}\n`;
 
     return text.trim();
-  }, [res, extra, enrichedData, id]);
+  }, [res, extra, enrichedDetails, id]);
 
   const handleShare = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -261,10 +252,10 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         <div className="flex items-start gap-2 flex-1 min-w-0">
           {activeTab === 'giro' && (
             <div className="flex flex-col gap-1 mr-1 mt-1 shrink-0">
-              <button onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={idx === 0}>
+              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'up'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={idx === 0}>
                 <ChevronUp className="w-4 h-4" />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={isLastInGiro}>
+              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'down'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={isLastInGiro}>
                 <ChevronDown className="w-4 h-4" />
               </button>
             </div>
@@ -294,17 +285,17 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               )}
             </div>
             {/* Aggiunto leading-snug e break-words per gestire città con nomi lunghissimi senza spaccare il layout */}
-            <h3 className="font-medium text-slate-900 leading-snug break-words pr-2">
+            <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
               {res.isStore ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-brand-700">{res.storeName || 'Senza Nome'}</span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
-                    {capToDisplay ? `${capToDisplay} ` : ''}{res['Comune']} ({res['Prov.']})
+                  <span className="text-sm font-bold text-brand-700 truncate">{res.storeName || 'Senza Nome'}</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight truncate">
+                    {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
                   </span>
                 </span>
               ) : (
                 <>
-                  {capToDisplay ? `${capToDisplay} ` : ''}{res['Comune']} ({res['Prov.']})
+                  {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
                 </>
               )}
             </h3>
@@ -374,8 +365,8 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-          <span className="leading-snug">
-            {res['Indirizzo']}
+          <span className="leading-snug line-clamp-2">
+            {toTitleCase(res['Indirizzo'])}
             {capToDisplay ? `, ${capToDisplay}` : ''}
           </span>
         </div>
@@ -477,7 +468,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
         )}
       </div>
 
-      {enrichedData[id] && (
+      {enrichedDetails && (
         <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
@@ -486,7 +477,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
             <div className="flex-1">
               <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
               <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-line">
-                {enrichedData[id].openingHours}
+                {enrichedDetails.openingHours}
               </p>
             </div>
           </div>
@@ -498,33 +489,33 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
               </div>
               <div>
                 <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                <a href={`tel:${enrichedData[id].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
-                  {enrichedData[id].phone}
+                <a href={`tel:${enrichedDetails.phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
+                  {enrichedDetails.phone}
                 </a>
               </div>
             </div>
 
-            {enrichedData[id].email && enrichedData[id].email !== 'Non disponibile' && (
+            {enrichedDetails.email && enrichedDetails.email !== 'Non disponibile' && (
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
                   <Mail className="w-4 h-4 text-brand-600" />
                 </div>
                 <div className="min-w-0">
                   <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                  <a href={`mailto:${enrichedData[id].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
-                    {enrichedData[id].email}
+                  <a href={`mailto:${enrichedDetails.email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
+                    {enrichedDetails.email}
                   </a>
                 </div>
               </div>
             )}
           </div>
 
-          {enrichedData[id].notes && enrichedData[id].notes !== 'Non disponibile' && (
+          {enrichedDetails.notes && enrichedDetails.notes !== 'Non disponibile' && (
             <div className="pt-3 border-t border-slate-200/60">
               <div className="flex gap-2 items-start">
                 <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-slate-500 italic leading-normal">
-                  {enrichedData[id].notes}
+                  {enrichedDetails.notes}
                 </p>
               </div>
             </div>
@@ -591,7 +582,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
           </button>
         </div>
 
-        {!enrichedData[id] && (
+        {!enrichedDetails && (
           enrichingId === id ? (
             <button disabled className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all">
               <Loader2 className="w-3 h-3 animate-spin" /> Caricamento...
@@ -800,7 +791,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
                   className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                 >
                   <option value="">Ora</option>
-                  {getAvailableTimes(extra.dataRivisita || '', id, rubrica).map(time => (
+                  {getAvailableTimes(extra.dataRivisita || '', id, rubrica || {}).map(time => (
                     <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
@@ -926,7 +917,9 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
           <button
             onClick={() => {
               if (!isCrmTab && activeTab !== 'rip') {
-                addToCrm(res);
+                if (!res.isStore) {
+                  addToCrm(res);
+                }
               }
               setExpandedCardId(null);
             }}
@@ -938,7 +931,7 @@ const RivenditaCard: React.FC<RivenditaCardProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default function App() {
   const [session, setSession] = useState<{ viewState: string; cookies: string; submitName: string } | null>(null);
@@ -1015,6 +1008,16 @@ export default function App() {
     message: string;
     type: 'success' | 'error' | 'info';
   }>({ show: false, message: '', type: 'info' });
+
+  useEffect(() => {
+    setCrmAnagrafiche(prev => {
+      const puliti = prev.filter(res => res.isStore !== true);
+      if (puliti.length !== prev.length) {
+        console.log("Database ripulito dai cloni fantasma!");
+      }
+      return puliti;
+    });
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ show: true, message, type });
@@ -1493,62 +1496,32 @@ export default function App() {
     }
   };
 
-  const handleEnrich = async (id: string, res: SearchResult) => {
+  const handleEnrich = useCallback(async (id: string, res: SearchResult) => {
     if (enrichedData[id]) return;
     
     try {
       setEnrichingId(id);
       const details = await enrichRivendita(res);
       setEnrichedData(prev => ({ ...prev, [id]: details }));
+      showToast('Dati arricchiti con successo!');
     } catch (err) {
       console.error(err);
+      showToast('Errore durante l\'arricchimento dati', 'error');
     } finally {
       setEnrichingId(null);
     }
-  };
+  }, [enrichedData, showToast]);
 
-  const handleCopyAddress = (address: string, id: string) => {
+  const handleCopyAddress = useCallback((address: string, id: string) => {
     navigator.clipboard.writeText(address).then(() => {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     }).catch(err => {
       console.error('Failed to copy: ', err);
     });
-  };
+  }, []);
 
-  const isSaved = (res: SearchResult) => {
-    return giroVisite.some(s => 
-      s['Num. Rivendita'] === res['Num. Rivendita'] && 
-      s['Comune'] === res['Comune'] && 
-      s['Prov.'] === res['Prov.']
-    );
-  };
-
-  const toggleSave = (res: SearchResult) => {
-    const id = getRivenditaId(res);
-    if (isSaved(res)) {
-      setGiroVisite(prev => prev.filter(s => 
-        !(s['Num. Rivendita'] === res['Num. Rivendita'] && 
-          s['Comune'] === res['Comune'] && 
-          s['Prov.'] === res['Prov.'])
-      ));
-    } else {
-      setGiroVisite(prev => [...prev, res]);
-      // Reset visit status when re-planned
-      const existing = rubrica[id];
-      if (existing?.visitata === 'Si') {
-        handleRubricaMultiUpdate(id, {
-          visitata: 'No',
-          lastDataVisita: existing.dataVisita,
-          lastOraVisita: existing.oraVisita
-        });
-      } else {
-        handleRubricaUpdate(id, 'visitata', 'No');
-      }
-    }
-  };
-
-  const handleRubricaUpdate = (id: string, field: keyof RivenditaExtra, value: string | boolean) => {
+  const handleRubricaUpdate = useCallback((id: string, field: keyof RivenditaExtra, value: string | boolean) => {
     setRubrica(prev => {
       const existing = prev[id];
       let isSavedToRubrica = existing?.isSavedToRubrica;
@@ -1589,9 +1562,9 @@ export default function App() {
         }
       };
     });
-  };
+  }, []);
 
-  const handleRubricaMultiUpdate = (id: string, updates: Partial<RivenditaExtra>) => {
+  const handleRubricaMultiUpdate = useCallback((id: string, updates: Partial<RivenditaExtra>) => {
     setRubrica(prev => {
       const existing = prev[id];
       let isSavedToRubrica = existing?.isSavedToRubrica;
@@ -1632,14 +1605,48 @@ export default function App() {
         }
       };
     });
-  };
+  }, []);
 
-  const initiateVisitToggle = (id: string) => {
+  const isSaved = useCallback((res: SearchResult) => {
+    return giroVisite.some(s => 
+      s['Num. Rivendita'] === res['Num. Rivendita'] && 
+      s['Comune'] === res['Comune'] && 
+      s['Prov.'] === res['Prov.']
+    );
+  }, [giroVisite]);
+
+  const toggleSave = useCallback((res: SearchResult) => {
+    const id = getRivenditaId(res);
+    if (isSaved(res)) {
+      setGiroVisite(prev => prev.filter(s => 
+        !(s['Num. Rivendita'] === res['Num. Rivendita'] && 
+          s['Comune'] === res['Comune'] && 
+          s['Prov.'] === res['Prov.'])
+      ));
+      showToast('Rimossa dal giro visite');
+    } else {
+      setGiroVisite(prev => [...prev, res]);
+      showToast('Aggiunta al giro visite');
+      // Reset visit status when re-planned
+      const existing = rubrica[id];
+      if (existing?.visitata === 'Si') {
+        handleRubricaMultiUpdate(id, {
+          visitata: 'No',
+          lastDataVisita: existing.dataVisita,
+          lastOraVisita: existing.oraVisita
+        });
+      } else {
+        handleRubricaUpdate(id, 'visitata', 'No');
+      }
+    }
+  }, [isSaved, rubrica, handleRubricaMultiUpdate, handleRubricaUpdate, showToast]);
+
+  const initiateVisitToggle = useCallback((id: string) => {
     setPendingVisitId(id);
     setShowConfirmVisitModal(true);
-  };
+  }, []);
 
-  const confirmVisit = () => {
+  const confirmVisit = useCallback(() => {
     if (!pendingVisitId) return;
     const id = pendingVisitId;
     const existing = rubrica[id];
@@ -1664,64 +1671,13 @@ export default function App() {
     setRevisitModalId(id);
     setShowConfirmVisitModal(false);
     setPendingVisitId(null);
-  };
+  }, [pendingVisitId, rubrica, handleRubricaMultiUpdate]);
 
-  const toggleExpandCard = (id: string) => {
+  const toggleExpandCard = useCallback((id: string) => {
     setExpandedCardId(prev => prev === id ? null : id);
-  };
+  }, []);
 
-  const exportToCSV = () => {
-    const rubricaEntries = (Object.entries(rubrica) as [string, RivenditaExtra][])
-      .filter(([id, _]) => hasRubricaData(id));
-    if (rubricaEntries.length === 0) return;
-
-    const headers = [
-      'Provincia', 'Comune', 'Num. Rivendita', 'Indirizzo', 'Tipo', 'Stato Rivendita',
-      'Stato Contatto', 'Visitata', 'Data Visita', 'Ora Visita', 'Data Rivisita', 'Ora Rivisita', 'Giorno Levata',
-      'Riferimento', 'Telefono', 'P. IVA', 'Mail', 'Richiesta Ordine', 'Note Ordine', 'Data Ordine', 'Ordine Evaso'
-    ];
-
-    const rows = rubricaEntries.map(([id, extra]) => {
-      const [prov, comune, num] = id.split('_');
-      const savedRes = giroVisite.find(r => getRivenditaId(r) === id);
-      
-      return [
-        prov || '',
-        comune || '',
-        num || '',
-        savedRes ? `"${savedRes['Indirizzo'] || ''}"` : '',
-        savedRes ? `"${savedRes['Tipo Rivendita'] || ''}"` : '',
-        savedRes ? `"${savedRes['Stato'] || ''}"` : '',
-        `"${extra.stato || ''}"`,
-        `"${extra.visitata || ''}"`,
-        `"${extra.dataVisita || ''}"`,
-        `"${extra.oraVisita || ''}"`,
-        `"${extra.dataRivisita || ''}"`,
-        `"${extra.oraRivisita || ''}"`,
-        `"${extra.giornoLevata || ''}"`,
-        `"${extra.riferimento || ''}"`,
-        `"${extra.telefono || ''}"`,
-        `"${extra.pIva || ''}"`,
-        `"${extra.mail || ''}"`,
-        `"${extra.richiestaOrdine ? 'Sì' : 'No'}"`,
-        `"${extra.noteOrdine || ''}"`,
-        `"${extra.dataOrdine || ''}"`,
-        `"${extra.ordineEvaso ? 'Sì' : 'No'}"`
-      ].join(',');
-    });
-
-    const csvContent = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `rubrica_rivendite_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const hasRubricaData = (id: string) => {
+  const hasRubricaData = useCallback((id: string) => {
     const extra = rubrica[id];
     if (!extra) return false;
     if (extra.isSavedToRubrica === undefined) {
@@ -1729,7 +1685,7 @@ export default function App() {
       return hasData;
     }
     return extra.isSavedToRubrica === true;
-  };
+  }, [rubrica]);
 
   useEffect(() => {
     // Migration: if crmAnagrafiche is empty but giroVisite has items with rubrica data,
@@ -1745,7 +1701,7 @@ export default function App() {
     }
   }, []);
 
-  const removeFromCrm = (res: SearchResult) => {
+  const removeFromCrm = useCallback((res: SearchResult) => {
     const id = getRivenditaId(res);
     setConfirmModal({
       isOpen: true,
@@ -1764,9 +1720,9 @@ export default function App() {
         showToast('Rivendita rimossa dal CRM');
       }
     });
-  };
+  }, []);
 
-  const removeStore = (res: SearchResult) => {
+  const removeStore = useCallback((res: SearchResult) => {
     const id = getRivenditaId(res);
     setConfirmModal({
       isOpen: true,
@@ -1785,24 +1741,27 @@ export default function App() {
         showToast('Store eliminato');
       }
     });
-  };
+  }, []);
 
-  const addToCrm = (res: SearchResult) => {
+  const addToCrm = useCallback((res: SearchResult) => {
     const id = getRivenditaId(res);
-    if (!crmAnagrafiche.some(s => getRivenditaId(s) === id)) {
-      setCrmAnagrafiche(prev => [...prev, res]);
-    }
+    setCrmAnagrafiche(prev => {
+      if (!prev.some(s => getRivenditaId(s) === id)) {
+        return [...prev, res];
+      }
+      return prev;
+    });
     handleRubricaUpdate(id, 'isSavedToRubrica', true);
     // Remove from Giro Visite automatically when saved to CRM
     setGiroVisite(prev => prev.filter(s => getRivenditaId(s) !== id));
-  };
+  }, [handleRubricaUpdate]);
 
-  const clearGiro = () => {
+  const clearGiro = useCallback(() => {
     setGiroVisite([]);
     setShowClearGiroConfirmModal(false);
-  };
+  }, []);
 
-  const exportGiroForMyMaps = () => {
+  const exportGiroForMyMaps = useCallback(() => {
     if (giroVisite.length === 0) return;
 
     // Colonne ottimizzate per l'importazione perfetta su Google My Maps
@@ -1845,59 +1804,67 @@ export default function App() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     }, 1500);
-  };
+  }, [giroVisite, rubrica]);
 
-  const giroVisiteList = giroVisite;
+  const giroVisiteList = useMemo(() => giroVisite, [giroVisite]);
   
-  const allCrmList = crmAnagrafiche;
+  const allCrmList = useMemo(() => crmAnagrafiche, [crmAnagrafiche]);
   
-  const crmList = allCrmList.filter(res => {
+  const crmList = useMemo(() => allCrmList.filter(res => {
     const id = getRivenditaId(res);
     const stato = rubrica[id]?.stato;
     // Mantiene la scheda visibile nel CRM durante la modifica, anche se si seleziona RIP
     if (activeTab === 'crm' && expandedCardId === id) return true;
     return stato !== 'RIP';
-  });
+  }), [allCrmList, rubrica, activeTab, expandedCardId]);
 
-  const ripList = allCrmList.filter(res => {
+  const ripList = useMemo(() => allCrmList.filter(res => {
     const id = getRivenditaId(res);
     const stato = rubrica[id]?.stato;
     // Mantiene la scheda visibile nei RIP durante la modifica, anche se si toglie RIP
     if (activeTab === 'rip' && expandedCardId === id) return true;
     return stato === 'RIP';
-  });
+  }), [allCrmList, rubrica, activeTab, expandedCardId]);
 
-  const storeList = stores;
+  const storeList = useMemo(() => stores, [stores]);
 
   // Province dinamiche dal CRM e dagli Store
-  const provincesInCrm = Array.from(new Set([
-    ...crmList.map(res => res['Prov.']),
-    ...storeList.map(res => res['Prov.'])
-  ])).sort();
+  const provincesInCrm = useMemo(() => Array.from(new Set([
+    ...crmList.map(res => (res['Prov.'] || '').toUpperCase()),
+    ...storeList.map(res => (res['Prov.'] || '').toUpperCase())
+  ])).sort(), [crmList, storeList]);
 
-  const getOrderedTabs = () => {
+  const getOrderedTabs = useCallback(() => {
     const tabs = ['search', 'giro', 'crm', 'store'];
     provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
     tabs.push('rip');
     return tabs;
-  };
+  }, [provincesInCrm]);
 
-  const handleSwipe = (direction: 'left' | 'right') => {
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab);
+    setViewMode('list');
+    setRivenditaFilter('');
+    setComuneFilter('');
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleSwipe = useCallback((direction: 'left' | 'right') => {
     const tabs = getOrderedTabs();
     const currentIndex = tabs.indexOf(activeTab);
+    let nextTab = activeTab;
     
     if (direction === 'left') {
       const nextIndex = (currentIndex + 1) % tabs.length;
-      setActiveTab(tabs[nextIndex]);
+      nextTab = tabs[nextIndex];
     } else if (direction === 'right') {
       const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      setActiveTab(tabs[prevIndex]);
+      nextTab = tabs[prevIndex];
     }
-    setRivenditaFilter('');
-    setComuneFilter('');
-  };
+    handleTabChange(nextTab);
+  }, [activeTab, getOrderedTabs, handleTabChange]);
 
-  const moveCard = (index: number, direction: 'up' | 'down') => {
+  const moveCard = useCallback((index: number, direction: 'up' | 'down') => {
     setGiroVisite(prev => {
       const newArray = [...prev];
       if (direction === 'up' && index > 0) {
@@ -1907,9 +1874,9 @@ export default function App() {
       }
       return newArray;
     });
-  };
+  }, []);
 
-  const getUniqueComuniForTab = () => {
+  const getUniqueComuniForTab = useCallback(() => {
     let list: SearchResult[] = [];
     if (activeTab === 'search') return [];
     if (activeTab === 'giro') list = giroVisiteList;
@@ -1918,26 +1885,26 @@ export default function App() {
     else if (activeTab === 'rip') list = ripList;
     else if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
-      list = [...crmList, ...storeList].filter(res => res['Prov.'] === prov);
+      list = [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase());
     }
     
     // Create strings like "Comune (Prov.)"
     const formattedComuni = list.map(res => `${res['Comune']} (${res['Prov.']})`);
     return Array.from(new Set(formattedComuni)).sort();
-  };
+  }, [activeTab, giroVisiteList, crmList, storeList, ripList]);
 
-  const getBaseListLength = () => {
+  const getBaseListLength = useCallback(() => {
     if (activeTab === 'crm') return crmList.length;
     if (activeTab === 'store') return storeList.length;
     if (activeTab === 'rip') return ripList.length;
     if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
-      return [...crmList, ...storeList].filter(res => res['Prov.'] === prov).length;
+      return [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase()).length;
     }
     return 0;
-  };
+  }, [activeTab, crmList, storeList, ripList]);
 
-  const handleFabSyncGenerate = async () => {
+  const handleFabSyncGenerate = useCallback(async () => {
     try {
       setFabSyncLoading(true);
       setFabMenuOpen(false); // Chiude il menu per feedback visivo
@@ -1967,9 +1934,9 @@ export default function App() {
     } finally {
       setFabSyncLoading(false);
     }
-  };
+  }, [giroVisite, crmAnagrafiche, stores, rubrica]);
 
-  const getCurrentList = () => {
+  const getCurrentList = useMemo(() => {
     let list: SearchResult[] = [];
     if (activeTab === 'search') return results || [];
     if (activeTab === 'giro') list = giroVisiteList;
@@ -1978,7 +1945,7 @@ export default function App() {
     else if (activeTab === 'rip') list = ripList;
     else if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
-      list = [...crmList, ...storeList].filter(res => res['Prov.'] === prov);
+      list = [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase());
     }
 
     // Filtro Numero Rivendita
@@ -2022,10 +1989,10 @@ export default function App() {
     }
 
     return list;
-  };
+  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica]);
 
-  const getSortedList = () => {
-    const list = getCurrentList();
+  const getSortedList = useMemo(() => {
+    const list = getCurrentList;
     if (activeTab === 'search') return list;
     
     const getDateTime = (dateStr?: string, timeStr?: string) => {
@@ -2053,13 +2020,78 @@ export default function App() {
       }
       return 0;
     });
-  };
+  }, [getCurrentList, activeTab, rubricaSort, rubrica]);
 
-  const handleStoreUpdate = (id: string, field: string, value: any) => {
+  const exportToCSV = useCallback(() => {
+    const listToExport = getSortedList;
+    if (listToExport.length === 0) return;
+
+    const headers = [
+      'Provincia', 'Comune', 'Num. Rivendita', 'Indirizzo', 'Tipo', 'Stato Rivendita',
+      'Stato Contatto', 'Visitata', 'Data Visita', 'Ora Visita', 'Data Rivisita', 'Ora Rivisita', 'Giorno Levata',
+      'Riferimento', 'Telefono', 'P. IVA', 'Mail', 'Richiesta Ordine', 'Note Ordine', 'Data Ordine', 'Ordine Evaso'
+    ];
+
+    const rows = listToExport.map((res) => {
+      const id = getRivenditaId(res);
+      const extra = rubrica[id] || {
+        stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: ''
+      };
+      
+      return [
+        res['Prov.'] || '',
+        res['Comune'] || '',
+        res['Num. Rivendita'] || res.storeNumber || '',
+        `"${res['Indirizzo'] || ''}"`,
+        `"${res['Tipo Rivendita'] || ''}"`,
+        `"${res['Stato'] || ''}"`,
+        `"${extra.stato || ''}"`,
+        `"${extra.visitata || ''}"`,
+        `"${extra.dataVisita || ''}"`,
+        `"${extra.oraVisita || ''}"`,
+        `"${extra.dataRivisita || ''}"`,
+        `"${extra.oraRivisita || ''}"`,
+        `"${extra.giornoLevata || ''}"`,
+        `"${extra.riferimento || ''}"`,
+        `"${extra.telefono || ''}"`,
+        `"${extra.pIva || ''}"`,
+        `"${extra.mail || ''}"`,
+        `"${extra.richiestaOrdine ? 'Sì' : 'No'}"`,
+        `"${extra.noteOrdine || ''}"`,
+        `"${extra.dataOrdine || ''}"`,
+        `"${extra.ordineEvaso ? 'Sì' : 'No'}"`
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dataOggi = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `TgesT_Export_${activeTab}_${dataOggi}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [getSortedList, rubrica, activeTab]);
+
+  const handleStoreUpdate = useCallback((id: string, field: string, value: any) => {
     setStores(prev => prev.map(s => getRivenditaId(s) === id ? { ...s, [field]: value } : s));
-  };
+  }, []);
 
-  const handleCreateStore = (newStore: Partial<SearchResult>) => {
+  const handleCreateStore = useCallback((newStore: Partial<SearchResult>) => {
+    // Controllo Anti-Doppione: verifica se esiste già in quel Comune con lo stesso Numero
+    const isDuplicate = stores.some(s => 
+      s['Comune']?.toUpperCase() === newStore['Comune']?.toUpperCase() && 
+      (s.storeNumber === newStore.storeNumber || s['Num. Rivendita'] === newStore['Num. Rivendita'])
+    );
+
+    if (isDuplicate) {
+      showToast(`Errore: Esiste già uno Store n° ${newStore.storeNumber || newStore['Num. Rivendita']} a ${newStore['Comune']?.toUpperCase()}`, 'error');
+      return; // Blocca la creazione
+    }
+
     const storeWithUid: SearchResult = {
       'Prov.': '',
       'Comune': '',
@@ -2069,16 +2101,17 @@ export default function App() {
       uid: `store_${Date.now()}`,
       isStore: true
     } as SearchResult;
+
     setStores(prev => [...prev, storeWithUid]);
     setShowCreateStoreModal(false);
-  };
+    showToast('Store creato con successo!', 'success');
+  }, [stores, showToast]);
 
-  const cardProps = {
+  const sortedList = getSortedList;
+
+  const cardProps = useMemo(() => ({
     activeTab,
     expandedCardId,
-    isSaved,
-    rubrica,
-    enrichedData,
     enrichingId,
     toggleSave,
     removeFromCrm,
@@ -2090,9 +2123,24 @@ export default function App() {
     setExpandedCardId,
     handleStoreUpdate,
     removeStore,
+    moveCard,
     setShareModal,
     openRevisitModal: setRevisitModalId
-  };
+  }), [
+    activeTab,
+    expandedCardId,
+    enrichingId,
+    toggleSave,
+    removeFromCrm,
+    initiateVisitToggle,
+    handleRubricaUpdate,
+    toggleExpandCard,
+    handleEnrich,
+    addToCrm,
+    handleStoreUpdate,
+    removeStore,
+    moveCard
+  ]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -2102,7 +2150,7 @@ export default function App() {
           <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] [will-change:scroll-position] whitespace-nowrap">
             <button
               id="tab-search"
-              onClick={() => { setActiveTab('search'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              onClick={() => handleTabChange('search')}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -2112,7 +2160,7 @@ export default function App() {
             </button>
             <button
               id="tab-giro"
-              onClick={() => { setActiveTab('giro'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              onClick={() => handleTabChange('giro')}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -2122,7 +2170,7 @@ export default function App() {
             </button>
             <button
               id="tab-crm"
-              onClick={() => { setActiveTab('crm'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              onClick={() => handleTabChange('crm')}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -2132,7 +2180,7 @@ export default function App() {
             </button>
             <button
               id="tab-store"
-              onClick={() => { setActiveTab('store'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              onClick={() => handleTabChange('store')}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -2145,7 +2193,7 @@ export default function App() {
               <button
                 key={prov}
                 id={`tab-prov_${prov}`}
-                onClick={() => { setActiveTab(`prov_${prov}`); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+                onClick={() => handleTabChange(`prov_${prov}`)}
                 className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                   activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -2157,7 +2205,7 @@ export default function App() {
 
             <button
               id="tab-rip"
-              onClick={() => { setActiveTab('rip'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              onClick={() => handleTabChange('rip')}
               className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
                 activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -2333,30 +2381,6 @@ export default function App() {
                   <h2 className="text-lg font-semibold text-slate-800">
                     Risultati ({results.length})
                   </h2>
-                  {results.length > 0 && (
-                    <div className="flex bg-slate-200 p-1 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('list')}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                          viewMode === 'list' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600'
-                        }`}
-                      >
-                        <List className="w-4 h-4" />
-                        Lista
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('map')}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                          viewMode === 'map' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600'
-                        }`}
-                      >
-                        <MapIcon className="w-4 h-4" />
-                        Mappa
-                      </button>
-                    </div>
-                  )}
                 </div>
                 
                 {results.length === 0 ? (
@@ -2364,171 +2388,25 @@ export default function App() {
                     <Store className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <p className="text-slate-500">Nessuna rivendita trovata con questi criteri.</p>
                   </div>
-                ) : viewMode === 'map' ? (
-                  <MapView results={results} />
                 ) : (
                   <div className="space-y-3">
-                    {results.map((res, idx) => {
+                    {sortedList.map((res, idx) => {
                       const id = getRivenditaId(res);
-                      const capToDisplay = rubrica[id]?.manualCap || res['CAP'] || res['Cap'] || '';
+                      const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
+                      const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
                       return (
-                      <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden group">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-brand-100 text-brand-700 text-xs font-bold px-2 py-1 rounded-md">
-                                Riv. {res['Num. Rivendita']}
-                              </span>
-                              <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                                res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                              }`}>
-                                {res['Stato']}
-                              </span>
-                            </div>
-                            <h3 className="font-medium text-slate-900 truncate pr-4">
-                              {capToDisplay ? `${capToDisplay} ` : ''}
-                              {res['Comune']} ({res['Prov.']})
-                            </h3>
-                          </div>
-                          <button
-                            onClick={() => toggleSave(res)}
-                            className={`p-2 rounded-xl transition-all ${
-                              isSaved(res) 
-                                ? 'bg-brand-100 text-brand-600' 
-                                : 'bg-slate-50 text-slate-400 hover:text-brand-600 hover:bg-brand-50'
-                            }`}
-                            title={isSaved(res) ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
-                          >
-                            <ClipboardList className={`w-5 h-5 ${isSaved(res) ? 'fill-current' : ''}`} />
-                          </button>
-                        </div>
-                        
-                        <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
-                          <div className="flex items-start gap-2">
-                            <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-                            <span className="leading-snug">
-                              {res['Indirizzo']}
-                              {capToDisplay ? `, ${capToDisplay}` : ''}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleCopyAddress(res['Indirizzo'], getRivenditaId(res))}
-                            className={`p-1.5 rounded-lg transition-all shrink-0 ${
-                              copiedId === getRivenditaId(res) 
-                                ? 'bg-emerald-50 text-emerald-600' 
-                                : 'hover:bg-slate-100 text-slate-400 hover:text-brand-600'
-                            }`}
-                            title="Copia indirizzo"
-                          >
-                            {copiedId === getRivenditaId(res) ? (
-                              <Check className="w-3.5 h-3.5" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-50 mt-1">
-                          <div className="text-xs">
-                            <span className="text-slate-400 block mb-0.5">Tipo</span>
-                            <span className="font-medium text-slate-700">{res['Tipo Rivendita']}</span>
-                          </div>
-                          <div className="text-xs">
-                            <span className="text-slate-400 block mb-0.5">Distr. Automatico</span>
-                            <span className="font-medium text-slate-700">{res['Distr. Automatico']}</span>
-                          </div>
-                        </div>
-
-                        {enrichedData[getRivenditaId(res)] && (
-                          <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
-                            <div className="flex items-start gap-3">
-                              <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                <Clock className="w-4 h-4 text-brand-600" />
-                              </div>
-                              <div className="flex-1">
-                                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
-                                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-line">
-                                  {enrichedData[getRivenditaId(res)].openingHours}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                  <Phone className="w-4 h-4 text-brand-600" />
-                                </div>
-                                <div>
-                                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                                  <a href={`tel:${enrichedData[getRivenditaId(res)].phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
-                                    {enrichedData[getRivenditaId(res)].phone}
-                                  </a>
-                                </div>
-                              </div>
-
-                              {enrichedData[getRivenditaId(res)].email && enrichedData[getRivenditaId(res)].email !== 'Non disponibile' && (
-                                <div className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                                    <Mail className="w-4 h-4 text-brand-600" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                                    <a href={`mailto:${enrichedData[getRivenditaId(res)].email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
-                                      {enrichedData[getRivenditaId(res)].email}
-                                    </a>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {enrichedData[getRivenditaId(res)].notes && enrichedData[getRivenditaId(res)].notes !== 'Non disponibile' && (
-                              <div className="pt-3 border-t border-slate-200/60">
-                                <div className="flex gap-2 items-start">
-                                  <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                  <p className="text-[11px] text-slate-500 italic leading-normal">
-                                    {enrichedData[getRivenditaId(res)].notes}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="mt-2 pt-4 border-t border-slate-50 flex flex-col gap-2">
-                          {!enrichedData[getRivenditaId(res)] && (
-                            enrichingId === getRivenditaId(res) ? (
-                              <button
-                                disabled
-                                className="w-full text-center text-sm font-semibold text-slate-400 bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-                              >
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Caricamento dettagli...
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleEnrich(getRivenditaId(res), res)}
-                                className="w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 py-3 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
-                              >
-                                <Clock className="w-4 h-4" />
-                                Mostra orari e contatti
-                              </button>
-                            )
-                          )}
-                          
-                          <button
-                            onClick={() => {
-                              const addr = [res['Indirizzo'], capToDisplay, res['Comune'], res['Prov.']].filter(Boolean).join(', ');
-                              handleNavigation(addr);
-                            }}
-                            className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all no-underline shadow-sm"
-                          >
-                            <Navigation className="w-4 h-4" />
-                            Naviga
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        <RivenditaCard
+                          key={id}
+                          res={res}
+                          idx={idx}
+                          isInGiro={isSaved(res)}
+                          extra={extra}
+                          enrichedDetails={enrichedData[id]}
+                          rubrica={expandedCardId === id ? rubrica : undefined}
+                          {...cardProps}
+                        />
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2567,46 +2445,36 @@ export default function App() {
                    activeTab === 'crm' ? `CRM (${crmList.length})` : 
                    activeTab === 'store' ? `Store (${storeList.length})` :
                    activeTab === 'rip' ? `RIP (${ripList.length})` : 
-                   `${activeTab.replace('prov_', '')} (${getCurrentList().length})`}
+                   `${activeTab.replace('prov_', '')} (${getCurrentList.length})`}
                 </h2>
                 {activeTab === 'store' && (
                   <button
                     onClick={() => setShowCreateStoreModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white hover:bg-brand-700 rounded-xl text-sm font-bold transition-all shadow-md shadow-brand-100"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white hover:bg-brand-700 rounded-xl text-xs font-bold transition-all shadow-md shadow-brand-100 active:scale-95"
                   >
-                    <Store className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
                     Aggiungi Store
                   </button>
                 )}
                 {activeTab === 'giro' && giroVisite.length > 0 && (
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <button
-                      onClick={exportGiroForMyMaps}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-100 text-brand-700 hover:bg-brand-200 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm"
-                      title="Esporta per Google My Maps"
-                    >
-                      <MapIcon className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Esporta My Maps</span>
-                      <span className="sm:hidden">My Maps</span> {/* Testo breve per mobile */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl shadow-sm border border-slate-200">
+                    {/* Toggle Mappa/Lista Unificato */}
+                    <button onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')} className={`p-2 rounded-lg transition-all ${viewMode === 'map' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`} title={viewMode === 'map' ? 'Torna alla Lista' : 'Vedi Mappa'}>
+                      {viewMode === 'map' ? <List className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
                     </button>
-                    <button
-                      onClick={() => setShowClearGiroConfirmModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl text-xs sm:text-sm font-bold transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Svuota Giro</span>
-                      <span className="sm:hidden">Svuota</span> {/* Testo breve per mobile */}
+                    <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                    {/* My Maps */}
+                    <button onClick={exportGiroForMyMaps} className="p-2 rounded-lg text-emerald-600 hover:bg-white hover:shadow-sm transition-all" title="Esporta per My Maps">
+                      <Download className="w-4 h-4" />
+                    </button>
+                    {/* Svuota Giro */}
+                    <button onClick={() => setShowClearGiroConfirmModal(true)} className="p-2 rounded-lg text-red-500 hover:bg-white hover:shadow-sm transition-all" title="Svuota Giro">
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 )}
-                {activeTab !== 'giro' && getCurrentList().length > 0 && (
-                  <button
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-xl text-sm font-bold transition-all"
-                  >
-                    <Download className="w-4 h-4" />
-                    Esporta CSV
-                  </button>
+                {activeTab !== 'giro' && getCurrentList.length > 0 && (
+                  null
                 )}
               </div>
 
@@ -2727,7 +2595,7 @@ export default function App() {
               </div>
             )}
 
-            {getCurrentList().length === 0 ? (
+            {getCurrentList.length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                   <BookOpen className="w-10 h-10 text-slate-200" />
@@ -2746,40 +2614,55 @@ export default function App() {
                 )}
               </div>
             ) : activeTab === 'giro' ? (
-              <div className="space-y-3">
-                {getCurrentList().map((res: SearchResult) => {
-                  const id = getRivenditaId(res);
-                  const originalIdx = giroVisite.findIndex(r => getRivenditaId(r) === id);
-                  return (
-                    <div key={id}>
-                      <RivenditaCard 
-                        res={{...res, _giroLength: giroVisite.length}} 
-                        idx={originalIdx} 
-                        isCrmTab={false}
-                        onMoveUp={() => moveCard(originalIdx, 'up')}
-                        onMoveDown={() => moveCard(originalIdx, 'down')}
-                        {...cardProps}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : getSortedList().length === 0 ? (
+              viewMode === 'map' ? (
+                <MapView results={getCurrentList} />
+              ) : (
+                <div className="space-y-3">
+                  {getCurrentList.map((res: SearchResult) => {
+                    const id = getRivenditaId(res);
+                    const originalIdx = giroVisite.findIndex(r => getRivenditaId(r) === id);
+                    const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
+                    return (
+                      <div key={id}>
+                        <RivenditaCard 
+                          res={{...res, _giroLength: giroVisite.length}} 
+                          idx={originalIdx} 
+                          isCrmTab={false}
+                          isInGiro={true}
+                          extra={extra}
+                          enrichedDetails={enrichedData[id]}
+                          rubrica={expandedCardId === id ? rubrica : undefined}
+                          {...cardProps}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : getSortedList.length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <p className="text-slate-500 text-sm">Nessuna rivendita trovata con i filtri selezionati.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {getSortedList().map((res: SearchResult, idx: number) => (
-                  <div key={getRivenditaId(res)}>
-                    <RivenditaCard 
-                      res={res}
-                      idx={idx}
-                      isCrmTab={activeTab !== 'giro'}
-                      {...cardProps}
-                    />
-                  </div>
-                ))}
+                {getSortedList.map((res: SearchResult, idx: number) => {
+                  const id = getRivenditaId(res);
+                  const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
+                  return (
+                    <div key={id}>
+                      <RivenditaCard 
+                        res={res}
+                        idx={idx}
+                        isCrmTab={activeTab !== 'giro'}
+                        isInGiro={isSaved(res)}
+                        extra={extra}
+                        enrichedDetails={enrichedData[id]}
+                        rubrica={expandedCardId === id ? rubrica : undefined}
+                        {...cardProps}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2793,33 +2676,21 @@ export default function App() {
         {/* fabMenuOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[-1]" onClick={() => setFabMenuOpen(false)}></div> */}
 
         {/* Contenitore pulsanti satellite - Posizionamento Assoluto rispetto al baricentro */}
-        <div className={`absolute inset-0 transition-transform duration-300 ease-out ${fabMenuOpen ? 'scale-100' : 'scale-0'}`}>
-          
-          {/* Azione 1: Reset/Refresh (In Alto) */}
-          <button
-            onClick={() => { handleReset(); setFabMenuOpen(false); }}
-            className={`absolute bottom-[76px] right-1 p-3.5 bg-slate-700 text-white rounded-full shadow-lg transition-all duration-300 delay-75 hover:bg-slate-600 active:scale-95 ${fabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-0 translate-y-10'}`}
-            title="Reset Ricerca e Filtri"
-          >
+        <div className={`absolute bottom-[72px] right-1 flex flex-col-reverse items-center gap-3 transition-all duration-300 origin-bottom ${fabMenuOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}>
+          {/* CSV */}
+          <button onClick={() => { exportToCSV(); setFabMenuOpen(false); }} disabled={getSortedList.length === 0} className="w-12 h-12 flex items-center justify-center bg-emerald-600 text-white rounded-full shadow-lg hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50" title="Esporta CSV">
+            <Download className="w-5 h-5" />
+          </button>
+          {/* Reset */}
+          <button onClick={() => { handleReset(); setFabMenuOpen(false); }} className="w-12 h-12 flex items-center justify-center bg-slate-700 text-white rounded-full shadow-lg hover:bg-slate-600 active:scale-95 transition-all" title="Reset Ricerca">
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-
-          {/* Azione 2: Impostazioni (In Alto a Sinistra - Diagonale) */}
-          <button
-            onClick={() => { setShowSettingsModal(true); setFabMenuOpen(false); }}
-            className={`absolute bottom-[60px] right-[60px] p-3.5 bg-white text-slate-700 rounded-full shadow-lg border border-slate-100 transition-all duration-300 delay-150 hover:bg-slate-100 active:scale-95 ${fabMenuOpen ? 'opacity-100 scale-100 translate-x-0 translate-y-0' : 'opacity-0 scale-0 translate-x-10 translate-y-10'}`}
-            title="Apri Impostazioni"
-          >
+          {/* Settings */}
+          <button onClick={() => { setShowSettingsModal(true); setFabMenuOpen(false); }} className="w-12 h-12 flex items-center justify-center bg-white text-slate-700 border border-slate-200 rounded-full shadow-lg hover:bg-slate-50 active:scale-95 transition-all" title="Impostazioni">
             <Settings className="w-5 h-5" />
           </button>
-
-          {/* Azione 3: Sync Volante Rapido (A Sinistra) */}
-          <button
-            onClick={handleFabSyncGenerate}
-            disabled={fabSyncLoading}
-            className={`absolute bottom-1 right-[76px] p-3.5 bg-brand-600 text-white rounded-full shadow-lg transition-all duration-300 delay-225 hover:bg-brand-700 active:scale-95 disabled:opacity-50 ${fabMenuOpen ? 'opacity-100 scale-100 translate-x-0' : 'opacity-0 scale-0 translate-x-10'}`}
-            title="Genera Codice Sync Rapido"
-          >
+          {/* Sync */}
+          <button onClick={handleFabSyncGenerate} disabled={fabSyncLoading} className="w-12 h-12 flex items-center justify-center bg-brand-600 text-white rounded-full shadow-lg hover:bg-brand-700 active:scale-95 transition-all disabled:opacity-50" title="Sync Volante">
             {fabSyncLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Cloud className="w-5 h-5" />}
           </button>
         </div>
@@ -3125,7 +2996,7 @@ export default function App() {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 handleCreateStore({
-                  'Prov.': formData.get('prov') as string,
+                  'Prov.': (formData.get('prov') as string).toUpperCase(),
                   'Comune': formData.get('comune') as string,
                   'Num. Rivendita': formData.get('num') as string,
                   storeNumber: formData.get('num') as string,
