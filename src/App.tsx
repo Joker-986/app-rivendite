@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, Expand } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -181,622 +181,114 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
   
-  // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
-
   const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
   const street = toTitleCase(res['Indirizzo']?.trim() || '');
   const city = (res['Comune']?.trim() || '').toUpperCase();
   const prov = res['Prov.']?.trim() || '';
   const fullAddress = [street, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
-  const encodedAddress = encodeURIComponent(fullAddress);
-  // Definisce se i dati del CRM devono essere mostrati (vero sia nel CRM che nel Giro)
-  const showCrmData = isCrmTab || activeTab === 'giro';
 
   const shareText = React.useMemo(() => {
-    const enriched = enrichedDetails;
     let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    text += `Indirizzo: ${toTitleCase(res['Indirizzo'])}${capToDisplay ? `, ${capToDisplay}` : ''}\n`;
-    text += `Comune: ${(res['Comune'] || '').toUpperCase()} (${res['Prov.']})\n`;
-    
+    text += `Indirizzo: ${fullAddress}\n`;
     if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
-    if (extra.riferimento) text += `Referente: ${extra.riferimento}\n`;
-    if (extra.pIva) text += `P. IVA: ${extra.pIva}\n`;
-    if (extra.telefono || (enriched && enriched.phone)) text += `Telefono: ${extra.telefono || enriched?.phone}\n`;
-    if (extra.mail || (enriched && enriched.email)) text += `Email: ${extra.mail || enriched?.email}\n`;
-    if (enriched && enriched.openingHours) text += `Orari: ${enriched.openingHours}\n`;
-
-    // Storico Visite
-    if (extra.visitata === 'Si' && extra.dataVisita) {
-      text += `Ultima Visita: ${new Date(extra.dataVisita).toLocaleDateString('it-IT')}${extra.oraVisita ? ' alle ' + extra.oraVisita : ''}\n`;
-    } else if (extra.lastDataVisita) {
-      text += `Ultima Visita: ${new Date(extra.lastDataVisita).toLocaleDateString('it-IT')}${extra.lastOraVisita ? ' alle ' + extra.lastOraVisita : ''}\n`;
-    }
-    if (extra.dataRivisita) {
-      text += `Prossima Visita: ${new Date(extra.dataRivisita).toLocaleDateString('it-IT')}${extra.oraRivisita ? ' alle ' + extra.oraRivisita : ''}\n`;
-    }
-
-    // Ordini
-    if (extra.richiestaOrdine) {
-      text += `\n--- ORDINE ---\n`;
-      text += `Stato: ${extra.ordineEvaso ? '✅ Evaso' : '⏳ DA EVADERE'}\n`;
-      if (extra.dataOrdine) text += `Inserito il: ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')}\n`;
-      if (extra.noteOrdine) text += `Articoli: ${extra.noteOrdine}\n`;
-    }
-
-    if (extra.note || (enriched && enriched.notes)) text += `\nNote: ${extra.note || enriched?.notes}\n`;
-
+    if (extra.telefono) text += `Telefono: ${extra.telefono}\n`;
+    if (extra.dataRivisita) text += `Prossima Visita: ${new Date(extra.dataRivisita).toLocaleDateString('it-IT')}\n`;
     return text.trim();
-  }, [res, extra, enrichedDetails, id]);
-
-  const handleShare = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (navigator.share) {
-      navigator.share({
-        text: shareText
-      }).catch((err) => {
-        if (err.name !== 'AbortError') {
-          setShareModal({ isOpen: true, text: shareText });
-        }
-      });
-    } else {
-      setShareModal({ isOpen: true, text: shareText });
-    }
-  };
+  }, [res, extra, fullAddress]);
 
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
-      <div className="flex justify-between items-start gap-3">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          {activeTab === 'giro' && (
-            <div className="flex flex-col gap-1 mr-1 mt-1 shrink-0">
-              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'up'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={idx === 0}>
-                <ChevronUp className="w-4 h-4" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'down'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={isLastInGiro}>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
-                {res.isStore ? <span className="flex items-center gap-1"><Store className="w-3 h-3" />STORE #{res.storeNumber || res['Num. Rivendita']}</span> : `RIV. ${res['Num. Rivendita']}`}
-              </span>
-              {res.isStore && res.isChain && (
-                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
-                  <Layers className="w-3 h-3" /> Catena ({res.chainCount || 1})
-                </span>
-              )}
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                {res['Stato']}
-              </span>
-              {showCrmData && extra.stato && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
-                  extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
-                  extra.stato === 'RIP' ? 'bg-slate-100 text-slate-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
-                  {extra.stato} (CRM)
-                </span>
-              )}
-            </div>
-            {/* Aggiunto leading-snug e break-words per gestire città con nomi lunghissimi senza spaccare il layout */}
-            <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
-              {res.isStore ? (
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-brand-700 truncate">{res.storeName || 'Senza Nome'}</span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight truncate">
-                    {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
-                  </span>
-                </span>
-              ) : (
-                <>
-                  {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
-                </>
-              )}
+    <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-2 relative text-left transition-all">
+      {/* Layout Base Ultracompatto */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tight ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
+            #{res.storeNumber || res['Num. Rivendita']}
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-xs font-bold text-slate-800 truncate">
+              {res.isStore ? (res.storeName || 'Store') : city}
             </h3>
           </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <button
-            onClick={(e) => handleShare(e)}
-            className={`p-2 rounded-xl transition-all shrink-0 flex items-center gap-1 ${
-              isCopied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-            }`}
-            title="Condividi informazioni"
-          >
-            {isCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
-            {isCopied && <span className="text-[10px] font-bold uppercase">Copiato!</span>}
-          </button>
-
-          {activeTab === 'search' && (
-            <button
-              onClick={() => toggleSave(res)}
-              className={`p-2 rounded-xl transition-all ${
-                isInGiro 
-                  ? 'bg-brand-100 text-brand-600' 
-                  : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-              }`}
-              title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
-            >
-              <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
-            </button>
-          )}
-          
-          {(isCrmTab || activeTab === 'rip' || activeTab === 'store') && (
-            <>
-              <button
-                onClick={() => toggleSave(res)}
-                className={`p-2 rounded-xl transition-all ${
-                  isInGiro 
-                    ? 'bg-brand-100 text-brand-600' 
-                    : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-                }`}
-                title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
-              >
-                <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
-              </button>
-              <button
-                onClick={() => res.isStore ? removeStore(res) : removeFromCrm(res)}
-                className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all shrink-0"
-                title={res.isStore ? "Elimina Store" : "Elimina dal CRM"}
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            </>
-          )}
-
-          {activeTab === 'giro' && (
-            <button
-              onClick={() => toggleSave(res)}
-              className="p-2 bg-pink-50 text-pink-500 rounded-xl hover:bg-pink-100 transition-all shrink-0"
-              title="Rimuovi dal giro visite"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          )}
-        </div>
-      </div>
-      
-      <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
-        <div className="flex items-start gap-2">
-          <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-          <span className="leading-snug line-clamp-2">
-            {toTitleCase(res['Indirizzo'])}
-            {capToDisplay ? `, ${capToDisplay}` : ''}
+        
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase ${
+            extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
+            extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
+            'bg-slate-100 text-slate-500'
+          }`}>
+            {extra.stato || 'New'}
           </span>
-        </div>
-      </div>
-
-      {(extra.visitata === 'Si' || extra.lastDataVisita) && (
-        <div className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 ${extra.visitata === 'Si' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-700'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className={`w-3.5 h-3.5 ${extra.visitata === 'Si' ? 'text-emerald-600' : 'text-slate-400'}`} />
-              <span className="font-bold uppercase tracking-wider text-[10px]">{extra.visitata === 'Si' ? 'Visitata il' : 'Ultima Visita'}</span>
-            </div>
-            <span className="font-bold text-sm">
-              {extra.visitata === 'Si' ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-') : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')}
-              {extra.visitata === 'Si' ? (extra.oraVisita ? ` alle ${extra.oraVisita}` : '') : (extra.lastOraVisita ? ` alle ${extra.lastOraVisita}` : '')}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* BADGE ARANCIONE DATA RIVISITA CLICCABILE */}
-      {showCrmData && extra.dataRivisita && (
-        <div 
-          onClick={() => openRevisitModal(id)}
-          title="Modifica Appuntamento"
-          className="text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 bg-orange-50 border-orange-500 text-orange-900 cursor-pointer hover:bg-orange-100 active:scale-95 transition-all"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5 text-orange-600" />
-              <span className="font-bold uppercase tracking-wider text-[10px]">Da Rivisitare il</span>
-            </div>
-            <span className="font-bold text-sm">
-              {new Date(extra.dataRivisita).toLocaleDateString('it-IT')}
-              {extra.oraRivisita ? ` alle ${extra.oraRivisita}` : ''}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {extra.note && (
-        <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-slate-600 italic mt-2">
-          <div className="flex items-center gap-1.5 mb-1 text-amber-700 font-bold uppercase tracking-wider text-[9px]"><BookOpen className="w-3 h-3" /> Note</div>
-          <p className="leading-relaxed">{extra.note}</p>
-        </div>
-      )}
-      
-      {/* GRIGLIA PULITA DALLE RIDONDANZE */}
-      <div className="grid grid-cols-2 gap-y-3 gap-x-2 pt-3 border-t border-slate-100 mt-2">
-        <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5 font-medium">Tipo</span>
-          <span className="font-bold text-slate-700">{res['Tipo Rivendita']}</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5 font-medium">Distr. Automatico</span>
-          <span className="font-bold text-slate-700">{res['Distr. Automatico']}</span>
-        </div>
-        {showCrmData && extra.giornoLevata && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5 font-medium">Giorno Levata</span>
-            <span className="font-bold text-slate-700">{extra.giornoLevata}</span>
-          </div>
-        )}
-        {showCrmData && extra.riferimento && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5 font-medium">Riferimento</span>
-            <span className="font-bold text-slate-700">{extra.riferimento}</span>
-          </div>
-        )}
-        {showCrmData && extra.telefono && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5 font-medium">Telefono</span>
-            <a href={`tel:${extra.telefono.replace(/\\s+/g, '')}`} className="font-black text-brand-600 hover:text-brand-700 underline decoration-brand-200 underline-offset-2" onClick={(e) => e.stopPropagation()}>
-              {extra.telefono}
-            </a>
-          </div>
-        )}
-        {showCrmData && extra.pIva && (
-          <div className="text-xs">
-            <span className="text-slate-400 block mb-0.5 font-medium">P. IVA</span>
-            <span className="font-bold text-slate-700">{extra.pIva}</span>
-          </div>
-        )}
-        {showCrmData && extra.mail && (
-          <div className="text-xs col-span-2">
-            <span className="text-slate-400 block mb-0.5 font-medium">Mail</span>
-            <span className="font-bold text-slate-700">{extra.mail}</span>
-          </div>
-        )}
-        {showCrmData && extra.richiestaOrdine && (
-          <div className="text-xs col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
-            <span className="text-slate-400 block mb-1 font-bold uppercase tracking-wider text-[9px]">Stato Ordine</span>
-            <span className="font-medium text-slate-700 flex items-center gap-1.5">
-              {extra.dataOrdine ? `${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
-              {extra.ordineEvaso ? <span className="text-emerald-600 font-black">Evaso ✓</span> : <span className="text-amber-600 font-black animate-pulse">Da evadere ⏳</span>}
-            </span>
-            {extra.noteOrdine && <div className="mt-1.5 p-2 bg-white rounded border border-slate-200 text-slate-600 italic leading-snug">{extra.noteOrdine}</div>}
-          </div>
-        )}
-      </div>
-
-      {enrichedDetails && (
-        <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-              <Clock className="w-4 h-4 text-brand-600" />
-            </div>
-            <div className="flex-1">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Orari di apertura</span>
-              <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-line">
-                {enrichedDetails.openingHours}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                <Phone className="w-4 h-4 text-brand-600" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Telefono</span>
-                <a href={`tel:${enrichedDetails.phone}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm transition-colors">
-                  {enrichedDetails.phone}
-                </a>
-              </div>
-            </div>
-
-            {enrichedDetails.email && enrichedDetails.email !== 'Non disponibile' && (
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                  <Mail className="w-4 h-4 text-brand-600" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                  <a href={`mailto:${enrichedDetails.email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
-                    {enrichedDetails.email}
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {enrichedDetails.notes && enrichedDetails.notes !== 'Non disponibile' && (
-            <div className="pt-3 border-t border-slate-200/60">
-              <div className="flex gap-2 items-start">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-slate-500 italic leading-normal">
-                  {enrichedDetails.notes}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="mt-2 pt-4 border-t border-slate-50 flex flex-col gap-2">
-        {activeTab === 'giro' && (
-          <button
-            onClick={() => initiateVisitToggle(id)}
-            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
-              extra.visitata === 'Si' 
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100' 
-                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {extra.visitata === 'Si' ? 'Aggiorna Orario Visita' : 'Rivendita visitata'}
-          </button>
-        )}
-
-        {/* Azioni Prioritarie: Ordine e Calendar */}
-        {( (showCrmData && extra.richiestaOrdine && !extra.ordineEvaso) || (showCrmData && extra.dataRivisita) ) && (
-          <div className="grid grid-cols-2 gap-2">
-            {showCrmData && extra.richiestaOrdine && !extra.ordineEvaso && (
-              <button
-                onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
-                className={`${extra.dataRivisita ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
-              >
-                <Check className="w-3.5 h-3.5" /> Evadi Ordine
-              </button>
-            )}
-
-            {showCrmData && extra.dataRivisita && (
-              <a
-                href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Appuntamento Rivendita ${res['Num. Rivendita']} - ${res['Comune']}`)}&dates=${formatGoogleCalendarDate(extra.dataRivisita, extra.oraRivisita)}&details=${encodeURIComponent(`Indirizzo: ${fullAddress}\nTelefono: ${extra.telefono || 'N/A'}\nRiferimento: ${extra.riferimento || 'N/A'}`)}&location=${encodedAddress}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${(extra.richiestaOrdine && !extra.ordineEvaso) ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm`}
-              >
-                <Calendar className="w-3.5 h-3.5" /> Aggiungi a Calendar
-              </a>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => handleNavigation(fullAddress)}
-            className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm"
-          >
+          <button onClick={() => handleNavigation(fullAddress)} className="p-1.5 bg-brand-50 text-brand-600 rounded-lg hover:bg-brand-100 transition-colors">
             <Navigation className="w-3.5 h-3.5" />
-            Naviga
           </button>
-          <button
-            onClick={() => toggleExpandCard(id)}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm ${
-              isExpanded ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            {isExpanded ? 'Chiudi' : 'Dettagli'}
-          </button>
+          {extra.telefono && (
+            <a href={`tel:${extra.telefono.replace(/\s+/g, '')}`} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors">
+              <Phone className="w-3.5 h-3.5" />
+            </a>
+          )}
         </div>
+      </div>
 
-        {!enrichedDetails && (
-          enrichingId === id ? (
-            <button disabled className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all">
-              <Loader2 className="w-3 h-3 animate-spin" /> Caricamento...
-            </button>
-          ) : (
-            <button
-              onClick={() => handleEnrich(id, res)}
-              className="w-full text-center text-[11px] font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
-            >
-              <Clock className="w-3.5 h-3.5" /> Orari e contatti
-            </button>
-          )
+      {/* Badge Intelligenti */}
+      <div className="flex flex-wrap gap-1.5">
+        {extra.richiestaOrdine && !extra.ordineEvaso && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[8px] font-black rounded border border-amber-100 uppercase animate-pulse">
+            <ClipboardList className="w-2.5 h-2.5" /> Ordine
+          </span>
+        )}
+        {extra.dataRivisita && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 text-[8px] font-black rounded border border-orange-100 uppercase">
+            <CalendarClock className="w-2.5 h-2.5" /> {new Date(extra.dataRivisita).toLocaleDateString('it-IT').slice(0, 5)}
+          </span>
         )}
       </div>
 
-      {/* Expandable Form */}
+      {/* Blocco Espandibile */}
       {isExpanded && (
-        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
-          <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
-            <BookOpen className="w-4 h-4 text-brand-600" />
-            Informazioni Extra
-          </h4>
-
-          {res.isStore ? (
-            <div className="space-y-4">
-              {/* Sezione Identità */}
-              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
-                  <Store className="w-4 h-4 text-brand-600" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1 col-span-1 sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
-                    <input
-                      type="text"
-                      maxLength={5}
-                      value={extra.manualCap || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
-                      placeholder="Es. 80100"
-                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-1 sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Insegna</label>
-                    <input
-                      type="text"
-                      value={res.storeName || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'storeName', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Identificativo</label>
-                    <input
-                      type="text"
-                      value={res.storeNumber || res['Num. Rivendita'] || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'storeNumber', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipologia</label>
-                    <select
-                      value={res.isChain ? 'true' : 'false'}
-                      onChange={(e) => handleStoreUpdate?.(id, 'isChain', e.target.value === 'true')}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    >
-                      <option value="false">Punto Vendita Singolo</option>
-                      <option value="true">Parte di una Catena</option>
-                    </select>
-                  </div>
-                  {res.isChain && (
-                    <div className="space-y-1 col-span-1 sm:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Totale Punti Vendita</label>
-                      <input
-                        type="number"
-                        value={res.chainCount || 1}
-                        onChange={(e) => handleStoreUpdate?.(id, 'chainCount', parseInt(e.target.value) || 1)}
-                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Sezione Localizzazione */}
-              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
-                  <MapPin className="w-4 h-4 text-brand-600" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Localizzazione</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia</label>
-                    <input
-                      type="text"
-                      value={res['Prov.']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Prov.', e.target.value.toUpperCase())}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune</label>
-                    <input
-                      type="text"
-                      value={res['Comune']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Comune', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo Completo</label>
-                    <input
-                      type="text"
-                      value={res['Indirizzo']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Indirizzo', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    />
-                  </div>
-                </div>
-              </div>
+        <div className="mt-2 pt-3 border-t border-slate-50 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo</p>
+              <p className="text-[10px] text-slate-600 leading-tight">{fullAddress}</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-              <div className="space-y-1 col-span-1 sm:col-span-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
-                <input
-                  type="text"
-                  maxLength={5}
-                  value={extra.manualCap || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
-                  placeholder="Es. 80100"
-                  className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
-                <input
-                  type="text"
-                  value={res['Distr. Automatico'] || ''}
-                  onChange={(e) => handleStoreUpdate?.(id, 'Distr. Automatico', e.target.value)}
-                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stato (Attiva/Chiusa)</label>
-                <input
-                  type="text"
-                  value={res['Stato'] || ''}
-                  onChange={(e) => handleStoreUpdate?.(id, 'Stato', e.target.value)}
-                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                />
-              </div>
+            <div className="space-y-1">
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Referente</p>
+              <p className="text-[10px] text-slate-600 font-bold">{extra.riferimento || '---'}</p>
+            </div>
+          </div>
+
+          {extra.note && (
+            <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">
+              <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Note</p>
+              <p className="text-[10px] text-slate-600 italic">{extra.note}</p>
             </div>
           )}
-          
-          {(extra.lastDataVisita || (extra.visitata === 'Si' && extra.dataVisita)) && (
-            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-2">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold text-[10px] uppercase tracking-wider mb-1">
-                <Clock className="w-3.5 h-3.5" />
-                {extra.visitata === 'Si' ? 'VISITATA IL' : 'ULTIMA VISITA'}
-              </div>
-              <p className="text-xs text-emerald-700">
-                Data: <span className="font-bold">
-                  {extra.visitata === 'Si' 
-                    ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
-                    : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
-                  }
-                </span> alle <span className="font-bold">
-                  {extra.visitata === 'Si' ? extra.oraVisita : extra.lastOraVisita}
-                </span>
-              </p>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Stato</label>
-              <select
-                value={extra.stato}
-                onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              >
-                <option value="">Seleziona</option>
-                <option value="Attivata">Attivata</option>
-                <option value="Non Attiva">Non Attiva</option>
-                <option value="Basso Rendente">Basso Rendente</option>
-                <option value="RIP">RIP</option>
-              </select>
-            </div>
 
+          <div className="flex gap-2 pt-1">
+            <button onClick={(e) => { e.stopPropagation(); toggleSave(res); }} className="flex-1 py-2 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold hover:bg-slate-200 transition-colors">
+              {isInGiro ? 'Rimuovi Giro' : 'Aggiungi Giro'}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); handleShare(e); }} className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors">
+              <Share2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Data e Ora Prossima Visita (Programmata)</label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={extra.dataRivisita || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
-                  className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-                <select
-                  value={extra.oraRivisita || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
-                  className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                >
-                  <option value="">Ora</option>
-                  {getAvailableTimes(extra.dataRivisita || '', id, rubrica || {}).map(time => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+      {/* Pulsante Dettagli */}
+      <button 
+        onClick={() => toggleExpandCard(id)}
+        className="w-full mt-1 py-1.5 flex items-center justify-center gap-1 text-[10px] font-black text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-all border border-transparent hover:border-brand-100"
+      >
+        {isExpanded ? <ChevronUp className="w-3 h-3" /> : <Expand className="w-3 h-3" />}
+        {isExpanded ? 'MENO INFO' : 'DETTAGLI'}
+      </button>
+    </div>
+  );
+});
+           </div>
 
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Giorno Levata</label>
@@ -958,6 +450,26 @@ export default function App() {
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = useState<string>('search');
+  const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('oggi');
+  const [customRange, setCustomRange] = useState({ start: '', end: '' });
+  const [radarTab, setRadarTab] = useState<'completate' | 'programmate'>('completate');
+
+  const isDateInRange = (dateStr?: string) => {
+    if (!dateStr) return statsPeriod === 'all';
+    const d = new Date(dateStr); d.setHours(0,0,0,0);
+    const now = new Date(); now.setHours(0,0,0,0);
+    
+    if (statsPeriod === 'all') return true;
+    if (statsPeriod === 'oggi') return d.getTime() === now.getTime();
+    
+    if (statsPeriod === 'custom') {
+      if (!customRange.start || !customRange.end) return true;
+      return d >= new Date(customRange.start) && d <= new Date(customRange.end);
+    }
+    
+    const diffDays = Math.ceil(Math.abs(now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+    return statsPeriod === '7g' ? diffDays <= 7 : diffDays <= 30;
+  };
   const [rivenditaFilter, setRivenditaFilter] = useState('');
   const [comuneFilter, setComuneFilter] = useState('');
   const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
@@ -1838,6 +1350,7 @@ export default function App() {
     const tabs = ['search', 'giro', 'crm', 'store'];
     provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
     tabs.push('rip');
+    tabs.push('statistiche');
     return tabs;
   }, [provincesInCrm]);
 
@@ -2107,6 +1620,92 @@ export default function App() {
     showToast('Store creato con successo!', 'success');
   }, [stores, showToast]);
 
+  const orderStats = useMemo(() => {
+    const allEntries = Object.entries(rubrica) as [string, RivenditaExtra][];
+    
+    const filtrati = allEntries.filter(([_, data]) => {
+      if (data.richiestaOrdine !== true && data.ordineEvaso !== true) return false;
+      return isDateInRange(data.dataOrdine || data.dataVisita || data.lastDataVisita);
+    });
+
+    const evasi = filtrati.filter(([_, data]) => data.ordineEvaso === true).length;
+    const listaDaEvadere = filtrati.filter(([_, data]) => data.ordineEvaso !== true).map(([id, data]) => {
+      const riv = [...crmAnagrafiche, ...stores, ...giroVisite].find(r => getRivenditaId(r) === id);
+      return { id, extra: data, rivendita: riv };
+    }).filter(i => i.rivendita);
+
+    return { totali: filtrati.length, evasi, daEvadere: filtrati.length - evasi, listaDaEvadere };
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
+
+  const crmStats = useMemo(() => {
+    let attivate = 0, nonAttive = 0, bassoRendente = 0, rip = 0, daAssegnare = 0;
+    const combined = [...crmAnagrafiche, ...stores];
+    
+    // Filtriamo per conversione nel periodo
+    const filtrati = combined.filter(r => {
+      const id = getRivenditaId(r);
+      const data = rubrica[id];
+      if (!data) return false;
+      return isDateInRange(data.dataVisita || data.lastDataVisita || data.dataOrdine);
+    });
+
+    filtrati.forEach(r => {
+      const s = rubrica[getRivenditaId(r)]?.stato;
+      if (s === 'Attivata') attivate++;
+      else if (s === 'Non Attiva') nonAttive++;
+      else if (s === 'Basso Rendente') bassoRendente++;
+      else if (s === 'RIP') rip++;
+      else daAssegnare++;
+    });
+    return { total: filtrati.length, attivate, nonAttive, bassoRendente, rip, daAssegnare };
+  }, [crmAnagrafiche, stores, rubrica, statsPeriod, customRange]);
+
+  const visitStats = useMemo(() => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const combined = [...crmAnagrafiche, ...stores];
+    const listaVisitate: any[] = [];
+    const prossimi: any[] = [];
+
+    combined.forEach(r => {
+      const id = getRivenditaId(r);
+      const d = rubrica[id];
+      if (!d) return;
+
+      // Visite fatte nel periodo
+      if (d.dataVisita && isDateInRange(d.dataVisita)) {
+        listaVisitate.push({
+          id,
+          nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
+          comune: r.Comune,
+          data: new Date(d.dataVisita).toLocaleDateString('it-IT').slice(0, 5)
+        });
+      }
+
+      // Visite programmate (future)
+      if (d.dataRivisita) {
+        const dr = new Date(d.dataRivisita); dr.setHours(0,0,0,0);
+        if (dr >= now) {
+          prossimi.push({
+            id,
+            nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
+            comune: r.Comune,
+            dataRivisita: new Date(d.dataRivisita).toLocaleDateString('it-IT'),
+            ora: d.oraRivisita || '',
+            dateObj: dr
+          });
+        }
+      }
+    });
+
+    prossimi.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+    
+    return { 
+      vPeriodo: listaVisitate.length, 
+      listaVisitate, 
+      prossimi: prossimi.slice(0, 10)
+    };
+  }, [rubrica, crmAnagrafiche, stores, statsPeriod, customRange]);
+
   const sortedList = getSortedList;
 
   const cardProps = useMemo(() => ({
@@ -2212,6 +1811,17 @@ export default function App() {
             >
               <AlertCircle className="w-4 h-4" />
               RIP ({ripList.length})
+            </button>
+
+            <button
+              id="tab-statistiche"
+              onClick={() => { setActiveTab('statistiche'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
+              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
+                activeTab === 'statistiche' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <BarChart2 className="w-4 h-4" />
+              Statistiche
             </button>
           </div>
         </div>
@@ -2595,7 +2205,239 @@ export default function App() {
               </div>
             )}
 
-            {getCurrentList.length === 0 ? (
+            {activeTab === 'statistiche' ? (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <h2 className="text-xl font-bold text-slate-800 px-1">Le tue Statistiche</h2>
+
+                <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 space-y-3">
+                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                    {['oggi', '7g', '30g', 'all', 'custom'].map((p) => (
+                      <button key={p} onClick={() => setStatsPeriod(p as any)} className={`flex-1 py-2 text-[10px] font-bold rounded-lg capitalize transition-all ${statsPeriod === p ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500'}`}>
+                        {p === 'all' ? 'Sempre' : p}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {statsPeriod === 'custom' && (
+                    <div className="flex gap-2 animate-in fade-in zoom-in-95">
+                      <input type="date" value={customRange.start} onChange={(e) => setCustomRange(prev => ({...prev, start: e.target.value}))} className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                      <input type="date" value={customRange.end} onChange={(e) => setCustomRange(prev => ({...prev, end: e.target.value}))} className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Radar Visite (Consuntivo) */}
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="w-4 h-4 text-emerald-600" /></div>
+                    <h3 className="font-bold text-slate-800">Visite Completate</h3>
+                  </div>
+                  <p className="text-3xl font-black text-slate-900">{visitStats.vPeriodo} <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Punti Visitati</span></p>
+                  {visitStats.listaVisitate.length > 0 && (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 border-t border-slate-50 pt-2.5">
+                      {visitStats.listaVisitate.map((v: any) => (
+                        <div key={v.id} className="flex items-center justify-between text-xs py-0.5"><span className="text-slate-700 truncate">{v.nome}</span><span className="text-[10px] text-slate-400 ml-2">{v.data}</span></div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Agenda Appuntamenti */}
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center"><CalendarClock className="w-4 h-4 text-orange-600" /></div>
+                    <h3 className="font-bold text-slate-800">Agenda Appuntamenti</h3>
+                  </div>
+                  {visitStats.prossimi.length > 0 ? (
+                    <div className="space-y-3">
+                      {visitStats.prossimi.map((p: any) => (
+                        <div key={p.id} className="p-3 bg-orange-50/50 rounded-2xl border border-orange-100 flex items-center justify-between">
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-slate-800 truncate">{p.nome}</p>
+                            <p className="text-[10px] font-bold text-orange-700 uppercase">{p.comune}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-black text-orange-600">{p.dataRivisita.slice(0, 5)}</p>
+                            <p className="text-[10px] font-bold text-orange-400">{p.ora || '--:--'}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic text-center py-4">Nessun impegno in agenda.</p>
+                  )}
+                </div>
+                
+                {/* CRUSCOTTO LOGISTICA ORDINI */}
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
+                        <ClipboardList className="w-4 h-4 text-brand-600" />
+                      </div>
+                      <h3 className="font-bold text-slate-800">Raccolta Ordini</h3>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Evasi</p>
+                      <div className="flex items-end gap-2">
+                        <p className="text-3xl font-black text-emerald-700 leading-none">{orderStats.evasi}</p>
+                        <p className="text-xs font-bold text-emerald-600/70 mb-1 pb-0.5">/ {orderStats.totali}</p>
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Da Consegnare</p>
+                      <p className="text-3xl font-black text-amber-700 leading-none">{orderStats.daEvadere}</p>
+                    </div>
+                  </div>
+
+                  {/* Barra di progresso */}
+                  {orderStats.totali > 0 && (
+                    <div className="pt-2">
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                          style={{ width: `${(orderStats.evasi / orderStats.totali) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista Action Items */}
+                  {orderStats.listaDaEvadere.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Consegne Pendenti</h4>
+                      {orderStats.listaDaEvadere.map(({ id, extra, rivendita }) => (
+                        <div key={id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-2">
+                          <div className="flex justify-between items-start">
+                            <span className="text-sm font-bold text-slate-800">
+                              {rivendita?.isStore ? (rivendita.storeName || 'Store') : `Riv. ${rivendita?.['Num. Rivendita']}`} - {toTitleCase(rivendita?.['Comune'] || '')}
+                            </span>
+                            <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-slate-200 font-bold text-slate-500 shrink-0">
+                              {extra.dataOrdine ? new Date(extra.dataOrdine).toLocaleDateString('it-IT').slice(0, 5) : '-'}
+                            </span>
+                          </div>
+                          {extra.noteOrdine && (
+                            <p className="text-xs text-slate-600 italic">
+                              {extra.noteOrdine}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* TERMOMETRO DEL TERRITORIO */}
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                      <Target className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <h3 className="font-bold text-slate-800">Termometro Territorio</h3>
+                  </div>
+
+                  {crmStats.total > 0 ? (
+                    <>
+                      {/* Barra Multi-Stato Proporzionale */}
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                        {crmStats.attivate > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(crmStats.attivate / crmStats.total) * 100}%` }}></div>}
+                        {crmStats.nonAttive > 0 && <div className="h-full bg-amber-400" style={{ width: `${(crmStats.nonAttive / crmStats.total) * 100}%` }}></div>}
+                        {crmStats.bassoRendente > 0 && <div className="h-full bg-orange-500" style={{ width: `${(crmStats.bassoRendente / crmStats.total) * 100}%` }}></div>}
+                        {crmStats.rip > 0 && <div className="h-full bg-slate-800" style={{ width: `${(crmStats.rip / crmStats.total) * 100}%` }}></div>}
+                        {crmStats.daAssegnare > 0 && <div className="h-full bg-slate-300" style={{ width: `${(crmStats.daAssegnare / crmStats.total) * 100}%` }}></div>}
+                      </div>
+
+                      {/* Legenda e Contatori */}
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-xs font-bold text-slate-600">Attivate</span></div>
+                          <span className="font-black text-slate-800">{crmStats.attivate}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div><span className="text-xs font-bold text-slate-600">Non Attive</span></div>
+                          <span className="font-black text-slate-800">{crmStats.nonAttive}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div><span className="text-xs font-bold text-slate-600 truncate max-w-[70px]">Basso Rend.</span></div>
+                          <span className="font-black text-slate-800">{crmStats.bassoRendente}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-800"></div><span className="text-xs font-bold text-slate-600">RIP</span></div>
+                          <span className="font-black text-slate-800">{crmStats.rip}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-500 italic text-center py-4">Nessun dato presente nel CRM.</p>
+                  )}
+                </div>
+
+                {/* Radar Visite */}
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
+                        <Activity className="w-4 h-4 text-pink-600" />
+                      </div>
+                      <h3 className="font-bold text-slate-800">Radar Visite</h3>
+                    </div>
+                    {/* Selettore Grafico */}
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <button onClick={() => setRadarTab('completate')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${radarTab === 'completate' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Fatte</button>
+                      <button onClick={() => setRadarTab('programmate')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${radarTab === 'programmate' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Agenda</button>
+                    </div>
+                  </div>
+
+                  {radarTab === 'completate' ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+                          <p className="text-[10px] font-bold text-emerald-700 uppercase">Visite nel Periodo</p>
+                          <p className="text-2xl font-black text-emerald-900">{visitStats.vPeriodo}</p>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center flex flex-col justify-center">
+                          <p className="text-[10px] font-bold text-slate-500">Solo CRM & Store</p>
+                        </div>
+                      </div>
+                      {visitStats.listaVisitate.length > 0 ? (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {visitStats.listaVisitate.map((v: any) => (
+                            <div key={v.id} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 truncate">{v.nome}</p>
+                                <p className="text-[10px] text-slate-500">{v.comune} • {v.data}</p>
+                              </div>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna visita registrata in questo periodo.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Prossimi Appuntamenti</h4>
+                      {visitStats.prossimi.length > 0 ? (
+                        visitStats.prossimi.map((p: any) => (
+                          <div key={p.id} className="p-3 bg-orange-50 rounded-xl border border-orange-100">
+                            <p className="text-xs font-bold text-slate-800 truncate">{p.nome} - {p.comune}</p>
+                            <p className="text-[10px] text-orange-600 font-bold flex items-center gap-1 mt-1">
+                              <CalendarClock className="w-3 h-3"/> {p.dataRivisita} {p.ora}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna rivisita programmata.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : getCurrentList.length === 0 ? (
               <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                   <BookOpen className="w-10 h-10 text-slate-200" />
