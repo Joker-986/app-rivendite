@@ -28,7 +28,7 @@ interface SearchResult {
 
 export interface RivenditaHistoryEntry {
   data: string;
-  tipo: 'VISITA' | 'ORDINE';
+  tipo: 'VISITA' | 'ORDINE' | 'HOSTESS';
   note: string;
   importo: number;
 }
@@ -167,6 +167,7 @@ interface RivenditaCardProps {
   setShareModal: (modal: { isOpen: boolean; text: string }) => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
   moveCard?: (index: number, direction: 'up' | 'down') => void;
+  jumpToPosition?: (fromIndex: number, toPosition: string) => void;
   openRevisitModal: (id: string) => void;
 }
 
@@ -230,6 +231,44 @@ const calcolaFineTurno = (inizio: string) => {
   return `${fineOre.toString().padStart(2, '0')}:${minuti.toString().padStart(2, '0')}`;
 };
 
+const TimelineItem: React.FC<{ entry: RivenditaHistoryEntry }> = ({ entry }) => {
+  const configs = {
+    VISITA: { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Visita' },
+    ORDINE: { icon: <ClipboardList className="w-3 h-3" />, color: 'bg-blue-100 text-blue-600', label: 'Ordine' },
+    HOSTESS: { icon: <UserCheck className="w-3 h-3" />, color: 'bg-purple-100 text-purple-600', label: 'Hostess' }
+  };
+  const config = configs[entry.tipo] || configs.VISITA;
+  const dataOra = new Date(entry.data);
+
+  return (
+    <div className="flex gap-3 mb-4 last:mb-0">
+      <div className="flex flex-col items-center">
+        <div className={`w-7 h-7 rounded-full ${config.color} flex items-center justify-center shadow-sm z-10`}>
+          {config.icon}
+        </div>
+        <div className="w-0.5 h-full bg-slate-100 -mt-1"></div>
+      </div>
+      
+      <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
+          <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100">
+            {dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • {dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+          {entry.note}
+        </p>
+        {entry.importo > 0 && (
+          <div className="mt-2 pt-2 border-t border-slate-200/50">
+            <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const RivenditaCard = React.memo<RivenditaCardProps>(({
   res,
   idx,
@@ -254,6 +293,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   setShareModal,
   handleStoreUpdate,
   moveCard,
+  jumpToPosition,
   openRevisitModal
 }) => {
   const id = getRivenditaId(res);
@@ -332,13 +372,18 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       <div className="flex justify-between items-start gap-3">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           {activeTab === 'giro' && (
-            <div className="flex flex-col gap-1 mr-1 mt-1 shrink-0">
-              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'up'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={idx === 0}>
-                <ChevronUp className="w-4 h-4" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); moveCard?.(idx, 'down'); }} className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 active:scale-90 disabled:opacity-30" disabled={isLastInGiro}>
-                <ChevronDown className="w-4 h-4" />
-              </button>
+            <div className="flex items-center justify-center mr-3 shrink-0">
+              <div className="relative group">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={idx + 1}
+                  onChange={(e) => { e.stopPropagation(); jumpToPosition?.(idx, e.target.value); }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full text-center text-sm font-black text-slate-700 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 outline-none transition-all appearance-none"
+                />
+                <span className="absolute -top-2 -left-1 text-[8px] font-black text-slate-400 uppercase bg-white px-1">Pos.</span>
+              </div>
             </div>
           )}
           <div className="flex-1 min-w-0">
@@ -559,7 +604,16 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       </div>
 
       {enrichedDetails && (
-        <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+        <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-brand-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi Gemini 1.5 Pro</span>
+            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+              enrichedDetails.confidence > 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              Affidabilità: {enrichedDetails.confidence || 'N/D'}%
+            </span>
+          </div>
+          
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
               <Clock className="w-4 h-4 text-brand-600" />
@@ -698,20 +752,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         )}
 
         {showTimeline && extra.history && (
-          <div className="mt-2 space-y-2 border-t border-slate-100 pt-3 animate-in fade-in slide-in-from-top-1 duration-200">
-            {extra.history.slice(0, 10).map((h, i) => (
-              <div key={i} className="flex items-start gap-2 text-[10px]">
-                <span className="font-bold text-slate-400 whitespace-nowrap">
-                  {new Date(h.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit'})}
-                </span>
-                <span className="uppercase font-black text-brand-600">
-                  {h.tipo === 'ORDINE' ? '📦' : h.tipo === 'HOSTESS' ? '👤' : '🟢'}
-                </span>
-                <p className="text-slate-600 italic truncate flex-1">
-                  {h.note} {h.importo > 0 && <span className="font-bold text-brand-700 not-italic ml-1">(€{h.importo})</span>}
-                </p>
-              </div>
-            ))}
+          <div className="mt-4 space-y-1 border-t border-slate-100 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="relative">
+              {extra.history.slice(0, 10).map((h, i) => (
+                <TimelineItem key={i} entry={h} />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1110,6 +1156,18 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       ))}
                     </select>
                   </div>
+
+                  <button
+                    onClick={() => {
+                      if (extra.hostessData && extra.hostessInizio) {
+                        const notes = `${extra.hostessData} - dalle ${extra.hostessInizio} alle ${extra.hostessFine}`;
+                        handleActivitySave(id, 'HOSTESS', notes);
+                      }
+                    }}
+                    className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-xl shadow-sm active:scale-95 transition-all"
+                  >
+                    Salva Servizio
+                  </button>
                 </div>
               </div>
             )}
@@ -1213,6 +1271,50 @@ export default function App() {
     return opzioni[index];
   };
 
+  // Funzione per esportare lo storico in formato Excel (CSV)
+  const exportHistoryToExcel = () => {
+    const headers = ['Data', 'Tipo', 'Rivendita', 'Comune', 'Importo', 'Note'];
+    const rows: string[][] = [];
+
+    Object.entries(rubrica).forEach(([id, riv]: [string, any]) => {
+      // Recupero dati anagrafici corretti per evitare "undefined"
+      const infoAnagrafica = [...crmAnagrafiche, ...stores, ...giroVisite].find(r => getRivenditaId(r) === id);
+      const nomeRiv = infoAnagrafica?.isStore ? (infoAnagrafica.storeName || 'Store') : `Riv. ${infoAnagrafica?.['Num. Rivendita'] || ''}`;
+      const comuneRiv = infoAnagrafica?.['Comune'] || '';
+
+      riv.history?.forEach((h: any) => {
+        if (isDateInRange(h.data)) {
+          rows.push([
+            new Date(h.data).toLocaleDateString('it-IT'),
+            h.tipo,
+            nomeRiv,
+            comuneRiv,
+            h.importo?.toString() || '0',
+            `"${(h.note || '').replace(/"/g, '""')}"` // Protezione per i caratteri speciali nelle note
+          ]);
+        }
+      });
+    });
+
+    if (rows.length === 0) {
+      showToast("Nessun dato da esportare per questo periodo", "info");
+      return;
+    }
+
+    // Creazione del file CSV con supporto caratteri speciali (BOM UTF-8)
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const periodo = statsPeriod === 'all' ? 'TOTALE' : statsPeriod.toUpperCase();
+    link.href = url;
+    link.download = `TgesT_Report_${periodo}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   useEffect(() => {
     localStorage.setItem('tgest_target', mensileTarget.toString());
   }, [mensileTarget]);
@@ -1279,11 +1381,64 @@ export default function App() {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
   };
 
+  const runDataMigration = () => {
+    setRubrica(prev => {
+      const newRubrica = { ...prev };
+      let migratedCount = 0;
+
+      Object.keys(newRubrica).forEach(id => {
+        const data = newRubrica[id];
+        if (!data.history) data.history = [];
+
+        // 1. Migrazione Vecchie Visite (se non già in history)
+        if (data.dataVisita && !data.history.some(h => h.tipo === 'VISITA' && h.data.includes(data.dataVisita!))) {
+          data.history.push({
+            data: new Date(data.dataVisita).toISOString(),
+            tipo: 'VISITA',
+            note: data.note || "Visita registrata nel vecchio sistema",
+            importo: 0
+          });
+          migratedCount++;
+        }
+
+        // 2. Migrazione Vecchi Ordini Evasi
+        if (data.ordineEvaso && data.noteOrdine && !data.history.some(h => h.tipo === 'ORDINE' && h.note === data.noteOrdine)) {
+          data.history.push({
+            data: data.dataOrdine ? new Date(data.dataOrdine).toISOString() : new Date().toISOString(),
+            tipo: 'ORDINE',
+            note: data.noteOrdine,
+            importo: data.ultimoImporto || 0
+          });
+          migratedCount++;
+        }
+        
+        // Ordina la history per data decrescente dopo la migrazione
+        data.history.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      });
+
+      if (migratedCount > 0) {
+        console.log(`Migrazione completata: ${migratedCount} record allineati.`);
+        showToast(`Riparazione completata: ${migratedCount} record allineati`, 'success');
+      } else {
+        showToast('Nessun dato da riparare', 'info');
+      }
+      return newRubrica;
+    });
+  };
+
   useEffect(() => {
     const seenVersion = localStorage.getItem('seen_changelog_version');
     // Mostra il changelog se è la prima volta o se la versione è cambiata
     if (seenVersion !== DATA_VERSION) {
       setShowChangelog(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const lastRepair = localStorage.getItem('last_repair_v');
+    if (lastRepair !== '2.51') {
+      runDataMigration();
+      localStorage.setItem('last_repair_v', '2.51');
     }
   }, []);
 
@@ -1820,10 +1975,10 @@ export default function App() {
     });
   }, []);
 
-  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE', notes: string, amount: number = 0) => {
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0) => {
     setRubrica(prev => {
       const current = prev[id] || {};
-      const newHistoryEntry = {
+      const newHistoryEntry: RivenditaHistoryEntry = {
         data: new Date().toISOString(),
         tipo: type,
         note: notes,
@@ -1838,20 +1993,26 @@ export default function App() {
         history: [newHistoryEntry, ...(current.history || [])].slice(0, 20),
         ultimoOrdine: type === 'ORDINE' ? notes : (current.ultimoOrdine || ""),
         ultimoImporto: type === 'ORDINE' ? amount : (current.ultimoImporto || 0),
-        richiestaOrdine: false,
-        ordineEvaso: false,
+        richiestaOrdine: type === 'ORDINE' ? false : current.richiestaOrdine,
+        ordineEvaso: type === 'ORDINE' ? false : current.ordineEvaso,
         noteOrdine: type === 'ORDINE' ? "" : current.noteOrdine,
         importoOrdine: type === 'ORDINE' ? 0 : current.importoOrdine
       };
 
-      // Gestione Persistenza Hostess v2.37
-      if (current.showHostessModule && current.hostessData && current.hostessInizio) {
-        const dataFormattata = new Date(current.hostessData).toLocaleDateString('it-IT');
-        updates.ultimaHostessInfo = `${dataFormattata} dalle ${current.hostessInizio} alle ${current.hostessFine}`;
-        updates.showHostessModule = false;
-        updates.hostessData = "";
-        updates.hostessInizio = "";
-        updates.hostessFine = "";
+      // Gestione Persistenza Hostess
+      if (type === 'HOSTESS' || (current.showHostessModule && current.hostessData && current.hostessInizio)) {
+        const hData = type === 'HOSTESS' ? (notes.split(' - ')[0] || current.hostessData) : current.hostessData;
+        const hInizio = type === 'HOSTESS' ? (notes.split(' dalle ')[1]?.split(' alle ')[0] || current.hostessInizio) : current.hostessInizio;
+        const hFine = type === 'HOSTESS' ? (notes.split(' alle ')[1] || current.hostessFine) : current.hostessFine;
+
+        if (hData && hInizio) {
+          const dataFormattata = new Date(hData).toLocaleDateString('it-IT');
+          updates.ultimaHostessInfo = `${dataFormattata} dalle ${hInizio} alle ${hFine}`;
+          updates.showHostessModule = false;
+          updates.hostessData = "";
+          updates.hostessInizio = "";
+          updates.hostessFine = "";
+        }
       }
 
       if (type === 'VISITA') {
@@ -2146,6 +2307,8 @@ export default function App() {
   }, []);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
+    if (activeTab === 'giro') return;
+    
     const tabs = getOrderedTabs();
     const currentIndex = tabs.indexOf(activeTab);
     let nextTab = activeTab;
@@ -2158,7 +2321,7 @@ export default function App() {
       nextTab = tabs[prevIndex];
     }
     handleTabChange(nextTab);
-  }, [activeTab, getOrderedTabs, handleTabChange]);
+  }, [activeTab, getOrderedTabs, handleTabChange, viewMode]);
 
   const moveCard = useCallback((index: number, direction: 'up' | 'down') => {
     setGiroVisite(prev => {
@@ -2171,6 +2334,19 @@ export default function App() {
       return newArray;
     });
   }, []);
+
+  const jumpToPosition = useCallback((fromIndex: number, toPosition: string) => {
+    const toIndex = parseInt(toPosition) - 1; // Conversione da base 1 a base 0
+    if (isNaN(toIndex) || toIndex < 0 || toIndex >= giroVisite.length || toIndex === fromIndex) return;
+
+    setGiroVisite(prev => {
+      const newArray = [...prev];
+      const [movedItem] = newArray.splice(fromIndex, 1);
+      newArray.splice(toIndex, 0, movedItem);
+      return newArray;
+    });
+    showToast(`Spostato in posizione ${toPosition}`);
+  }, [giroVisite.length, showToast]);
 
   const getUniqueComuniForTab = useCallback(() => {
     let list: SearchResult[] = [];
@@ -2246,9 +2422,13 @@ export default function App() {
 
     // Filtro Numero Rivendita
     if (rivenditaFilter) {
+      const searchTarget = rivenditaFilter.trim();
       list = list.filter(res => {
         const num = res.isStore ? (res.storeNumber || res['Num. Rivendita']) : res['Num. Rivendita'];
-        return num?.toString().includes(rivenditaFilter);
+        
+        // Convertiamo entrambi in stringa per un confronto sicuro e preciso
+        // Usiamo l'uguaglianza (===) invece di .includes()
+        return num?.toString() === searchTarget;
       });
     }
 
@@ -2556,6 +2736,7 @@ export default function App() {
     handleStoreUpdate,
     removeStore,
     moveCard,
+    jumpToPosition,
     setShareModal,
     openRevisitModal: setRevisitModalId
   }), [
@@ -2572,11 +2753,12 @@ export default function App() {
     addToCrm,
     handleStoreUpdate,
     removeStore,
-    moveCard
+    moveCard,
+    jumpToPosition
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans touch-none" style={{ overscrollBehavior: 'none' }}>
       {/* Top Navigation Bar */}
       <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
         <div className="max-w-md mx-auto px-3 py-3">
@@ -3134,6 +3316,16 @@ export default function App() {
                     </div>
                   );
                 })()}
+
+                <div className="px-1">
+                  <button
+                    onClick={exportHistoryToExcel}
+                    className="w-full mt-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all mb-6"
+                  >
+                    <Download className="w-5 h-5" />
+                    ESPORTA STORICO EXCEL (.CSV)
+                  </button>
+                </div>
                 
     {/* 1. RIEPILOGO ATTIVITÀ (CON BADGE ESTERNI v2.25) */}
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -3720,6 +3912,14 @@ export default function App() {
                 </p>
                 
                 <div className="grid grid-cols-1 gap-3">
+                  <button
+                    onClick={runDataMigration}
+                    className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+                  >
+                    <RefreshCw className="w-4 h-4 text-brand-600" />
+                    Riparazione Dati Storici
+                  </button>
+
                   <button
                     onClick={handleExportData}
                     className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
