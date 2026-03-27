@@ -29,9 +29,10 @@ export async function enrichRivendita(rivendita: any): Promise<EnrichedDetails> 
   Provincia: ${rivendita['Prov.']}
   
   REGOLE IMPORTANTI:
-  1. Per gli orari di apertura, sii estremamente accurato. Se trovi orari diversi per giorni diversi, elencali uno per riga (es. "Lunedì: 08:00-13:00, 15:00-20:00\\nMartedì: ...").
-  2. Per il numero di telefono, restituisci solo cifre (es. 0612345678), senza spazi.
-  3. Non includere il sito web.
+  1. TUTTE le risposte devono essere in LINGUA ITALIANA.
+  2. Per gli orari di apertura, sii estremamente accurato. Se trovi orari diversi per giorni diversi, elencali uno per riga (es. "Lunedì: 08:00-13:00, 15:00-20:00\\nMartedì: ...").
+  3. Per il numero di telefono, restituisci solo cifre (es. 0612345678), senza spazi.
+  4. Non includere il sito web.
   
   Usa Google Search per trovare informazioni reali e aggiornate.`;
 
@@ -47,10 +48,10 @@ export async function enrichRivendita(rivendita: any): Promise<EnrichedDetails> 
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              openingHours: { type: Type.STRING, description: "Orari di apertura settimanali" },
+              openingHours: { type: Type.STRING, description: "Orari di apertura settimanali in italiano" },
               phone: { type: Type.STRING, description: "Numero di telefono senza spazi" },
               email: { type: Type.STRING, description: "Indirizzo email" },
-              notes: { type: Type.STRING, description: "Altre note utili" }
+              notes: { type: Type.STRING, description: "Altre note utili esclusivamente in italiano" }
             },
             required: ["openingHours", "phone"]
           }

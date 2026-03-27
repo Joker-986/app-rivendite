@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3 } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -26,6 +26,13 @@ interface SearchResult {
   [key: string]: any;
 }
 
+export interface RivenditaHistoryEntry {
+  data: string;
+  tipo: 'VISITA' | 'ORDINE';
+  note: string;
+  importo: number;
+}
+
 export interface RivenditaExtra {
   stato: 'Attivata' | 'Non Attiva' | 'Basso Rendente' | 'RIP' | '';
   visitata: 'Si' | 'Da Rivisitare' | 'No' | '';
@@ -47,6 +54,16 @@ export interface RivenditaExtra {
   ordineEvaso?: boolean;
   note?: string;
   manualCap?: string;
+  history?: RivenditaHistoryEntry[];
+  ultimoOrdine?: string;
+  ultimoImporto?: number;
+  importoOrdine?: number;
+  hostessData?: string;
+  hostessInizio?: string;
+  hostessFine?: string;
+  codiceUnivoco?: string;
+  showHostessModule?: boolean;
+  ultimaHostessInfo?: string;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -135,13 +152,14 @@ interface RivenditaCardProps {
   isInGiro: boolean;
   extra: RivenditaExtra;
   enrichedDetails?: EnrichedDetails;
-  rubrica?: RubricaData;
+  rubrica: RubricaData;
   enrichingId: string | null;
   toggleSave: (res: SearchResult) => void;
   removeFromCrm: (res: SearchResult) => void;
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
-  handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: string | boolean) => void;
+  handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
+  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE', notes: string, amount?: number) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
@@ -151,6 +169,66 @@ interface RivenditaCardProps {
   moveCard?: (index: number, direction: 'up' | 'down') => void;
   openRevisitModal: (id: string) => void;
 }
+
+
+const LastOrderTile = ({ data }: { data: any }) => {
+  if (!data?.ultimoOrdine && !data?.ultimoImporto) return null;
+
+  return (
+    <div className="mt-1 p-3 bg-white border border-slate-100 rounded-xl flex items-start gap-2 shadow-inner">
+      <div className="flex-shrink-0 mt-0.5">
+        <ClipboardList className="w-3.5 h-3.5 text-slate-400" />
+      </div>
+      
+      <div className="flex-grow flex items-center justify-between min-w-0">
+        <div className="flex flex-col min-w-0">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">
+            Ordine Precedente:
+          </span>
+          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">
+            {data.ultimoOrdine || "Nessuna nota"}
+          </p>
+        </div>
+        
+        <div className="text-right flex-shrink-0">
+          <span className="text-[10px] font-black text-brand-600 bg-brand-50 px-2.5 py-1 rounded-md">
+            {data.ultimoImporto ? `${data.ultimoImporto}€` : "0€"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LastHostessTile = ({ data }: { data: any }) => {
+  if (!data?.ultimaHostessInfo) return null;
+
+  return (
+    <div className="mt-1 p-2 bg-purple-50/50 border border-purple-100 rounded-xl flex items-center gap-2 shadow-sm">
+      <CalendarClock className="w-3.5 h-3.5 text-purple-400" />
+      <div className="flex flex-col">
+        <span className="text-[9px] font-black text-purple-400 uppercase tracking-wider">Ultima Hostess:</span>
+        <p className="text-[10px] font-bold text-purple-700 leading-tight">
+          {data.ultimaHostessInfo}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// 1. Array degli orari validi (per un selettore a tendina più comodo su mobile)
+const ORARI_INIZIO = [
+  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00"
+];
+
+// 2. Funzione di calcolo automatico
+const calcolaFineTurno = (inizio: string) => {
+  if (!inizio) return "";
+  const [ore, minuti] = inizio.split(':').map(Number);
+  let fineOre = ore + 4;
+  return `${fineOre.toString().padStart(2, '0')}:${minuti.toString().padStart(2, '0')}`;
+};
 
 const RivenditaCard = React.memo<RivenditaCardProps>(({
   res,
@@ -168,6 +246,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   removeStore,
   initiateVisitToggle,
   handleRubricaUpdate,
+  handleActivitySave,
   toggleExpandCard,
   handleEnrich,
   addToCrm,
@@ -180,6 +259,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
   
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
@@ -202,6 +282,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
     if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
     if (extra.riferimento) text += `Referente: ${extra.riferimento}\n`;
     if (extra.pIva) text += `P. IVA: ${extra.pIva}\n`;
+    if (extra.codiceUnivoco) text += `Codice SDI: ${extra.codiceUnivoco}\n`;
     if (extra.telefono || (enriched && enriched.phone)) text += `Telefono: ${extra.telefono || enriched?.phone}\n`;
     if (extra.mail || (enriched && enriched.email)) text += `Email: ${extra.mail || enriched?.email}\n`;
     if (enriched && enriched.openingHours) text += `Orari: ${enriched.openingHours}\n`;
@@ -362,6 +443,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         </div>
       </div>
       
+      <LastOrderTile data={extra} />
+      <LastHostessTile data={extra} />
+      
       <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
@@ -448,6 +532,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5 font-medium">P. IVA</span>
             <span className="font-bold text-slate-700">{extra.pIva}</span>
+          </div>
+        )}
+        {showCrmData && extra.codiceUnivoco && (
+          <div className="text-xs">
+            <span className="text-slate-400 block mb-0.5 font-medium">Codice SDI</span>
+            <span className="font-bold text-slate-700 uppercase">{extra.codiceUnivoco}</span>
           </div>
         )}
         {showCrmData && extra.mail && (
@@ -543,7 +633,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="grid grid-cols-2 gap-2">
             {showCrmData && extra.richiestaOrdine && !extra.ordineEvaso && (
               <button
-                onClick={() => handleRubricaUpdate(id, 'ordineEvaso', true)}
+                onClick={() => handleActivitySave(id, 'ORDINE', extra.noteOrdine || '', extra.importoOrdine || 0)}
                 className={`${extra.dataRivisita ? 'col-span-1' : 'col-span-2'} flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all shadow-sm`}
               >
                 <Check className="w-3.5 h-3.5" /> Evadi Ordine
@@ -595,6 +685,34 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               <Clock className="w-3.5 h-3.5" /> Orari e contatti
             </button>
           )
+        )}
+
+        {extra.history && extra.history.length > 0 && (
+          <button
+            onClick={() => setShowTimeline(!showTimeline)}
+            className="w-full text-center text-[10px] font-bold text-slate-500 hover:text-brand-600 py-1 transition-all flex items-center justify-center gap-1"
+          >
+            <Activity className="w-3 h-3" />
+            {showTimeline ? 'Nascondi Cronologia' : 'Mostra Cronologia'}
+          </button>
+        )}
+
+        {showTimeline && extra.history && (
+          <div className="mt-2 space-y-2 border-t border-slate-100 pt-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            {extra.history.slice(0, 10).map((h, i) => (
+              <div key={i} className="flex items-start gap-2 text-[10px]">
+                <span className="font-bold text-slate-400 whitespace-nowrap">
+                  {new Date(h.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit'})}
+                </span>
+                <span className="uppercase font-black text-brand-600">
+                  {h.tipo === 'ORDINE' ? '📦' : h.tipo === 'HOSTESS' ? '👤' : '🟢'}
+                </span>
+                <p className="text-slate-600 italic truncate flex-1">
+                  {h.note} {h.importo > 0 && <span className="font-bold text-brand-700 not-italic ml-1">(€{h.importo})</span>}
+                </p>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -847,15 +965,28 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">P. IVA</label>
-              <input
-                type="text"
-                value={extra.pIva}
-                onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
-                placeholder="Partita IVA (solo numeri)"
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">P. IVA</label>
+                <input
+                  type="text"
+                  value={extra.pIva}
+                  onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
+                  placeholder="11 cifre"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Codice SDI</label>
+                <input
+                  type="text"
+                  value={extra.codiceUnivoco || ''}
+                  maxLength={7}
+                  onChange={(e) => handleRubricaUpdate(id, 'codiceUnivoco', e.target.value.toUpperCase())}
+                  placeholder="7 caratteri"
+                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm uppercase font-bold"
+                />
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -901,15 +1032,85 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                     className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
                   />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Importo Ordine (€)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={extra.importoOrdine || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'importoOrdine', parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                  />
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={extra.ordineEvaso || false}
-                    onChange={(e) => handleRubricaUpdate(id, 'ordineEvaso', e.target.checked)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        handleActivitySave(id, 'ORDINE', extra.noteOrdine || '', extra.importoOrdine || 0);
+                      } else {
+                        handleRubricaUpdate(id, 'ordineEvaso', false);
+                      }
+                    }}
                     className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                   />
                   <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
                 </label>
+              </div>
+            )}
+
+            {/* SEZIONE HOSTESS - NUOVA LOGICA v2.37 */}
+            <div className="pt-2 border-t border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={extra.showHostessModule || false}
+                  onChange={(e) => handleRubricaUpdate(id, 'showHostessModule', e.target.checked)}
+                  className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+                />
+                <span className="text-sm font-bold text-purple-700">Richiedi Hostess</span>
+              </label>
+            </div>
+
+            {extra.showHostessModule && (
+              <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl shadow-sm space-y-3">
+                <div className="flex items-center gap-2 mb-1 pb-2 border-b border-purple-100">
+                  <UserCheck className="w-4 h-4 text-purple-600" />
+                  <span className="text-xs font-bold text-purple-800 uppercase tracking-tight">Dettagli Servizio</span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Giorno Servizio</label>
+                    <input
+                      type="date"
+                      value={extra.hostessData || ''}
+                      onChange={(e) => handleRubricaUpdate(id, 'hostessData', e.target.value)}
+                      className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Inizio Turno</label>
+                    <select
+                      value={extra.hostessInizio || ''}
+                      onChange={(e) => {
+                        const inizio = e.target.value;
+                        const fine = calcolaFineTurno(inizio);
+                        handleRubricaUpdate(id, 'hostessInizio', inizio);
+                        handleRubricaUpdate(id, 'hostessFine', fine);
+                      }}
+                      className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold text-purple-700"
+                    >
+                      <option value="">Seleziona Orario</option>
+                      {ORARI_INIZIO.map(ora => (
+                        <option key={ora} value={ora}>{ora}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -986,6 +1187,36 @@ export default function App() {
   const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
   const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => loadFromStorage('crmAnagrafiche', []));
   const [stores, setStores] = useState<SearchResult[]>(() => loadFromStorage('stores', []));
+  const [mensileTarget, setMensileTarget] = useState(() => {
+    const saved = localStorage.getItem('tgest_target');
+    return saved ? Number(saved) : 10000;
+  });
+
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [tempTarget, setTempTarget] = useState(mensileTarget.toString());
+
+  const frasiTarget = {
+    bassa: ["🚀 Inizia il viaggio! Ogni ordine conta.", "💪 Riscaldiamo i motori...", "🔭 Obiettivo nel mirino, partiamo!"],
+    media: ["⚡️ Metà strada fatta! Continua così.", "🔥 Il ritmo è quello giusto, non mollare.", "📈 Stiamo crescendo, avanti tutta!"],
+    alta: ["🏆 Sento odore di successo... Quasi fatta!", "🏁 Manca l'ultimo miglio, stringi i denti!", "✨ Il traguardo è a un passo!"],
+    raggiunta: ["🎉 BOOM! Target distrutto! Grande lavoro!", "🏆 OBIETTIVO RAGGIUNTO! Ora festeggiamo!", "😎 Sopra il target! Sei inarrestabile!"]
+  };
+
+  const getFraseMotivazionale = (percentuale: number) => {
+    let fascia: 'bassa' | 'media' | 'alta' | 'raggiunta' = 'bassa';
+    if (percentuale >= 100) fascia = 'raggiunta';
+    else if (percentuale >= 65) fascia = 'alta';
+    else if (percentuale >= 35) fascia = 'media';
+    
+    const opzioni = frasiTarget[fascia];
+    const index = percentuale % opzioni.length; 
+    return opzioni[index];
+  };
+
+  useEffect(() => {
+    localStorage.setItem('tgest_target', mensileTarget.toString());
+  }, [mensileTarget]);
+
   const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [revisitModalId, setRevisitModalId] = useState<string | null>(null);
@@ -1005,7 +1236,8 @@ export default function App() {
   const [capFilter, setCapFilter] = useState<string>('');
   const [filterVisitata, setFilterVisitata] = useState<string>('');
   const [filterOrdine, setFilterOrdine] = useState<boolean>(false);
-  const [rubricaSort, setRubricaSort] = useState<string>('none');
+  const [rubricaSort, setRubricaSort] = useState<string>('dataVisitaAsc');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showChangelog, setShowChangelog] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1544,7 +1776,7 @@ export default function App() {
     });
   }, []);
 
-  const handleRubricaUpdate = useCallback((id: string, field: keyof RivenditaExtra, value: string | boolean) => {
+  const handleRubricaUpdate = useCallback((id: string, field: keyof RivenditaExtra, value: any) => {
     setRubrica(prev => {
       const existing = prev[id];
       let isSavedToRubrica = existing?.isSavedToRubrica;
@@ -1578,10 +1810,65 @@ export default function App() {
             oraVisita: '',
             oraRivisita: '',
             lastDataVisita: '',
-            lastOraVisita: ''
+            lastOraVisita: '',
+            importoOrdine: 0
           }),
           [field]: value,
           isSavedToRubrica
+        }
+      };
+    });
+  }, []);
+
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE', notes: string, amount: number = 0) => {
+    setRubrica(prev => {
+      const current = prev[id] || {};
+      const newHistoryEntry = {
+        data: new Date().toISOString(),
+        tipo: type,
+        note: notes,
+        importo: amount
+      };
+      
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+      const updates: Partial<RivenditaExtra> = {
+        history: [newHistoryEntry, ...(current.history || [])].slice(0, 20),
+        ultimoOrdine: type === 'ORDINE' ? notes : (current.ultimoOrdine || ""),
+        ultimoImporto: type === 'ORDINE' ? amount : (current.ultimoImporto || 0),
+        richiestaOrdine: false,
+        ordineEvaso: false,
+        noteOrdine: type === 'ORDINE' ? "" : current.noteOrdine,
+        importoOrdine: type === 'ORDINE' ? 0 : current.importoOrdine
+      };
+
+      // Gestione Persistenza Hostess v2.37
+      if (current.showHostessModule && current.hostessData && current.hostessInizio) {
+        const dataFormattata = new Date(current.hostessData).toLocaleDateString('it-IT');
+        updates.ultimaHostessInfo = `${dataFormattata} dalle ${current.hostessInizio} alle ${current.hostessFine}`;
+        updates.showHostessModule = false;
+        updates.hostessData = "";
+        updates.hostessInizio = "";
+        updates.hostessFine = "";
+      }
+
+      if (type === 'VISITA') {
+        updates.visitata = 'Si';
+        updates.dataVisita = dateStr;
+        updates.oraVisita = timeStr;
+        if (current.dataVisita) {
+          updates.lastDataVisita = current.dataVisita;
+          updates.lastOraVisita = current.oraVisita || '';
+        }
+      }
+
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          ...updates
         }
       };
     });
@@ -1674,27 +1961,12 @@ export default function App() {
     const id = pendingVisitId;
     const existing = rubrica[id];
     
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    handleActivitySave(id, 'VISITA', existing?.note || '');
     
-    const updates: Partial<RivenditaExtra> = {
-      visitata: 'Si',
-      dataVisita: dateStr,
-      oraVisita: timeStr
-    };
-
-    // If there was a previous visit, move it to lastDataVisita
-    if (existing?.dataVisita) {
-      updates.lastDataVisita = existing.dataVisita;
-      updates.lastOraVisita = existing.oraVisita || '';
-    }
-
-    handleRubricaMultiUpdate(id, updates);
     setRevisitModalId(id);
     setShowConfirmVisitModal(false);
     setPendingVisitId(null);
-  }, [pendingVisitId, rubrica, handleRubricaMultiUpdate]);
+  }, [pendingVisitId, rubrica, handleActivitySave]);
 
   const toggleExpandCard = useCallback((id: string) => {
     setExpandedCardId(prev => prev === id ? null : id);
@@ -2033,18 +2305,53 @@ export default function App() {
 
     return [...list].sort((a, b) => {
       if (rubricaSort === 'none') return 0;
+      
       const extraA = rubrica[getRivenditaId(a)];
       const extraB = rubrica[getRivenditaId(b)];
       
-      if (rubricaSort === 'dataVisitaAsc') {
-        return getDateTime(extraA?.dataVisita, extraA?.oraVisita) - getDateTime(extraB?.dataVisita, extraB?.oraVisita);
+      // Funzione per ottenere il valore di confronto
+      const getCompareValue = (item: any, extra: any) => {
+        if (rubricaSort === 'dataVisitaAsc') {
+          return extra?.dataVisita ? getDateTime(extra.dataVisita, extra.oraVisita) : null;
+        }
+        if (rubricaSort === 'dataRivisitaAsc') {
+          return extra?.dataRivisita ? getDateTime(extra.dataRivisita, extra.oraRivisita) : null;
+        }
+        const val = item[rubricaSort];
+        return (val !== undefined && val !== null && val !== '') ? val : null;
+      };
+
+      const valA = getCompareValue(a, extraA);
+      const valB = getCompareValue(b, extraB);
+
+      // Gestione valori vuoti: sempre in fondo indipendentemente dal verso
+      if (valA === null && valB !== null) return 1;
+      if (valA !== null && valB === null) return -1;
+      if (valA === null && valB === null) return 0;
+
+      let result = 0;
+      
+      // Se sono numeri (timestamp o altro)
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        result = valA - valB;
+      } else {
+        // Gestione ordinamento numerico per stringhe (es. Numero Rivendita)
+        const numA = Number(valA);
+        const numB = Number(valB);
+        
+        if (!isNaN(numA) && !isNaN(numB)) {
+          result = numA - numB;
+        } else {
+          const sA = String(valA).toLowerCase();
+          const sB = String(valB).toLowerCase();
+          if (sA < sB) result = -1;
+          else if (sA > sB) result = 1;
+        }
       }
-      if (rubricaSort === 'dataRivisitaAsc') {
-        return getDateTime(extraA?.dataRivisita, extraA?.oraRivisita) - getDateTime(extraB?.dataRivisita, extraB?.oraRivisita);
-      }
-      return 0;
+      
+      return sortOrder === 'asc' ? result : -result;
     });
-  }, [getCurrentList, activeTab, rubricaSort, rubrica]);
+  }, [getCurrentList, activeTab, rubricaSort, sortOrder, rubrica]);
 
   const exportToCSV = useCallback(() => {
     const listToExport = getSortedList;
@@ -2216,6 +2523,21 @@ export default function App() {
     };
   }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
 
+  const fatturatoPeriodo = useMemo(() => {
+    let totale = 0;
+    Object.values(rubrica).forEach((riv: any) => {
+      if (riv.history && Array.isArray(riv.history)) {
+        riv.history.forEach((evento: any) => {
+          // Verifica se l'evento è un ORDINE e se rientra nel periodo scelto
+          if (evento.tipo === 'ORDINE' && isDateInRange(evento.data)) {
+            totale += Number(evento.importo || 0);
+          }
+        });
+      }
+    });
+    return totale;
+  }, [rubrica, statsPeriod, customRange]);
+
   const sortedList = getSortedList;
 
   const cardProps = useMemo(() => ({
@@ -2226,6 +2548,7 @@ export default function App() {
     removeFromCrm,
     initiateVisitToggle,
     handleRubricaUpdate,
+    handleActivitySave,
     toggleExpandCard,
     handleEnrich,
     addToCrm,
@@ -2243,6 +2566,7 @@ export default function App() {
     removeFromCrm,
     initiateVisitToggle,
     handleRubricaUpdate,
+    handleActivitySave,
     toggleExpandCard,
     handleEnrich,
     addToCrm,
@@ -2702,15 +3026,31 @@ export default function App() {
                     </div>
                     <div className="space-y-1 col-span-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Ordina per</label>
-                      <select
-                        value={rubricaSort}
-                        onChange={(e) => setRubricaSort(e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
-                      >
-                        <option value="none">Nessun ordine</option>
-                        <option value="dataVisitaAsc">Ultima Visita</option>
-                        <option value="dataRivisitaAsc">Prossimo Appuntamento</option>
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={rubricaSort}
+                          onChange={(e) => setRubricaSort(e.target.value)}
+                          className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                        >
+                          <option value="none">Nessun ordine</option>
+                          <option value="Num. Rivendita">Numero Rivendita</option>
+                          <option value="Comune">Comune</option>
+                          <option value="dataVisitaAsc">Ultima Visita</option>
+                          <option value="dataRivisitaAsc">Prossimo Appuntamento</option>
+                        </select>
+                        
+                        <button
+                          onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                          className="w-10 h-10 flex items-center justify-center bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-200 transition-colors shrink-0"
+                          title={sortOrder === 'asc' ? "Ordine Crescente (A-Z)" : "Ordine Decrescente (Z-A)"}
+                        >
+                          {sortOrder === 'asc' ? (
+                            <ArrowDownAZ className="w-5 h-5 text-brand-600" />
+                          ) : (
+                            <ArrowUpZA className="w-5 h-5 text-brand-600" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2737,6 +3077,63 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {/* TARGET MENSILE (v2.45) */}
+                {(() => {
+                  const percentuale = mensileTarget > 0 ? Math.min(Math.round((fatturatoPeriodo / mensileTarget) * 100), 100) : 0;
+                  const mancano = Math.max(mensileTarget - fatturatoPeriodo, 0);
+                  const frase = getFraseMotivazionale(percentuale);
+
+                  return (
+                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm mb-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex flex-col gap-1 flex-1">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Il Tuo Obiettivo</span>
+                          <button 
+                            onClick={() => {
+                              setTempTarget(mensileTarget.toString());
+                              setShowTargetModal(true);
+                            }}
+                            className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95"
+                          >
+                            <span className="text-xs font-black text-brand-700">€{mensileTarget.toLocaleString('it-IT')}</span>
+                            <Edit3 className="w-3 h-3 text-brand-500" />
+                          </button>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-black text-brand-600">
+                            {percentuale}%
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner relative">
+                        {/* Gradiente di base con effetto glass */}
+                        <div 
+                          className="h-full bg-gradient-to-r from-brand-300 to-brand-600 rounded-full transition-all duration-1000 ease-out relative" 
+                          style={{ width: `${percentuale}%` }}
+                        >
+                          {/* Effetto Lucido/Glass */}
+                          <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-full blur-[1px]"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-3 px-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-[10px] font-bold text-slate-400 italic">
+                            {fatturatoPeriodo >= mensileTarget ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400">
+                            €{fatturatoPeriodo.toLocaleString('it-IT')} / €{mensileTarget.toLocaleString('it-IT')}
+                          </p>
+                        </div>
+                        <p className="text-[11px] font-medium text-brand-600/80 mt-1">
+                          {frase}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
     {/* 1. RIEPILOGO ATTIVITÀ (CON BADGE ESTERNI v2.25) */}
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -2769,14 +3166,18 @@ export default function App() {
 
       {statsRadarOpen && (
         <div className="p-5 pt-0 space-y-4">
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
-              <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Visite Completate</p>
-              <p className="text-2xl font-black text-emerald-900">{visitStats.vPeriodo}</p>
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="bg-emerald-50 p-2.5 rounded-2xl border border-emerald-100">
+              <p className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider leading-tight">Visite<br/>Completate</p>
+              <p className="text-xl font-black text-emerald-900">{visitStats.vPeriodo}</p>
             </div>
-            <div className="bg-orange-50 p-3 rounded-2xl border border-orange-100">
-              <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">Rimanenti nel Giro</p>
-              <p className="text-2xl font-black text-orange-900">{visitStats.rimanentiGiro}</p>
+            <div className="bg-orange-50 p-2.5 rounded-2xl border border-orange-100">
+              <p className="text-[9px] font-bold text-orange-700 uppercase tracking-wider leading-tight">Rimanenti<br/>nel Giro</p>
+              <p className="text-xl font-black text-orange-900">{visitStats.rimanentiGiro}</p>
+            </div>
+            <div className="bg-brand-50 p-2.5 rounded-2xl border border-brand-100">
+              <p className="text-[9px] font-bold text-brand-600 uppercase tracking-wider leading-tight">Fatturato<br/>Totale</p>
+              <p className="text-xl font-black text-brand-900">{fatturatoPeriodo.toLocaleString('it-IT')}€</p>
             </div>
           </div>
 
@@ -3554,6 +3955,61 @@ export default function App() {
               >
                 Chiudi
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Target Modal (Bottom Sheet v2.45) */}
+      {showTargetModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200] flex items-end justify-center animate-in fade-in duration-300">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setShowTargetModal(false)}
+          />
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl relative z-[210] p-8 animate-in slide-in-from-bottom-full duration-300">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-8" />
+            
+            <div className="space-y-6">
+              <div className="text-center">
+                <h3 className="text-xl font-black text-slate-900">Imposta Obiettivo Mensile</h3>
+                <p className="text-slate-400 text-sm font-medium mt-1">Definisci il traguardo da raggiungere questo mese</p>
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300">€</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={tempTarget}
+                  onChange={(e) => setTempTarget(e.target.value)}
+                  className="w-full h-20 pl-10 pr-4 bg-slate-50 border-2 border-slate-100 rounded-3xl focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none text-4xl font-black text-brand-700 transition-all text-center"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowTargetModal(false)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all active:scale-95"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={() => {
+                    const val = parseFloat(tempTarget);
+                    if (!isNaN(val) && val > 0) {
+                      setMensileTarget(val);
+                      localStorage.setItem('tgest_target', val.toString());
+                      setShowTargetModal(false);
+                      showToast('Obiettivo aggiornato con successo!');
+                    }
+                  }}
+                  className="flex-1 py-4 bg-brand-600 text-white font-bold rounded-2xl shadow-xl shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+                >
+                  Salva Obiettivo
+                </button>
+              </div>
             </div>
           </div>
         </div>
