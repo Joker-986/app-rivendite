@@ -124,13 +124,14 @@ export default function MapView({ results }: MapViewProps) {
         return;
       }
 
-      // Recupera la cache esistente o creane una nuova
-      const cacheKey = 'tgest_geo_cache';
+      // Cache V2: Separazione dati puliti
+      const cacheKey = 'tgest_geo_cache_v2';
       const geoCache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
 
       setGeocodingProgress({ current: 0, total: results.length });
       const newGeocoded: GeocodedResult[] = [];
       const newNotFound: SearchResult[] = [];
+      const midPoint = Math.floor(results.length / 2);
       
       for (let i = 0; i < results.length; i++) {
         if (!isMounted) break;
@@ -139,7 +140,7 @@ export default function MapView({ results }: MapViewProps) {
         const id = res.CMNR || res['Num. Rivendita'] + res['Comune'];
         const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
 
-        // 1. Controllo in Cache (Velocità Massima)
+        // 1. Controllo in Cache (Aggiornamento immediato per dati pronti)
         if (geoCache[id]) {
           newGeocoded.push({ ...res, lat: geoCache[id].lat, lon: geoCache[id].lon });
           setGeocodedResults([...newGeocoded]);
@@ -147,9 +148,9 @@ export default function MapView({ results }: MapViewProps) {
           continue; 
         }
 
-        // 2. Se non in cache, procedi con Fetch (con Delay anti-blocco mobile)
+        // 2. Fetch con delay blindato (600ms per standard mobile)
         try {
-          await new Promise(resolve => setTimeout(resolve, 300)); 
+          await new Promise(resolve => setTimeout(resolve, 600)); 
           
           const response = await fetch('/api/geocode', {
             method: 'POST',
@@ -163,20 +164,21 @@ export default function MapView({ results }: MapViewProps) {
               const lat = parseFloat(data[0].lat);
               const lon = parseFloat(data[0].lon);
               
-              // Salva in Cache locale
               geoCache[id] = { lat, lon };
               localStorage.setItem(cacheKey, JSON.stringify(geoCache));
-
               newGeocoded.push({ ...res, lat, lon });
-              setGeocodedResults([...newGeocoded]);
             } else {
               newNotFound.push(res);
-              setNotFoundResults([...newNotFound]);
             }
           }
         } catch (error) {
           console.error("Geocoding error:", address, error);
           newNotFound.push(res);
+        }
+        
+        // 3. Buffer di Rendering: Aggiorna solo a metà, fine o cache hit
+        if (i === midPoint || i === results.length - 1) {
+          setGeocodedResults([...newGeocoded]);
           setNotFoundResults([...newNotFound]);
         }
         
