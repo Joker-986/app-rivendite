@@ -1,316 +1,146 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Navigation, AlertTriangle, MapPinOff, MapPin, Store, Info } from 'lucide-react';
+import { Navigation, MapPinOff, AlertTriangle, Crosshair } from 'lucide-react';
 
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
+const defaultIcon = L.icon({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
 });
+L.Marker.prototype.options.icon = defaultIcon;
 
-interface SearchResult {
-  [key: string]: any;
-}
+interface MapViewProps { results: any[]; }
 
-interface MapViewProps {
-  results: SearchResult[];
-}
-
-interface GeocodedResult extends SearchResult {
-  lat: number;
-  lon: number;
-}
-
-const MapBounds = ({ markers, userLocation }: { markers: GeocodedResult[], userLocation: {lat: number, lon: number} | null }) => {
+// GESTIONE ZOOM: Si attiva solo al primo caricamento o su richiesta
+const MapController = ({ markers, userLocation, forceUpdate }: { markers: any[], userLocation: any, forceUpdate: boolean }) => {
   const map = useMap();
+  const hasCentered = useRef(false);
+
   useEffect(() => {
-    if (markers.length > 0 || userLocation) {
+    if ((markers.length > 0 && !hasCentered.current) || forceUpdate) {
       const points: L.LatLngExpression[] = markers.map(m => [m.lat, m.lon]);
-      if (userLocation) {
-        points.push([userLocation.lat, userLocation.lon]);
+      if (userLocation) points.push([userLocation.lat, userLocation.lon]);
+      if (points.length > 0) {
+        map.fitBounds(L.latLngBounds(points), { padding: [50, 50], maxZoom: 15 });
+        hasCentered.current = true;
       }
-      const bounds = L.latLngBounds(points);
-      map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [markers, userLocation, map]);
+  }, [markers.length, userLocation, forceUpdate]);
   return null;
 };
 
 export default function MapView({ results }: MapViewProps) {
-  const [geocodedResults, setGeocodedResults] = useState<GeocodedResult[]>([]);
-  const [notFoundResults, setNotFoundResults] = useState<SearchResult[]>([]);
-  const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
-  const [userLocation, setUserLocation] = useState<{lat: number, lon: number} | null>(null);
+  const [geocodedResults, setGeocodedResults] = useState<any[]>([]);
+  const [notFoundResults, setNotFoundResults] = useState<any[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [userLocation, setUserLocation] = useState<any>(null);
+  const [forceCenter, setForceCenter] = useState(false);
+  const isGeocoding = useRef(false);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lon: position.coords.longitude
-        });
-      },
-      (error) => {
-        console.error("Error tracking location:", error);
-      },
-      { enableHighAccuracy: true }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
-
-  const userIcon = L.divIcon({
-    className: 'user-location-marker',
-    html: `
-      <div style="
-        width: 16px;
-        height: 16px;
-        background-color: #4285F4;
-        border: 2px solid white;
-        border-radius: 50%;
-        box-shadow: 0 0 5px rgba(0,0,0,0.3);
-        position: relative;
-      ">
-        <div style="
-          position: absolute;
-          top: -2px;
-          left: -2px;
-          width: 16px;
-          height: 16px;
-          background-color: #4285F4;
-          border-radius: 50%;
-          opacity: 0.4;
-          animation: pulse 2s infinite;
-        "></div>
-      </div>
-      <style>
-        @keyframes pulse {
-          0% { transform: scale(1); opacity: 0.4; }
-          70% { transform: scale(2.5); opacity: 0; }
-          100% { transform: scale(2.5); opacity: 0; }
-        }
-      </style>
-    `,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8]
-  });
-
-  const handleMapNavigation = useCallback((res: GeocodedResult) => {
-    const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
-    const encoded = encodeURIComponent(address);
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    if (isMobile) {
-      window.location.href = 'geo:0,0?q=' + encoded;
-    } else {
-      window.open(`https://www.google.com/maps/search/?api=1&query=${res.lat},${res.lon}`, '_blank');
-    }
+    navigator.geolocation.getCurrentPosition(p => setUserLocation({ lat: p.coords.latitude, lon: p.coords.longitude }));
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    
-    const geocodeResults = async () => {
-      if (!results || results.length === 0) {
-        setGeocodedResults([]);
-        setNotFoundResults([]);
-        setGeocodingProgress({ current: 0, total: 0 });
-        return;
-      }
+    if (isGeocoding.current || !results.length) return;
+    isGeocoding.current = true;
 
-      // Cache V2: Separazione dati puliti
-      const cacheKey = 'tgest_geo_cache_v2';
-      const geoCache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+    const run = async () => {
+      const CACHE_KEY = 'tgest_geo_v30';
+      const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+      const successful: any[] = [];
+      const failed: any[] = [];
 
-      setGeocodingProgress({ current: 0, total: results.length });
-      const newGeocoded: GeocodedResult[] = [];
-      const newNotFound: SearchResult[] = [];
-      const midPoint = Math.floor(results.length / 2);
-      
       for (let i = 0; i < results.length; i++) {
-        if (!isMounted) break;
-        
         const res = results[i];
-        const id = res.CMNR || res['Num. Rivendita'] + res['Comune'];
-        const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
-
-        // 1. Controllo in Cache (Aggiornamento immediato per dati pronti)
-        if (geoCache[id]) {
-          newGeocoded.push({ ...res, lat: geoCache[id].lat, lon: geoCache[id].lon });
-          setGeocodedResults([...newGeocoded]);
-          setGeocodingProgress(prev => ({ ...prev, current: i + 1 }));
-          continue; 
-        }
-
-        // 2. Fetch con delay blindato (600ms per standard mobile)
-        try {
-          await new Promise(resolve => setTimeout(resolve, 600)); 
-          
-          const response = await fetch('/api/geocode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address })
-          });
-
-          if (response.ok) {
+        const id = res.uid || `${res['Comune']}_${res['Num. Rivendita']}`;
+        
+        if (cache[id]) {
+          successful.push({ ...res, lat: cache[id].lat, lon: cache[id].lon });
+        } else {
+          try {
+            // Pulizia indirizzo per migliorare precisione
+            const cleanAddr = res['Indirizzo'].split('-')[0].split('(')[0].trim();
+            const query = encodeURIComponent(`${cleanAddr}, ${res['Comune']}, ${res['Prov.']}, Italy`);
+            
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&addressdetails=1`);
             const data = await response.json();
-            if (data && data.length > 0) {
-              const lat = parseFloat(data[0].lat);
-              const lon = parseFloat(data[0].lon);
-              
-              geoCache[id] = { lat, lon };
-              localStorage.setItem(cacheKey, JSON.stringify(geoCache));
-              newGeocoded.push({ ...res, lat, lon });
-            } else {
-              newNotFound.push(res);
-            }
-          }
-        } catch (error) {
-          console.error("Geocoding error:", address, error);
-          newNotFound.push(res);
-        }
-        
-        // 3. Buffer di Rendering: Aggiorna solo a metà, fine o cache hit
-        if (i === midPoint || i === results.length - 1) {
-          setGeocodedResults([...newGeocoded]);
-          setNotFoundResults([...newNotFound]);
-        }
-        
-        setGeocodingProgress(prev => ({ ...prev, current: i + 1 }));
-      }
-    };
 
-    geocodeResults();
-    return () => { isMounted = false; };
+            if (data && data[0]) {
+              const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+              cache[id] = coords;
+              localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+              successful.push({ ...res, ...coords });
+            } else {
+              failed.push(res);
+            }
+            await new Promise(r => setTimeout(r, 1100));
+          } catch (e) {
+            failed.push(res);
+          }
+        }
+        setProgress(i + 1);
+        setGeocodedResults([...successful]);
+        setNotFoundResults([...failed]);
+      }
+      isGeocoding.current = false;
+    };
+    run();
   }, [results]);
 
-  if (!results || results.length === 0) return null;
-
-  const isGeocoding = geocodingProgress.current < geocodingProgress.total;
+  const userIcon = L.divIcon({
+    className: 'bg-transparent',
+    html: `<div style="width:16px; height:16px; background:#4285F4; border:2px solid white; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [16, 16]
+  });
 
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3">
-      <div className="flex justify-between items-center">
-        <h3 className="font-semibold text-slate-800">Mappa Rivendite</h3>
-        {isGeocoding && (
-          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-            Geocoding: {geocodingProgress.current} / {geocodingProgress.total}
-          </span>
-        )}
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+        <span className="text-[11px] font-black text-slate-500 uppercase">Progresso: {progress}/{results.length}</span>
+        <button 
+          onClick={() => { setForceCenter(true); setTimeout(() => setForceCenter(false), 500); }}
+          className="p-2 bg-brand-50 text-brand-600 rounded-xl"
+        ><Crosshair className="w-4 h-4" /></button>
       </div>
-      
-      <div className="h-[400px] w-full rounded-xl overflow-hidden border border-slate-200 relative z-0">
-        <MapContainer 
-          center={[41.8719, 12.5674]} 
-          zoom={6} 
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer
-            attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          />
-          
-          <MarkerClusterGroup chunkedLoading>
-            {geocodedResults.map((res, idx) => (
-              <Marker key={idx} position={[res.lat, res.lon]}>
-                <Popup className="custom-popup">
-                  <div className="p-2 min-w-[220px]">
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      <span className="bg-brand-100 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Store className="w-3 h-3" />
-                        Riv. {res['Num. Rivendita']}
-                      </span>
-                      {res['Tipo Rivendita'] && (
-                        <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                          {res['Tipo Rivendita']}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-start gap-2 mb-3">
-                      <MapPin className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold text-slate-900 text-sm leading-tight">
-                          {res['Comune']} ({res['Prov.']})
-                        </div>
-                        <div className="text-slate-600 text-xs mt-1 leading-relaxed">
-                          {res['Indirizzo']}<br />
-                          {res['CAP']} {res['Comune']}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const addr = `${res['Indirizzo']}, ${res['CAP'] || ''} ${res['Comune']}, ${res['Prov.']}, Italy`;
-                          const encoded = encodeURIComponent(addr);
-                          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                          if (isMobile) {
-                            window.location.href = 'geo:0,0?q=' + encoded;
-                          } else {
-                            window.open(`https://www.google.com/maps/search/?api=1&query=${encoded}`, '_blank');
-                          }
-                        }}
-                        className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 w-full py-3 px-6 rounded-xl text-sm font-bold transition-all shadow-sm"
-                      >
-                        <Navigation className="w-4 h-4" />
-                        Naviga
-                      </button>
-                    </div>
+
+      <div className="h-[450px] w-full rounded-3xl overflow-hidden border-2 border-white shadow-xl relative z-0">
+        <MapContainer center={[41.9, 12.5]} zoom={6} style={{ height: '100%', width: '100%' }}>
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+          <MarkerClusterGroup>
+            {geocodedResults.map((m, idx) => (
+              <Marker key={idx} position={[m.lat, m.lon]}>
+                <Popup>
+                  <div className="p-1">
+                    <p className="text-[10px] font-bold text-brand-600">Riv. {m['Num. Rivendita']}</p>
+                    <p className="text-xs font-bold mb-2">{m['Comune']}</p>
+                    <button onClick={() => window.location.href=`geo:0,0?q=${encodeURIComponent(m['Indirizzo']+', '+m['Comune'])}`} className="w-full bg-brand-600 text-white py-2 rounded-lg text-[10px] font-bold">NAVIGA</button>
                   </div>
                 </Popup>
               </Marker>
             ))}
           </MarkerClusterGroup>
-
-          {userLocation && (
-            <Marker position={[userLocation.lat, userLocation.lon]} icon={userIcon}>
-              <Popup>
-                <div className="font-bold text-brand-700">La tua posizione</div>
-              </Popup>
-            </Marker>
-          )}
-
-          <MapBounds markers={geocodedResults} userLocation={userLocation} />
+          {userLocation && <Marker position={[userLocation.lat, userLocation.lon]} icon={userIcon} />}
+          <MapController markers={geocodedResults} userLocation={userLocation} forceUpdate={forceCenter} />
         </MapContainer>
       </div>
-      
+
+      {/* LISTA NON LOCALIZZATI RIPRISTINATA */}
       {notFoundResults.length > 0 && (
-        <div className="mt-4 border-t border-slate-100 pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-amber-700">
-              <AlertTriangle className="w-4 h-4" />
-              <h4 className="text-sm font-bold uppercase tracking-wider">Rivendite non localizzate ({notFoundResults.length})</h4>
-            </div>
-            {isGeocoding && (
-              <span className="text-[10px] text-amber-600 animate-pulse font-medium">
-                Ricerca in corso...
-              </span>
-            )}
+        <div className="bg-orange-50 p-4 rounded-3xl border border-orange-100">
+          <div className="flex items-center gap-2 mb-3 text-orange-700">
+            <AlertTriangle className="w-4 h-4" />
+            <h4 className="text-xs font-black uppercase">Non Localizzate ({notFoundResults.length})</h4>
           </div>
-          <div className="space-y-2">
-            {notFoundResults.map((res, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-100">
-                <div className="p-2 bg-amber-100 rounded-lg shrink-0">
-                  <MapPinOff className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                      RIV. {res['Num. Rivendita']}
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 truncate">{res['Comune']}</div>
-                  <div className="text-xs text-slate-600 truncate">{res['Indirizzo']}</div>
-                </div>
+          <div className="grid grid-cols-1 gap-2">
+            {notFoundResults.map((r, i) => (
+              <div key={i} className="bg-white/60 p-2 rounded-xl text-[10px] font-bold text-slate-600 border border-orange-200/50">
+                {r['Num. Rivendita']} - {r['Comune']} ({r['Indirizzo']})
               </div>
             ))}
           </div>
