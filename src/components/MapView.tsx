@@ -124,65 +124,58 @@ export default function MapView({ results }: MapViewProps) {
         return;
       }
 
+      // Recupera la cache esistente o creane una nuova
+      const cacheKey = 'tgest_geo_cache';
+      const geoCache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+
       setGeocodingProgress({ current: 0, total: results.length });
       const newGeocoded: GeocodedResult[] = [];
       const newNotFound: SearchResult[] = [];
-      
-      const fetchGeocodeFromBackend = async (addr: string) => {
-        try {
-          const res = await fetch('/api/geocode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: addr })
-          });
-          if (res.ok) {
-            return await res.json();
-          }
-          return [];
-        } catch (e) {
-          return [];
-        }
-      };
       
       for (let i = 0; i < results.length; i++) {
         if (!isMounted) break;
         
         const res = results[i];
-        const cleanIndirizzo = res['Indirizzo'].replace(/S\.N\.C\.|SNC/gi, '').trim();
-        const address = `${cleanIndirizzo}, ${res['Comune']}, ${res['Prov.']}, Italy`;
-        const fallbackAddress = `${res['Comune']}, ${res['Prov.']}, Italy`;
-        
+        const id = res.CMNR || res['Num. Rivendita'] + res['Comune'];
+        const address = `${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`;
+
+        // 1. Controllo in Cache (Velocità Massima)
+        if (geoCache[id]) {
+          newGeocoded.push({ ...res, lat: geoCache[id].lat, lon: geoCache[id].lon });
+          setGeocodedResults([...newGeocoded]);
+          setGeocodingProgress(prev => ({ ...prev, current: i + 1 }));
+          continue; 
+        }
+
+        // 2. Se non in cache, procedi con Fetch (con Delay anti-blocco mobile)
         try {
-          if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
+          await new Promise(resolve => setTimeout(resolve, 300)); 
           
-          let data = await fetchGeocodeFromBackend(address);
+          const response = await fetch('/api/geocode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address })
+          });
 
-          if ((!data || data.length === 0) && cleanIndirizzo !== res['Indirizzo']) {
-            data = await fetchGeocodeFromBackend(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`);
-          }
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              
+              // Salva in Cache locale
+              geoCache[id] = { lat, lon };
+              localStorage.setItem(cacheKey, JSON.stringify(geoCache));
 
-          if (!data || data.length === 0) {
-            data = await fetchGeocodeFromBackend(fallbackAddress);
-          }
-          
-          if (data && data.length > 0) {
-            newGeocoded.push({
-              ...res,
-              lat: parseFloat(data[0].lat),
-              lon: parseFloat(data[0].lon)
-            });
-            // Batch update every 3 results or at the end to prevent mobile lag
-            if (newGeocoded.length % 3 === 0 || i === results.length - 1) {
+              newGeocoded.push({ ...res, lat, lon });
               setGeocodedResults([...newGeocoded]);
-            }
-          } else {
-            newNotFound.push(res);
-            if (newNotFound.length % 3 === 0 || i === results.length - 1) {
+            } else {
+              newNotFound.push(res);
               setNotFoundResults([...newNotFound]);
             }
           }
         } catch (error) {
-          console.error("Geocoding error for address:", address, error);
+          console.error("Geocoding error:", address, error);
           newNotFound.push(res);
           setNotFoundResults([...newNotFound]);
         }
@@ -192,10 +185,7 @@ export default function MapView({ results }: MapViewProps) {
     };
 
     geocodeResults();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [results]);
 
   if (!results || results.length === 0) return null;

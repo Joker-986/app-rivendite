@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -961,6 +961,9 @@ export default function App() {
   const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('oggi');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [radarTab, setRadarTab] = useState<'completate' | 'programmate'>('completate');
+  const [statsOrdiniOpen, setStatsOrdiniOpen] = useState(false);
+  const [statsTerritorioOpen, setStatsTerritorioOpen] = useState(false);
+  const [statsRadarOpen, setStatsRadarOpen] = useState(true);
 
   const isDateInRange = (dateStr?: string) => {
     if (!dateStr) return statsPeriod === 'all';
@@ -2130,19 +2133,27 @@ export default function App() {
 
   const orderStats = useMemo(() => {
     const allEntries = Object.entries(rubrica) as [string, RivenditaExtra][];
-    
-    const filtrati = allEntries.filter(([_, data]) => {
-      if (data.richiestaOrdine !== true && data.ordineEvaso !== true) return false;
-      return isDateInRange(data.dataOrdine || data.dataVisita || data.lastDataVisita);
-    });
-
-    const evasi = filtrati.filter(([_, data]) => data.ordineEvaso === true).length;
-    const listaDaEvadere = filtrati.filter(([_, data]) => data.ordineEvaso !== true).map(([id, data]) => {
+    const mapEntry = (id: string, data: any) => {
       const riv = [...crmAnagrafiche, ...stores, ...giroVisite].find(r => getRivenditaId(r) === id);
-      return { id, extra: data, rivendita: riv };
-    }).filter(i => i.rivendita);
+      return { 
+        id, 
+        nome: riv?.isStore ? (riv.storeName || 'Store') : `Riv. ${riv?.['Num. Rivendita']}`,
+        soloNumero: riv?.isStore ? (riv.storeNumber || '') : (riv?.['Num. Rivendita'] || ''),
+        comune: riv?.['Comune'] || '',
+        dataOrdine: data.dataOrdine,
+        note: data.noteOrdine || 'Nessuna nota'
+      };
+    };
 
-    return { totali: filtrati.length, evasi, daEvadere: filtrati.length - evasi, listaDaEvadere };
+    const daEvadereList = allEntries
+      .filter(([_, d]) => d.richiestaOrdine === true && d.ordineEvaso !== true && isDateInRange(d.dataOrdine || d.dataVisita))
+      .map(([id, d]) => mapEntry(id, d)).filter(o => o.nome);
+
+    const evasiList = allEntries
+      .filter(([_, d]) => d.ordineEvaso === true && isDateInRange(d.dataOrdine || d.dataVisita))
+      .map(([id, d]) => mapEntry(id, d)).filter(o => o.nome);
+
+    return { daEvadere: daEvadereList.length, evasi: evasiList.length, listaDaEvadere: daEvadereList, listaEvasi: evasiList };
   }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
 
   const crmStats = useMemo(() => {
@@ -2169,50 +2180,41 @@ export default function App() {
   }, [crmAnagrafiche, stores, rubrica, statsPeriod, customRange]);
 
   const visitStats = useMemo(() => {
-    const now = new Date(); now.setHours(0,0,0,0);
     const combined = [...crmAnagrafiche, ...stores];
     const listaVisitate: any[] = [];
     const prossimi: any[] = [];
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
 
     combined.forEach(r => {
       const id = getRivenditaId(r);
-      const d = rubrica[id];
-      if (!d) return;
-
-      // Visite fatte nel periodo
-      if (d.dataVisita && isDateInRange(d.dataVisita)) {
-        listaVisitate.push({
-          id,
-          nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
-          comune: r.Comune,
-          data: new Date(d.dataVisita).toLocaleDateString('it-IT').slice(0, 5)
-        });
+      const d = rubrica[id] as RivenditaExtra;
+      const infoBase = {
+        id,
+        nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
+        soloNumero: r.isStore ? (r.storeNumber || '') : (r['Num. Rivendita'] || ''),
+        comune: r.Comune
+      };
+      
+      if (d?.dataVisita && isDateInRange(d.dataVisita)) {
+        listaVisitate.push({ ...infoBase, data: new Date(d.dataVisita).toLocaleDateString('it-IT').slice(0, 5) });
       }
 
-      // Visite programmate (future)
-      if (d.dataRivisita) {
-        const dr = new Date(d.dataRivisita); dr.setHours(0,0,0,0);
-        if (dr >= now) {
-          prossimi.push({
-            id,
-            nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
-            comune: r.Comune,
-            dataRivisita: new Date(d.dataRivisita).toLocaleDateString('it-IT'),
-            ora: d.oraRivisita || '',
-            dateObj: dr
-          });
+      if (d?.dataRivisita) {
+        const [y, m, day] = d.dataRivisita.split('-').map(Number);
+        const dr = new Date(y, m - 1, day);
+        if (dr >= oggi || (dr < oggi && d.visitata !== 'Si')) {
+          prossimi.push({ ...infoBase, dataRivisita: d.dataRivisita, ora: d.oraRivisita || '', dateObj: dr, isOverdue: dr < oggi });
         }
       }
     });
 
-    prossimi.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-    
     return { 
       vPeriodo: listaVisitate.length, 
       listaVisitate, 
-      prossimi: prossimi.slice(0, 10)
+      prossimi: prossimi.sort((a,b) => a.dateObj.getTime() - b.dateObj.getTime()).slice(0, 10), 
+      rimanentiGiro: giroVisite.filter(r => (rubrica[getRivenditaId(r)] as RivenditaExtra)?.visitata !== 'Si').length 
     };
-  }, [rubrica, crmAnagrafiche, stores, statsPeriod, customRange]);
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
 
   const sortedList = getSortedList;
 
@@ -2597,35 +2599,37 @@ export default function App() {
               </div>
 
               {/* Filtri Comuni */}
-              <div className="flex flex-row gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Num. Riv."
-                    value={rivenditaFilter}
-                    onChange={(e) => setRivenditaFilter(e.target.value)}
-                    className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm"
-                  />
-                </div>
+              {activeTab !== 'statistiche' && (
+                <div className="flex flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Num. Riv."
+                      value={rivenditaFilter}
+                      onChange={(e) => setRivenditaFilter(e.target.value)}
+                      className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm"
+                    />
+                  </div>
 
-                <div className="relative flex-[1.5]">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <select
-                    value={comuneFilter}
-                    onChange={(e) => setComuneFilter(e.target.value)}
-                    className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm appearance-none"
-                  >
-                    <option value="">Tutti i Comuni</option>
-                    {getUniqueComuniForTab().map(comune => (
-                      <option key={comune} value={comune}>{comune}</option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  <div className="relative flex-[1.5]">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select
+                      value={comuneFilter}
+                      onChange={(e) => setComuneFilter(e.target.value)}
+                      className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm appearance-none"
+                    >
+                      <option value="">Tutti i Comuni</option>
+                      {getUniqueComuniForTab().map(comune => (
+                        <option key={comune} value={comune}>{comune}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {getBaseListLength() > 0 && activeTab !== 'search' && activeTab !== 'giro' && (
@@ -2734,196 +2738,284 @@ export default function App() {
                   )}
                 </div>
                 
-                {/* CRUSCOTTO LOGISTICA ORDINI */}
-                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
-                        <ClipboardList className="w-4 h-4 text-brand-600" />
-                      </div>
-                      <h3 className="font-bold text-slate-800">Raccolta Ordini</h3>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Evasi</p>
-                      <div className="flex items-end gap-2">
-                        <p className="text-3xl font-black text-emerald-700 leading-none">{orderStats.evasi}</p>
-                        <p className="text-xs font-bold text-emerald-600/70 mb-1 pb-0.5">/ {orderStats.totali}</p>
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
-                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1">Da Consegnare</p>
-                      <p className="text-3xl font-black text-amber-700 leading-none">{orderStats.daEvadere}</p>
-                    </div>
-                  </div>
+    {/* 1. RIEPILOGO ATTIVITÀ (CON BADGE ESTERNI v2.25) */}
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <button 
+        onClick={() => setStatsRadarOpen(!statsRadarOpen)}
+        className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
+            <Activity className="w-4 h-4 text-pink-600" />
+          </div>
+          <h3 className="font-bold text-slate-800">Riepilogo Attività</h3>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {/* Badge visibili anche quando chiuso */}
+          {!statsRadarOpen && (
+            <div className="flex gap-1.5 animate-in fade-in zoom-in-95 duration-300">
+              <div className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-lg text-[10px] font-black border border-emerald-200">
+                {visitStats.vPeriodo}
+              </div>
+              <div className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-lg text-[10px] font-black border border-orange-200">
+                {visitStats.rimanentiGiro}
+              </div>
+            </div>
+          )}
+          {statsRadarOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </div>
+      </button>
 
-                  {/* Barra di progresso */}
-                  {orderStats.totali > 0 && (
-                    <div className="pt-2">
-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-                          style={{ width: `${(orderStats.evasi / orderStats.totali) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
+      {statsRadarOpen && (
+        <div className="p-5 pt-0 space-y-4">
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+              <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Visite Completate</p>
+              <p className="text-2xl font-black text-emerald-900">{visitStats.vPeriodo}</p>
+            </div>
+            <div className="bg-orange-50 p-3 rounded-2xl border border-orange-100">
+              <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">Rimanenti nel Giro</p>
+              <p className="text-2xl font-black text-orange-900">{visitStats.rimanentiGiro}</p>
+            </div>
+          </div>
 
-                  {/* Lista Action Items */}
-                  {orderStats.listaDaEvadere.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Consegne Pendenti</h4>
-                      {orderStats.listaDaEvadere.map(({ id, extra, rivendita }) => (
-                        <div key={id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-2">
-                          <div className="flex justify-between items-start">
-                            <span className="text-sm font-bold text-slate-800">
-                              {rivendita?.isStore ? (rivendita.storeName || 'Store') : `Riv. ${rivendita?.['Num. Rivendita']}`} - {toTitleCase(rivendita?.['Comune'] || '')}
-                            </span>
-                            <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-slate-200 font-bold text-slate-500 shrink-0">
-                              {extra.dataOrdine ? new Date(extra.dataOrdine).toLocaleDateString('it-IT').slice(0, 5) : '-'}
-                            </span>
-                          </div>
-                          {extra.noteOrdine && (
-                            <p className="text-xs text-slate-600 italic">
-                              {extra.noteOrdine}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+          {/* LISTA VISITE COMPLETATE (RINOMINATA) */}
+          {visitStats.listaVisitate.length > 0 ? (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1 mt-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Storico Visite</h4>
+              {visitStats.listaVisitate.map((v: any) => (
+                <div key={v.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{v.nome}</p>
+                    <p className="text-[10px] text-slate-500">{v.comune} • {v.data}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <button 
+                      onClick={() => { setRivenditaFilter(v.soloNumero); setActiveTab('crm'); }} 
+                      className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                    </button>
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna visita salvata.</p>
+          )}
+        </div>
+      )}
+    </div>
 
-                {/* TERMOMETRO DEL TERRITORIO */}
-                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <Target className="w-4 h-4 text-indigo-600" />
-                    </div>
-                    <h3 className="font-bold text-slate-800">Termometro Territorio</h3>
+    {/* 2. AGENDA (FIX EVIDENZIAZIONE OGGI v2.25) */}
+    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+          <CalendarClock className="w-4 h-4 text-orange-600" />
+        </div>
+        <h3 className="font-bold text-slate-800">Agenda</h3>
+      </div>
+      <div className="space-y-3">
+        {visitStats.prossimi.length > 0 ? (
+          visitStats.prossimi.map((p: any) => {
+            // Convertiamo la stringa ISO (YYYY-MM-DD) in un oggetto data
+            // Usiamo split e new Date(y, m-1, d) per evitare problemi di fuso orario
+            const [year, month, day] = p.dataRivisita.split('-').map(Number);
+            const dObj = new Date(year, month - 1, day);
+            
+            const dataIT = dObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const oggiIT = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            const isToday = dataIT === oggiIT;
+            const isOverdue = p.isOverdue;
+
+            return (
+              <div key={p.id} className={`p-3 rounded-xl border transition-all ${
+                isToday ? 'bg-orange-100 border-orange-400 shadow-md ring-1 ring-orange-200' : 
+                isOverdue ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-orange-100'
+              }`}>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <p className={`text-xs font-bold truncate ${isToday ? 'text-orange-900' : isOverdue ? 'text-red-900' : 'text-slate-800'}`}>
+                      {p.nome} - {p.comune}
+                    </p>
+                    <p className={`text-[10px] font-bold flex items-center gap-1 mt-1 ${isToday ? 'text-orange-700' : isOverdue ? 'text-red-600' : 'text-orange-600'}`}>
+                      <CalendarClock className="w-3 h-3"/> {dataIT} {p.ora} 
+                      {isToday && ' • OGGI'}
+                      {isOverdue && ' • DA RECUPERARE'}
+                    </p>
                   </div>
-
-                  {crmStats.total > 0 ? (
-                    <>
-                      {/* Barra Multi-Stato Proporzionale */}
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                        {crmStats.attivate > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(crmStats.attivate / crmStats.total) * 100}%` }}></div>}
-                        {crmStats.nonAttive > 0 && <div className="h-full bg-amber-400" style={{ width: `${(crmStats.nonAttive / crmStats.total) * 100}%` }}></div>}
-                        {crmStats.bassoRendente > 0 && <div className="h-full bg-orange-500" style={{ width: `${(crmStats.bassoRendente / crmStats.total) * 100}%` }}></div>}
-                        {crmStats.rip > 0 && <div className="h-full bg-slate-800" style={{ width: `${(crmStats.rip / crmStats.total) * 100}%` }}></div>}
-                        {crmStats.daAssegnare > 0 && <div className="h-full bg-slate-300" style={{ width: `${(crmStats.daAssegnare / crmStats.total) * 100}%` }}></div>}
-                      </div>
-
-                      {/* Legenda e Contatori */}
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-xs font-bold text-slate-600">Attivate</span></div>
-                          <span className="font-black text-slate-800">{crmStats.attivate}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div><span className="text-xs font-bold text-slate-600">Non Attive</span></div>
-                          <span className="font-black text-slate-800">{crmStats.nonAttive}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div><span className="text-xs font-bold text-slate-600 truncate max-w-[70px]">Basso Rend.</span></div>
-                          <span className="font-black text-slate-800">{crmStats.bassoRendente}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-800"></div><span className="text-xs font-bold text-slate-600">RIP</span></div>
-                          <span className="font-black text-slate-800">{crmStats.rip}</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-slate-500 italic text-center py-4">Nessun dato presente nel CRM.</p>
-                  )}
                 </div>
-
-                {/* Radar Visite */}
-                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
-                        <Activity className="w-4 h-4 text-pink-600" />
-                      </div>
-                      <h3 className="font-bold text-slate-800">Radar Visite</h3>
-                    </div>
-                    {/* Selettore Grafico */}
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <button onClick={() => setRadarTab('completate')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${radarTab === 'completate' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Fatte</button>
-                      <button onClick={() => setRadarTab('programmate')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${radarTab === 'programmate' ? 'bg-white shadow-sm text-pink-600' : 'text-slate-500'}`}>Agenda</button>
-                    </div>
-                  </div>
-
-                  {radarTab === 'completate' ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
-                          <p className="text-[10px] font-bold text-emerald-700 uppercase">Visite nel Periodo</p>
-                          <p className="text-2xl font-black text-emerald-900">{visitStats.vPeriodo}</p>
-                        </div>
-                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center flex flex-col justify-center">
-                          <p className="text-[10px] font-bold text-slate-500">Solo CRM & Store</p>
-                        </div>
-                      </div>
-                      {visitStats.listaVisitate.length > 0 ? (
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                          {visitStats.listaVisitate.map((v: any) => (
-                            <div key={v.id} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between">
-                              <div className="min-w-0">
-                                <p className="text-xs font-bold text-slate-800 truncate">{v.nome}</p>
-                                <p className="text-[10px] text-slate-500">{v.comune} • {v.data}</p>
-                              </div>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna visita registrata in questo periodo.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Prossimi Appuntamenti</h4>
-                      {visitStats.prossimi.length > 0 ? (
-                        visitStats.prossimi.map((p: any) => (
-                          <div key={p.id} className="p-3 bg-orange-50 rounded-xl border border-orange-100">
-                            <p className="text-xs font-bold text-slate-800 truncate">{p.nome} - {p.comune}</p>
-                            <p className="text-[10px] text-orange-600 font-bold flex items-center gap-1 mt-1">
-                              <CalendarClock className="w-3 h-3"/> {p.dataRivisita} {p.ora}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna rivisita programmata.</p>
-                      )}
-                    </div>
-                  )}
+                
+                <div className="flex gap-2 mt-3">
+                  <button 
+                    onClick={() => {
+                      const riv = [...crmAnagrafiche, ...stores].find(r => getRivenditaId(r) === p.id);
+                      if (riv && !giroVisite.some(g => getRivenditaId(g) === p.id)) {
+                        setGiroVisite(prev => [...prev, riv]);
+                        showToast('Aggiunta al giro');
+                      }
+                    }}
+                    className="flex-1 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Giro
+                  </button>
+                  <button 
+                    onClick={() => { setRivenditaFilter(p.soloNumero); setActiveTab('crm'); }} 
+                    className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </button>
                 </div>
               </div>
-            ) : getCurrentList.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
-                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
-                  <BookOpen className="w-10 h-10 text-slate-200" />
+            );
+          })
+        ) : (
+          <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna rivisita programmata.</p>
+        )}
+      </div>
+    </div>
+
+    {/* 3. RACCOLTA ORDINI (RIPRISTINATA v2.26) */}
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <button onClick={() => setStatsOrdiniOpen(!statsOrdiniOpen)} className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center"><ClipboardList className="w-4 h-4 text-blue-600" /></div>
+          <h3 className="font-bold text-slate-800">Raccolta Ordini</h3>
+        </div>
+        {!statsOrdiniOpen && orderStats.daEvadere > 0 && (
+          <div className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg text-[10px] font-black border border-blue-200">{orderStats.daEvadere}</div>
+        )}
+      </button>
+      
+      {statsOrdiniOpen && (
+        <div className="p-5 pt-0 space-y-6">
+          {/* LISTA DA EVADERE */}
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Da Evadere ({orderStats.daEvadere})</h4>
+            {orderStats.listaDaEvadere.length > 0 ? (
+              orderStats.listaDaEvadere.map((o: any) => (
+                <div key={o.id} className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                  <div className="flex justify-between items-start mb-1">
+                    <p className="text-xs font-bold text-slate-800 truncate">{o.nome}</p>
+                    <button 
+                      onClick={() => { setRivenditaFilter(o.soloNumero); setActiveTab('crm'); }} 
+                      className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mb-2">{o.comune}</p>
+                  <div className="bg-white/50 p-2 rounded-lg border border-blue-50">
+                    <p className="text-[10px] font-medium text-slate-600 italic">Note: {o.note}</p>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-slate-800 font-bold">Nessun dato</p>
-                  <p className="text-slate-500 text-sm">Non ci sono elementi che corrispondono ai criteri di ricerca.</p>
+              ))
+            ) : <p className="text-[10px] text-slate-400 italic">Nessun ordine da evadere.</p>}
+          </div>
+
+          {/* LISTA EVASI */}
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Ordini Evasi ({orderStats.evasi})</h4>
+            {orderStats.listaEvasi.map((o: any) => (
+              <div key={o.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl opacity-75">
+                <div className="flex justify-between items-start">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate">{o.nome}</p>
+                    <p className="text-[10px] text-slate-500">{o.comune} • {o.note}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <button 
+                      onClick={() => { setRivenditaFilter(o.soloNumero); setActiveTab('crm'); }} 
+                      className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                    </button>
+                  </div>
                 </div>
-                {activeTab === 'giro' && (
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+                {/* 4. TERMOMETRO DEL TERRITORIO */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                  <button 
+                    onClick={() => setStatsTerritorioOpen(!statsTerritorioOpen)}
+                    className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <Target className="w-4 h-4 text-indigo-600" />
+                      </div>
+                      <h3 className="font-bold text-slate-800">Termometro Territorio</h3>
+                    </div>
+                    {statsTerritorioOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                  </button>
+
+                  {statsTerritorioOpen && (
+                    <div className="p-5 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                      {crmStats.total > 0 ? (
+                        <>
+                          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex mt-2">
+                            {crmStats.attivate > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(crmStats.attivate / crmStats.total) * 100}%` }}></div>}
+                            {crmStats.nonAttive > 0 && <div className="h-full bg-amber-400" style={{ width: `${(crmStats.nonAttive / crmStats.total) * 100}%` }}></div>}
+                            {crmStats.bassoRendente > 0 && <div className="h-full bg-orange-500" style={{ width: `${(crmStats.bassoRendente / crmStats.total) * 100}%` }}></div>}
+                            {crmStats.rip > 0 && <div className="h-full bg-slate-800" style={{ width: `${(crmStats.rip / crmStats.total) * 100}%` }}></div>}
+                            {crmStats.daAssegnare > 0 && <div className="h-full bg-slate-300" style={{ width: `${(crmStats.daAssegnare / crmStats.total) * 100}%` }}></div>}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 pt-2">
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-xs font-bold text-slate-600">Attivate</span></div>
+                              <span className="font-black text-slate-800">{crmStats.attivate}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div><span className="text-xs font-bold text-slate-600">Non Attive</span></div>
+                              <span className="font-black text-slate-800">{crmStats.nonAttive}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div><span className="text-xs font-bold text-slate-600 truncate max-w-[70px]">Basso Rend.</span></div>
+                              <span className="font-black text-slate-800">{crmStats.bassoRendente}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-800"></div><span className="text-xs font-bold text-slate-600">RIP</span></div>
+                              <span className="font-black text-slate-800">{crmStats.rip}</span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-500 italic text-center py-4">Nessun dato presente nel CRM.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            ) : activeTab === 'giro' ? (
+              viewMode === 'map' ? (
+                <MapView results={getCurrentList} />
+              ) : getCurrentList.length === 0 ? (
+                <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                    <BookOpen className="w-10 h-10 text-slate-200" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-slate-800 font-bold">Nessun dato</p>
+                    <p className="text-slate-500 text-sm">Non ci sono elementi che corrispondono ai criteri di ricerca.</p>
+                  </div>
                   <button
                     onClick={() => setActiveTab('search')}
                     className="px-6 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
                   >
                     Vai alla ricerca
                   </button>
-                )}
-              </div>
-            ) : activeTab === 'giro' ? (
-              viewMode === 'map' ? (
-                <MapView results={getCurrentList} />
+                </div>
               ) : (
                 <div className="space-y-3">
                   {getCurrentList.map((res: SearchResult) => {
