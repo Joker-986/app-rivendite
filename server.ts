@@ -507,7 +507,10 @@ app.post('/api/enrich', async (req, res) => {
       const cohereResponse = await cohere.chat({
         model: "command-r-plus",
         message: cohereMessage,
-        connectors: [{ id: "web-search" }],
+        tools: [{ 
+          name: "internet_search", 
+          description: "Performs a search on the internet to find up-to-date information." 
+        }], // Sintassi aggiornata 2026 con fix TS
       });
 
       let cohereText = cohereResponse.text || '{}';
