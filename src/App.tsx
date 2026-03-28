@@ -2307,7 +2307,7 @@ export default function App() {
   }, []);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
-    if (activeTab === 'giro') return;
+    if (activeTab === 'giro' && viewMode === 'map') return;
     
     const tabs = getOrderedTabs();
     const currentIndex = tabs.indexOf(activeTab);
@@ -2758,7 +2758,7 @@ export default function App() {
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans touch-none" style={{ overscrollBehavior: 'none' }}>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans" style={{ overscrollBehaviorY: 'contain' }}>
       {/* Top Navigation Bar */}
       <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
         <div className="max-w-md mx-auto px-3 py-3">
