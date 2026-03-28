@@ -417,41 +417,41 @@ app.post('/api/geocode', async (req, res) => {
   }
 });
 
-// --- ROTTA GEMINI SICURA (RIPRISTINATA E POTENZIATA) ---
+// --- ROTTA GEMINI CON FALLBACK SU GROQ (VERSIONE DEFINITIVA) ---
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
   const groqApiKey = process.env.GROQ_API_KEY;
 
+  if (!apiKey) {
+    console.error("GEMINI_API_KEY mancante nel server");
+    return res.status(500).json({
+      openingHours: "N/D", phone: "N/D", zona: "N/D",
+      notes: "DEBUG AI: Chiave API Gemini non configurata.", confidence: 0
+    });
+  }
+
+  // Inizializza il client Groq per il "Piano B"
   let groqClient: OpenAI | null = null;
   if (groqApiKey) {
     groqClient = new OpenAI({ apiKey: groqApiKey, baseURL: "https://api.groq.com/openai/v1" });
   }
 
-  if (!apiKey) {
-    console.error("GEMINI_API_KEY mancante nel server");
-    res.status(500).json({
-      openingHours: "N/D", phone: "N/D", zona: "N/D",
-      notes: "DEBUG AI: Chiave API non configurata sul server.", confidence: 0
-    });
-    return;
-  }
-
-  // Utilizziamo l'istanza originale funzionante
-  const ai = new GoogleGenAI({ apiKey });
-  const prompt = `Analizza la seguente rivendita di tabacchi italiana:
-  Numero: ${rivendita['Num. Rivendita']}
-  Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
-  Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
-
-  TROVA TRAMITE GOOGLE SEARCH:
-  1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
-  2. phone: Solo cifre, senza spazi.
-  3. zona: Quartiere o zona geografica (es. "Vomero", "Centro Storico", "Frazione X").
-  4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE. Altrimenti indica se offre servizi come Sisal, Lottomatica, Amazon Hub.
-  5. confidence: Valuta severamente da 0 a 100 in base alle fonti (100 = fonti ufficiali, 0 = nessuna fonte).`;
-
   try {
+    // --- TENTATIVO 1: GEMINI ---
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `Analizza la seguente rivendita di tabacchi italiana:
+    Numero: ${rivendita['Num. Rivendita']}
+    Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
+    Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
+
+    TROVA TRAMITE GOOGLE SEARCH:
+    1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
+    2. phone: Solo cifre, senza spazi.
+    3. zona: Quartiere o zona geografica.
+    4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE, altrimenti indica servizi extra.
+    5. confidence: Valuta da 0 a 100 in base alle fonti.`;
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -473,25 +473,26 @@ app.post('/api/enrich', async (req, res) => {
     });
 
     let text = response.text || '';
-    // Pulizia robusta da eventuali tag markdown
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(text || '{}');
     
-    res.json({
+    return res.json({
       openingHours: data.openingHours || "Non disponibile",
       phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
       zona: data.zona || "Non disponibile",
       notes: data.notes || "Dettagli recuperati con successo.",
       confidence: typeof data.confidence === 'number' ? data.confidence : 0
     });
+
   } catch (geminiError: any) {
     console.warn("Gemini fallito, tento il fallback su Groq...", geminiError.message);
-
+    
+    // --- TENTATIVO 2: GROQ (IL PARACADUTE) ---
     if (!groqClient) {
-      return res.status(500).json({
-        openingHours: "N/D", phone: "N/D", zona: "N/D",
-        notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Groq non configurato.`,
-        confidence: 0
+      return res.status(500).json({ 
+        openingHours: "N/D", phone: "N/D", zona: "N/D", 
+        notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Groq non configurato.`, 
+        confidence: 0 
       });
     }
 
@@ -499,7 +500,7 @@ app.post('/api/enrich', async (req, res) => {
       const groqPrompt = `Analizza questa rivendita di tabacchi italiana.
       Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
       Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
-
+      
       Rispondi ESCLUSIVAMENTE con un JSON valido contenente queste chiavi (senza markdown o testo extra):
       - openingHours (string: orari ultra-sintetici o "Non disponibile")
       - phone (string: solo cifre o "Non disponibile")
@@ -509,7 +510,7 @@ app.post('/api/enrich', async (req, res) => {
 
       const chatCompletion = await groqClient.chat.completions.create({
         messages: [{ role: "user", content: groqPrompt }],
-        model: "llama3-8b-8192",
+        model: "llama-3.1-8b-instant", // <-- Il modello aggiornato super-veloce
         temperature: 0.1,
         response_format: { type: "json_object" }
       });
@@ -528,10 +529,10 @@ app.post('/api/enrich', async (req, res) => {
 
     } catch (groqError: any) {
       console.error("Anche Groq ha fallito:", groqError);
-      return res.status(500).json({
-        openingHours: "N/D", phone: "N/D", zona: "N/D",
-        notes: `DEBUG AI: Gemini e Groq falliti. (${groqError.message})`,
-        confidence: 0
+      return res.status(500).json({ 
+        openingHours: "N/D", phone: "N/D", zona: "N/D", 
+        notes: `DEBUG AI: Gemini e Groq falliti. (${groqError.message})`, 
+        confidence: 0 
       });
     }
   }
