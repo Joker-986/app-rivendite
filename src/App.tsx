@@ -170,7 +170,20 @@ interface RivenditaCardProps {
   moveCard?: (index: number, direction: 'up' | 'down') => void;
   jumpToPosition?: (fromIndex: number, toPosition: string) => void;
   openRevisitModal: (id: string) => void;
+  aiLockedUntil: number | null;
+  cooldownSeconds: number;
 }
+
+
+// Calcola la data attuale basandosi sull'orologio di Google (Los Angeles).
+// Serve SOLO ad uso interno per sincronizzare il reset delle quote gratuite.
+const getGoogleResetDate = () => {
+  const ptDate = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const yyyy = ptDate.getFullYear();
+  const mm = String(ptDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(ptDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 
 const LastOrderTile = ({ data }: { data: any }) => {
@@ -295,7 +308,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   handleStoreUpdate,
   moveCard,
   jumpToPosition,
-  openRevisitModal
+  openRevisitModal,
+  aiLockedUntil,
+  cooldownSeconds
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
@@ -553,7 +568,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       {enrichedDetails && (
         <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-brand-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi Gemini 1.5 Pro</span>
+            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi Gemini 3.1 Pro</span>
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
               enrichedDetails.confidence > 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
             }`}>
@@ -677,9 +692,15 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           ) : (
             <button
               onClick={() => handleEnrich(id, res)}
-              className="w-full text-center text-[11px] font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 py-2 rounded-xl flex items-center justify-center gap-2 transition-all border border-brand-100"
+              disabled={!!aiLockedUntil}
+              className={`w-full text-center text-[11px] font-semibold py-2 rounded-xl flex items-center justify-center gap-2 transition-all border ${
+                aiLockedUntil 
+                  ? 'text-slate-400 bg-slate-50 border-slate-200 cursor-not-allowed'
+                  : 'text-brand-600 hover:text-brand-700 hover:bg-brand-50 border-brand-100'
+              }`}
             >
-              <Clock className="w-3.5 h-3.5" /> Orari e contatti
+              <Clock className="w-3.5 h-3.5" /> 
+              {aiLockedUntil ? `Attendi ${cooldownSeconds}s per nuova analisi` : 'Orari e contatti'}
             </button>
           )
         )}
@@ -1178,6 +1199,39 @@ export default function App() {
   } | null>(null);
   const [enrichedData, setEnrichedData] = useState<Record<string, EnrichedDetails>>({});
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
+  const [dailyAiCount, setDailyAiCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ai_daily_usage');
+      if (saved) {
+        const { date, count } = JSON.parse(saved);
+        const googleToday = getGoogleResetDate();
+        if (date === googleToday) return count;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 0;
+  });
+  const [aiUsage, setAiUsage] = useState<number[]>([]);
+  const [aiLockedUntil, setAiLockedUntil] = useState<number | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (aiLockedUntil) {
+      interval = setInterval(() => {
+        const remaining = Math.ceil((aiLockedUntil - Date.now()) / 1000);
+        if (remaining <= 0) {
+          setAiLockedUntil(null);
+          setCooldownSeconds(0);
+          setAiUsage([]); // Reset dei gettoni
+        } else {
+          setCooldownSeconds(remaining);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [aiLockedUntil]);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = useState<string>('search');
   const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('oggi');
@@ -2029,6 +2083,11 @@ export default function App() {
 
   const handleEnrich = useCallback(async (id: string, res: SearchResult) => {
     if (enrichedData[id]) return;
+    if (aiLockedUntil) {
+      showToast(`Attendi ${cooldownSeconds} secondi prima di un'altra ricerca.`, 'info');
+      return;
+    }
+    
     try {
       setEnrichingId(id);
       const details = await enrichRivendita(res);
@@ -2037,13 +2096,32 @@ export default function App() {
       if (details.zona && details.zona !== 'Non disponibile' && details.zona !== 'N/D') {
         handleRubricaUpdate(id, 'zona', details.zona);
       }
-      showToast('Dati recuperati!');
+      showToast('Dati recuperati con successo!');
+
+      // AGGIORNA IL CONTATORE GIORNALIERO AI SINCRONIZZATO CON GOOGLE
+      const googleTodayStr = getGoogleResetDate();
+      setDailyAiCount(prev => {
+        const newCount = prev + 1;
+        localStorage.setItem('ai_daily_usage', JSON.stringify({ date: googleTodayStr, count: newCount }));
+        return newCount;
+      });
+
+      // LOGICA RATE LIMITING (Max 2 per minuto)
+      const now = Date.now();
+      setAiUsage(prev => {
+        const newUsage = [...prev, now].filter(t => now - t < 60000);
+        if (newUsage.length >= 2) {
+          setAiLockedUntil(newUsage[0] + 60000); // Blocca per 60 sec dal PRIMO click
+        }
+        return newUsage;
+      });
+
     } catch (err) {
-      showToast('Errore AI', 'error');
+      showToast('Errore durante la ricerca AI', 'error');
     } finally {
       setEnrichingId(null);
     }
-  }, [enrichedData, handleRubricaUpdate]);
+  }, [enrichedData, handleRubricaUpdate, aiLockedUntil, cooldownSeconds]);
 
   const isSaved = useCallback((res: SearchResult) => {
     return giroVisite.some(s => 
@@ -2705,7 +2783,9 @@ export default function App() {
     moveCard,
     jumpToPosition,
     setShareModal,
-    openRevisitModal: setRevisitModalId
+    openRevisitModal: setRevisitModalId,
+    aiLockedUntil,
+    cooldownSeconds
   }), [
     activeTab,
     expandedCardId,
@@ -2721,7 +2801,11 @@ export default function App() {
     handleStoreUpdate,
     removeStore,
     moveCard,
-    jumpToPosition
+    jumpToPosition,
+    setShareModal,
+    setRevisitModalId,
+    aiLockedUntil,
+    cooldownSeconds
   ]);
 
   return (
@@ -3923,6 +4007,13 @@ export default function App() {
                 <div className="space-y-1 text-[11px] text-amber-700">
                   <p>Rivendite Salvate: <span className="font-bold">{crmAnagrafiche.length}</span></p>
                   <p>Spazio Occupato: <span className="font-bold">{storageSize}</span></p>
+                  
+                  {/* CONTATORE AI CON FORMATTAZIONE ITALIANA */}
+                  <div className="py-1 border-y border-amber-200/50 my-1">
+                    <p>Richieste AI Oggi: <span className={`font-bold ${dailyAiCount >= 45 ? 'text-red-600' : ''}`}>{dailyAiCount} / 50</span></p>
+                    <p className="text-[9px] text-amber-600/70 italic mt-0.5">* Il contatore si azzera alle 09:00 (Ora Italiana)</p>
+                  </div>
+
                   <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
                   <p>Versione App: <span className="font-bold">{DATA_VERSION}</span></p>
                 </div>

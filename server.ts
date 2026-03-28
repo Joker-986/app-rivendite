@@ -417,71 +417,77 @@ app.post('/api/geocode', async (req, res) => {
 // --- ROTTA GEMINI SICURA ---
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
-  
   const apiKey = process.env.GEMINI_API_KEY;
-  
+
   if (!apiKey) {
     console.error("GEMINI_API_KEY is missing nel server");
-    res.status(500).json({
-      openingHours: "Configurazione mancante",
-      phone: "Configurazione mancante",
-      email: "Configurazione mancante",
-      notes: "Chiave API non configurata sul server."
-    });
+    res.status(500).json({ openingHours: "N/D", phone: "N/D", zona: "N/D", notes: "Chiave API non configurata sul server.", confidence: 0 });
     return;
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `Trova gli orari di apertura e le informazioni di contatto per la seguente rivendita di tabacchi in Italia:
-  Numero Rivendita: ${rivendita['Num. Rivendita']}
-  Indirizzo: ${rivendita['Indirizzo']}
-  Comune: ${rivendita['Comune']}
-  Provincia: ${rivendita['Prov.']}
-  
-  REGOLE IMPORTANTI:
-  1. Per gli orari di apertura, sii estremamente accurato. Se trovi orari diversi per giorni diversi, elencali uno per riga.
-  2. Per il numero di telefono, restituisci solo cifre, senza spazi.
-  3. Non includere il sito web.
-  
-  Usa Google Search per trovare informazioni reali e aggiornate.`;
+  const prompt = `Analizza la seguente rivendita di tabacchi italiana:
+  Numero: ${rivendita['Num. Rivendita']}
+  Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
+  Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
+
+  TROVA TRAMITE GOOGLE SEARCH:
+  1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
+  2. phone: Solo cifre, senza spazi.
+  3. zona: Quartiere o zona geografica (es. "Vomero", "Centro Storico", "Frazione X").
+  4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE. Altrimenti indica se offre servizi extra (Sisal, Lottomatica, Amazon Hub).
+  5. confidence: Valuta severamente da 0 a 100. Dai 90-100 se trovi fonti ufficiali concordanti. Dai 40-60 se le fonti sono vecchie o ambigue. Dai 0-30 se non trovi riscontri.`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            openingHours: { type: Type.STRING },
-            phone: { type: Type.STRING },
-            email: { type: Type.STRING },
-            notes: { type: Type.STRING }
-          },
-          required: ["openingHours", "phone"]
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              openingHours: { type: Type.STRING },
+              phone: { type: Type.STRING },
+              zona: { type: Type.STRING },
+              notes: { type: Type.STRING },
+              confidence: { type: Type.NUMBER }
+            },
+            required: ["openingHours", "phone", "zona", "notes", "confidence"]
+          }
         }
-      }
-    });
+      });
+    } catch (e: any) {
+      response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt + "\n\nRispondi in JSON con i campi: openingHours, phone, zona, notes, confidence.",
+        config: { responseMimeType: "application/json" }
+      });
+    }
 
     let text = response.text || '';
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(text || '{}');
-    
+
     res.json({
       openingHours: data.openingHours || "Non disponibile",
       phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
-      email: data.email || "Non disponibile",
-      notes: data.notes || "Dettagli recuperati con successo."
+      zona: data.zona || "Non disponibile",
+      notes: data.notes || "Dettagli recuperati con successo.",
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0
     });
   } catch (error: any) {
-    console.error("Error enriching rivendita:", error);
+    console.error("Error enriching rivendita on server:", error);
+    const errorMsg = error?.message || '';
+    const isQuotaExceeded = errorMsg.includes('429') || errorMsg.includes('Quota');
+
     res.status(500).json({
-      openingHours: "Non disponibile",
-      phone: "Non disponibile",
-      email: "Non disponibile",
-      notes: `Errore: ${error.message || 'Impossibile recuperare i dettagli'}`
+      openingHours: "N/D", phone: "N/D", zona: "N/D",
+      notes: isQuotaExceeded ? "⏳ Limite (2 richieste/minuto) superato. Attendi 60 secondi." : "⚠️ Errore di connessione a Gemini.",
+      confidence: 0
     });
   }
 });
