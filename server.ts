@@ -429,9 +429,9 @@ app.post('/api/enrich', async (req, res) => {
     // Utilizziamo l'SDK ufficiale @google/generative-ai
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Utilizziamo il modello gemini-1.5-flash-latest che è più stabile sugli endpoint v1/v1beta
+    // Utilizziamo il nome modello STABILE per evitare il 404 sull'endpoint v1beta
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-latest", 
+      model: "gemini-1.5-flash", 
     });
 
     const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
