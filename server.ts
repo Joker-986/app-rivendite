@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import { GoogleGenAI, Type } from "@google/genai";
+import OpenAI from 'openai';
 import dotenv from 'dotenv';
 dotenv.config(); // Carica la chiave da Render
 
@@ -420,6 +421,12 @@ app.post('/api/geocode', async (req, res) => {
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
+  const groqApiKey = process.env.GROQ_API_KEY;
+
+  let groqClient: OpenAI | null = null;
+  if (groqApiKey) {
+    groqClient = new OpenAI({ apiKey: groqApiKey, baseURL: "https://api.groq.com/openai/v1" });
+  }
 
   if (!apiKey) {
     console.error("GEMINI_API_KEY mancante nel server");
@@ -477,14 +484,56 @@ app.post('/api/enrich', async (req, res) => {
       notes: data.notes || "Dettagli recuperati con successo.",
       confidence: typeof data.confidence === 'number' ? data.confidence : 0
     });
-  } catch (error: any) {
-    console.error("Error enriching rivendita:", error);
-    // Invia l'errore tecnico al client tramite il campo notes per il Toast
-    res.status(500).json({
-      openingHours: "N/D", phone: "N/D", zona: "N/D",
-      notes: `DEBUG AI: ${error.message || 'Errore durante la generazione su Render'}`,
-      confidence: 0
-    });
+  } catch (geminiError: any) {
+    console.warn("Gemini fallito, tento il fallback su Groq...", geminiError.message);
+
+    if (!groqClient) {
+      return res.status(500).json({
+        openingHours: "N/D", phone: "N/D", zona: "N/D",
+        notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Groq non configurato.`,
+        confidence: 0
+      });
+    }
+
+    try {
+      const groqPrompt = `Analizza questa rivendita di tabacchi italiana.
+      Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
+      Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
+
+      Rispondi ESCLUSIVAMENTE con un JSON valido contenente queste chiavi (senza markdown o testo extra):
+      - openingHours (string: orari ultra-sintetici o "Non disponibile")
+      - phone (string: solo cifre o "Non disponibile")
+      - zona (string: quartiere/frazione o "Non disponibile")
+      - notes (string: avvisi o servizi extra)
+      - confidence (number: da 0 a 100)`;
+
+      const chatCompletion = await groqClient.chat.completions.create({
+        messages: [{ role: "user", content: groqPrompt }],
+        model: "llama3-8b-8192",
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      });
+
+      let groqText = chatCompletion.choices[0]?.message?.content || '{}';
+      groqText = groqText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const groqData = JSON.parse(groqText);
+
+      return res.json({
+        openingHours: groqData.openingHours || "Non disponibile",
+        phone: (groqData.phone || "Non disponibile").replace(/\s+/g, ''),
+        zona: groqData.zona || "Non disponibile",
+        notes: groqData.notes ? `[Via Groq] ${groqData.notes}` : "Dati recuperati tramite Groq.",
+        confidence: typeof groqData.confidence === 'number' ? groqData.confidence : 0
+      });
+
+    } catch (groqError: any) {
+      console.error("Anche Groq ha fallito:", groqError);
+      return res.status(500).json({
+        openingHours: "N/D", phone: "N/D", zona: "N/D",
+        notes: `DEBUG AI: Gemini e Groq falliti. (${groqError.message})`,
+        confidence: 0
+      });
+    }
   }
 });
 
