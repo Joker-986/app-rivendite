@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import dotenv from 'dotenv';
 dotenv.config(); // Carica la chiave da Render
 
@@ -426,23 +426,21 @@ app.post('/api/enrich', async (req, res) => {
   }
 
   try {
-    // Utilizziamo l'SDK ufficiale @google/generative-ai
-    const genAI = new GoogleGenerativeAI(apiKey);
+    // Utilizziamo il nuovo SDK @google/genai che punta di default alla v1 stabile
+    const ai = new GoogleGenAI({ apiKey });
     
-    // Utilizziamo il nome modello STABILE per evitare il 404 sull'endpoint v1beta
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", 
-    });
-
     const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
     Trova: orari sintetici, telefono (solo cifre), zona/quartiere e servizi extra.
     Rispondi esclusivamente in formato JSON con questi campi: 
     openingHours, phone, zona, notes, confidence (numero 0-100).`;
 
-    // Generazione contenuto
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const rawText = response.text();
+    // Generazione contenuto con il modello gemini-1.5-flash
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: prompt,
+    });
+
+    const rawText = response.text;
     
     // Sanificazione robusta del JSON (rimozione markdown e spazi)
     let cleanText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
