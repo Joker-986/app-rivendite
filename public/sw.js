@@ -27,6 +27,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // EXCLUDE API CALLS FROM CACHE
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
   // Simple network-first strategy to ensure fresh content
   // but fallback to cache if offline.
   event.respondWith(

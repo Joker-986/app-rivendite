@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from 'dotenv';
 dotenv.config(); // Carica la chiave da Render
 
@@ -416,58 +416,74 @@ app.post('/api/geocode', async (req, res) => {
   }
 });
 
-// --- ROTTA GEMINI SICURA ---
+// --- ROTTA GEMINI SICURA (RIPRISTINATA E POTENZIATA) ---
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({ notes: "DEBUG AI: Chiave mancante su Render.", confidence: 0 });
+    console.error("GEMINI_API_KEY mancante nel server");
+    res.status(500).json({
+      openingHours: "N/D", phone: "N/D", zona: "N/D",
+      notes: "DEBUG AI: Chiave API non configurata sul server.", confidence: 0
+    });
+    return;
   }
 
+  // Utilizziamo l'istanza originale funzionante
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `Analizza la seguente rivendita di tabacchi italiana:
+  Numero: ${rivendita['Num. Rivendita']}
+  Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
+  Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
+
+  TROVA TRAMITE GOOGLE SEARCH:
+  1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
+  2. phone: Solo cifre, senza spazi.
+  3. zona: Quartiere o zona geografica (es. "Vomero", "Centro Storico", "Frazione X").
+  4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE. Altrimenti indica se offre servizi come Sisal, Lottomatica, Amazon Hub.
+  5. confidence: Valuta severamente da 0 a 100 in base alle fonti (100 = fonti ufficiali, 0 = nessuna fonte).`;
+
   try {
-    // Utilizziamo il nuovo SDK @google/genai che punta di default alla v1 stabile
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
-    Trova: orari sintetici, telefono (solo cifre), zona/quartiere e servizi extra.
-    Rispondi esclusivamente in formato JSON con questi campi: 
-    openingHours, phone, zona, notes, confidence (numero 0-100).`;
-
-    // Generazione contenuto con il modello gemini-1.5-flash
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            openingHours: { type: Type.STRING },
+            phone: { type: Type.STRING },
+            zona: { type: Type.STRING },
+            notes: { type: Type.STRING },
+            confidence: { type: Type.NUMBER }
+          },
+          required: ["openingHours", "phone", "zona", "notes", "confidence"]
+        }
+      }
     });
 
-    const rawText = response.text;
+    let text = response.text || '';
+    // Pulizia robusta da eventuali tag markdown
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(text || '{}');
     
-    // Sanificazione robusta del JSON (rimozione markdown e spazi)
-    let cleanText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    // Ulteriore sicurezza: estraiamo solo ciò che è tra le parentesi graffe se presente
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      cleanText = jsonMatch[0];
-    }
-    
-    const data = JSON.parse(cleanText);
-
     res.json({
-      openingHours: data.openingHours || "N/D",
-      phone: (data.phone || "N/D").replace(/\s+/g, ''),
-      zona: data.zona || "N/D",
-      notes: data.notes || "Dati recuperati correttamente.",
-      confidence: data.confidence || 0
+      openingHours: data.openingHours || "Non disponibile",
+      phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
+      zona: data.zona || "Non disponibile",
+      notes: data.notes || "Dettagli recuperati con successo.",
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0
     });
-
   } catch (error: any) {
-    console.error("ERRORE AI:", error);
-    // Messaggio di debug persistente per il Toast
-    const statusCode = error.status || (error.response ? error.response.status : 'Errore');
-    res.status(500).json({ 
-      notes: `DEBUG AI: [${statusCode}] ${error.message || 'Errore Sconosciuto'}`, 
-      confidence: 0 
+    console.error("Error enriching rivendita:", error);
+    // Invia l'errore tecnico al client tramite il campo notes per il Toast
+    res.status(500).json({
+      openingHours: "N/D", phone: "N/D", zona: "N/D",
+      notes: `DEBUG AI: ${error.message || 'Errore durante la generazione su Render'}`,
+      confidence: 0
     });
   }
 });
