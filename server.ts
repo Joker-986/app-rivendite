@@ -426,11 +426,12 @@ app.post('/api/enrich', async (req, res) => {
   }
 
   try {
+    // Utilizziamo l'SDK ufficiale @google/generative-ai
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Cambiamo il nome del modello in quello più stabile e universale
+    // Utilizziamo il modello gemini-1.5-flash-latest che è più stabile sugli endpoint v1/v1beta
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", // Se persiste il 404, proveremo 'gemini-1.5-flash-latest'
+      model: "gemini-1.5-flash-latest", 
     });
 
     const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
@@ -438,12 +439,21 @@ app.post('/api/enrich', async (req, res) => {
     Rispondi esclusivamente in formato JSON con questi campi: 
     openingHours, phone, zona, notes, confidence (numero 0-100).`;
 
-    // Utilizziamo un timeout per evitare blocchi infiniti
+    // Generazione contenuto
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const rawText = response.text();
     
-    const data = JSON.parse(text);
+    // Sanificazione robusta del JSON (rimozione markdown e spazi)
+    let cleanText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    // Ulteriore sicurezza: estraiamo solo ciò che è tra le parentesi graffe se presente
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanText = jsonMatch[0];
+    }
+    
+    const data = JSON.parse(cleanText);
 
     res.json({
       openingHours: data.openingHours || "N/D",
@@ -455,9 +465,10 @@ app.post('/api/enrich', async (req, res) => {
 
   } catch (error: any) {
     console.error("ERRORE AI:", error);
-    // Rimandiamo al toast l'errore esatto per capire se è un problema di versione o di permessi
+    // Messaggio di debug persistente per il Toast
+    const statusCode = error.status || (error.response ? error.response.status : 'Errore');
     res.status(500).json({ 
-      notes: `DEBUG AI: [${error.status || 'Errore'}] ${error.message}`, 
+      notes: `DEBUG AI: [${statusCode}] ${error.message || 'Errore Sconosciuto'}`, 
       confidence: 0 
     });
   }
