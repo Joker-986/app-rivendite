@@ -3,7 +3,9 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from 'dotenv';
+dotenv.config(); // Carica la chiave da Render
 
 const app = express();
 const PORT = 3000;
@@ -420,75 +422,40 @@ app.post('/api/enrich', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.error("GEMINI_API_KEY is missing nel server");
-    res.status(500).json({ openingHours: "N/D", phone: "N/D", zona: "N/D", notes: "Chiave API non configurata sul server.", confidence: 0 });
-    return;
+    return res.status(500).json({ notes: "Errore: Chiave non trovata sul server." });
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-  const prompt = `Analizza la seguente rivendita di tabacchi italiana:
-  Numero: ${rivendita['Num. Rivendita']}
-  Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
-  Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
-
-  TROVA TRAMITE GOOGLE SEARCH:
-  1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
-  2. phone: Solo cifre, senza spazi.
-  3. zona: Quartiere o zona geografica (es. "Vomero", "Centro Storico", "Frazione X").
-  4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE. Altrimenti indica se offre servizi extra (Sisal, Lottomatica, Amazon Hub).
-  5. confidence: Valuta severamente da 0 a 100. Dai 90-100 se trovi fonti ufficiali concordanti. Dai 40-60 se le fonti sono vecchie o ambigue. Dai 0-30 se non trovi riscontri.`;
-
   try {
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              openingHours: { type: Type.STRING },
-              phone: { type: Type.STRING },
-              zona: { type: Type.STRING },
-              notes: { type: Type.STRING },
-              confidence: { type: Type.NUMBER }
-            },
-            required: ["openingHours", "phone", "zona", "notes", "confidence"]
-          }
-        }
-      });
-    } catch (e: any) {
-      response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: prompt + "\n\nRispondi in JSON con i campi: openingHours, phone, zona, notes, confidence.",
-        config: { responseMimeType: "application/json" }
-      });
-    }
+    // Configurazione corretta per il Backend
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash", // Versione gratuita e veloce
+      tools: [{ googleSearch: {} }] as any
+    });
 
-    let text = response.text || '';
+    const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
+    Trova orari sintetici, telefono (solo cifre), e zona/quartiere. 
+    Segnala se CHIUSO DEFINITIVAMENTE o servizi extra (Sisal/Amazon). 
+    Rispondi SOLO in JSON: openingHours, phone, zona, notes, confidence (0-100).`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    
+    // Pulizia per estrarre il JSON in modo sicuro
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(text || '{}');
+    const data = JSON.parse(text);
 
     res.json({
-      openingHours: data.openingHours || "Non disponibile",
-      phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
-      zona: data.zona || "Non disponibile",
-      notes: data.notes || "Dettagli recuperati con successo.",
-      confidence: typeof data.confidence === 'number' ? data.confidence : 0
+      openingHours: data.openingHours || "N/D",
+      phone: (data.phone || "N/D").replace(/\s+/g, ''),
+      zona: data.zona || "N/D",
+      notes: data.notes || "Analisi completata.",
+      confidence: data.confidence || 0
     });
   } catch (error: any) {
-    console.error("Error enriching rivendita on server:", error);
-    const errorMsg = error?.message || '';
-    const isQuotaExceeded = errorMsg.includes('429') || errorMsg.includes('Quota');
-
-    res.status(500).json({
-      openingHours: "N/D", phone: "N/D", zona: "N/D",
-      notes: isQuotaExceeded ? "⏳ Limite (2 richieste/minuto) superato. Attendi 60 secondi." : "⚠️ Errore di connessione a Gemini.",
-      confidence: 0
-    });
+    console.error("Errore Gemini:", error);
+    res.status(500).json({ notes: "⏳ Limite superato o errore di rete. Riprova." });
   }
 });
 
