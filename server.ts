@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import { GoogleGenAI, Type } from "@google/genai";
-import OpenAI from 'openai';
+import { CohereClient } from 'cohere-ai';
 import dotenv from 'dotenv';
 dotenv.config(); // Carica la chiave da Render
 
@@ -417,11 +417,11 @@ app.post('/api/geocode', async (req, res) => {
   }
 });
 
-// --- ROTTA GEMINI CON FALLBACK SU GROQ (VERSIONE DEFINITIVA) ---
+// --- ROTTA GEMINI CON FALLBACK SU COHERE (VERSIONE DEFINITIVA) ---
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
-  const groqApiKey = process.env.GROQ_API_KEY;
+  const cohereApiKey = process.env.COHERE_API_KEY;
 
   if (!apiKey) {
     console.error("GEMINI_API_KEY mancante nel server");
@@ -429,12 +429,6 @@ app.post('/api/enrich', async (req, res) => {
       openingHours: "N/D", phone: "N/D", zona: "N/D",
       notes: "DEBUG AI: Chiave API Gemini non configurata.", confidence: 0
     });
-  }
-
-  // Inizializza il client Groq per il "Piano B"
-  let groqClient: OpenAI | null = null;
-  if (groqApiKey) {
-    groqClient = new OpenAI({ apiKey: groqApiKey, baseURL: "https://api.groq.com/openai/v1" });
   }
 
   try {
@@ -485,19 +479,21 @@ app.post('/api/enrich', async (req, res) => {
     });
 
   } catch (geminiError: any) {
-    console.warn("Gemini fallito, tento il fallback su Groq...", geminiError.message);
+    console.warn("Gemini fallito, tento il fallback su Cohere...", geminiError.message);
     
-    // --- TENTATIVO 2: GROQ (IL PARACADUTE) ---
-    if (!groqClient) {
+    // --- TENTATIVO 2: COHERE (IL PARACADUTE CON WEB SEARCH) ---
+    if (!cohereApiKey) {
       return res.status(500).json({ 
         openingHours: "N/D", phone: "N/D", zona: "N/D", 
-        notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Groq non configurato.`, 
+        notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Cohere non configurato.`, 
         confidence: 0 
       });
     }
 
+    const cohere = new CohereClient({ token: cohereApiKey });
+
     try {
-      const groqPrompt = `Analizza questa rivendita di tabacchi italiana.
+      const cohereMessage = `Analizza questa rivendita di tabacchi italiana.
       Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
       Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
       
@@ -508,30 +504,37 @@ app.post('/api/enrich', async (req, res) => {
       - notes (string: avvisi o servizi extra)
       - confidence (number: da 0 a 100)`;
 
-      const chatCompletion = await groqClient.chat.completions.create({
-        messages: [{ role: "user", content: groqPrompt }],
-        model: "llama-3.1-8b-instant", // <-- Il modello aggiornato super-veloce
-        temperature: 0.1,
-        response_format: { type: "json_object" }
+      const cohereResponse = await cohere.chat({
+        model: "command-r-plus",
+        message: cohereMessage,
+        connectors: [{ id: "web-search" }],
       });
 
-      let groqText = chatCompletion.choices[0]?.message?.content || '{}';
-      groqText = groqText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const groqData = JSON.parse(groqText);
+      let cohereText = cohereResponse.text || '{}';
+      // Pulizia robusta del JSON
+      cohereText = cohereText.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      // Tentativo di estrarre solo il blocco JSON se c'è testo extra
+      const jsonMatch = cohereText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cohereText = jsonMatch[0];
+      }
+
+      const cohereData = JSON.parse(cohereText);
 
       return res.json({
-        openingHours: groqData.openingHours || "Non disponibile",
-        phone: (groqData.phone || "Non disponibile").replace(/\s+/g, ''),
-        zona: groqData.zona || "Non disponibile",
-        notes: groqData.notes ? `[Via Groq] ${groqData.notes}` : "Dati recuperati tramite Groq.",
-        confidence: typeof groqData.confidence === 'number' ? groqData.confidence : 0
+        openingHours: cohereData.openingHours || "Non disponibile",
+        phone: (cohereData.phone || "Non disponibile").replace(/\s+/g, ''),
+        zona: cohereData.zona || "Non disponibile",
+        notes: cohereData.notes ? `[Via Cohere] ${cohereData.notes}` : "Dati recuperati tramite Cohere.",
+        confidence: typeof cohereData.confidence === 'number' ? cohereData.confidence : 0
       });
 
-    } catch (groqError: any) {
-      console.error("Anche Groq ha fallito:", groqError);
+    } catch (cohereError: any) {
+      console.error("Anche Cohere ha fallito:", cohereError);
       return res.status(500).json({ 
         openingHours: "N/D", phone: "N/D", zona: "N/D", 
-        notes: `DEBUG AI: Gemini e Groq falliti. (${groqError.message})`, 
+        notes: `DEBUG AI: Gemini e Cohere falliti. (${cohereError.message})`, 
         confidence: 0 
       });
     }
