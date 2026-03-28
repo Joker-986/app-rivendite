@@ -422,40 +422,29 @@ app.post('/api/enrich', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({ notes: "Errore: Chiave non trovata sul server." });
+    return res.status(500).json({ notes: "DEBUG AI: Chiave GEMINI_API_KEY non trovata su Render.", confidence: 0 });
   }
 
   try {
-    // Configurazione corretta per il Backend
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", // Versione gratuita e veloce
-      tools: [{ googleSearch: {} }] as any
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", tools: [{ googleSearch: {} }] } as any);
 
-    const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
-    Trova orari sintetici, telefono (solo cifre), e zona/quartiere. 
-    Segnala se CHIUSO DEFINITIVAMENTE o servizi extra (Sisal/Amazon). 
-    Rispondi SOLO in JSON: openingHours, phone, zona, notes, confidence (0-100).`;
+    const prompt = `Analizza la rivendita: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. Trova orari, telefono (solo cifre), e zona. Rispondi SOLO in JSON: openingHours, phone, zona, notes, confidence.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let text = response.text();
-    
-    // Pulizia per estrarre il JSON in modo sicuro
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     const data = JSON.parse(text);
 
     res.json({
       openingHours: data.openingHours || "N/D",
       phone: (data.phone || "N/D").replace(/\s+/g, ''),
       zona: data.zona || "N/D",
-      notes: data.notes || "Analisi completata.",
+      notes: data.notes || "Dati recuperati.",
       confidence: data.confidence || 0
     });
   } catch (error: any) {
-    console.error("Errore Gemini:", error);
-    res.status(500).json({ notes: "⏳ Limite superato o errore di rete. Riprova." });
+    res.status(500).json({ notes: `DEBUG AI: ${error.message || 'Errore Sconosciuto'}`, confidence: 0 });
   }
 });
 

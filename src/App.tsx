@@ -2093,6 +2093,11 @@ export default function App() {
       const details = await enrichRivendita(res);
       setEnrichedData(prev => ({ ...prev, [id]: details }));
       
+      if (details.notes?.includes('DEBUG AI:')) {
+        showToast(details.notes, 'error');
+        return;
+      }
+
       if (details.zona && details.zona !== 'Non disponibile' && details.zona !== 'N/D') {
         handleRubricaUpdate(id, 'zona', details.zona);
       }
@@ -4278,15 +4283,21 @@ export default function App() {
 
       {/* Toast Notification */}
       {toast.show && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-bottom-4 duration-300">
-          <div className={`px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border ${
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-bottom-4 duration-300 w-[90%] max-w-sm">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
             toast.type === 'success' ? 'bg-emerald-600 border-emerald-500' : 
-            toast.type === 'error' ? 'bg-red-600 border-red-500' : 
-            'bg-slate-800 border-slate-700'
+            toast.type === 'error' ? 'bg-red-600 border-red-500' : 'bg-slate-800 border-slate-700'
           } text-white`}>
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
-            <span className="text-xs font-bold uppercase tracking-wider">{toast.message}</span>
+            <div className="flex items-center gap-3 overflow-hidden">
+              {toast.type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
+              <span className="text-[11px] font-bold uppercase truncate">{toast.message}</span>
+            </div>
+            {toast.type === 'error' && (
+              <button onClick={() => { navigator.clipboard.writeText(toast.message); showToast('Copiato!', 'success'); }}
+                className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg border border-white/10 shrink-0">
+                <span className="text-[9px] font-black">COPIA</span>
+              </button>
+            )}
           </div>
         </div>
       )}
