@@ -64,6 +64,7 @@ export interface RivenditaExtra {
   codiceUnivoco?: string;
   showHostessModule?: boolean;
   ultimaHostessInfo?: string;
+  zona?: string;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -371,46 +372,32 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
       <div className="flex justify-between items-start gap-3">
         <div className="flex items-start gap-2 flex-1 min-w-0">
-          {activeTab === 'giro' && (
-            <div className="flex items-center justify-center mr-3 shrink-0">
-              <div className="relative group">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={idx + 1}
-                  onChange={(e) => { e.stopPropagation(); jumpToPosition?.(idx, e.target.value); }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-10 h-10 bg-slate-100 border-2 border-slate-200 rounded-full text-center text-sm font-black text-slate-700 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 outline-none transition-all appearance-none"
-                />
-                <span className="absolute -top-2 -left-1 text-[8px] font-black text-slate-400 uppercase bg-white px-1">Pos.</span>
-              </div>
-            </div>
-          )}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              
+              {activeTab === 'giro' && (
+                <div 
+                  className="flex items-center bg-slate-100 border border-slate-200 rounded-md overflow-hidden h-6 shadow-sm focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 transition-all shrink-0" 
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-1.5 bg-slate-200/70 text-slate-500 text-[10px] font-black border-r border-slate-200 h-full flex items-center select-none">#</div>
+                  <input
+                    type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={idx + 1} key={`pos-${idx}-${idx + 1}`}
+                    onBlur={(e) => { const val = e.target.value; if (val && val !== (idx + 1).toString()) jumpToPosition?.(idx, val); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="w-7 text-center text-[11px] font-black text-slate-700 bg-transparent focus:bg-white focus:text-brand-700 outline-none m-0 p-0 h-full"
+                  />
+                </div>
+              )}
+
               <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
                 {res.isStore ? <span className="flex items-center gap-1"><Store className="w-3 h-3" />STORE #{res.storeNumber || res['Num. Rivendita']}</span> : `RIV. ${res['Num. Rivendita']}`}
               </span>
-              {res.isStore && res.isChain && (
-                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
-                  <Layers className="w-3 h-3" /> Catena ({res.chainCount || 1})
-                </span>
-              )}
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                 {res['Stato']}
               </span>
-              {showCrmData && extra.stato && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
-                  extra.stato === 'Non Attiva' ? 'bg-red-100 text-red-700' :
-                  extra.stato === 'RIP' ? 'bg-slate-100 text-slate-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
-                  {extra.stato} (CRM)
-                </span>
-              )}
             </div>
-            {/* Aggiunto leading-snug e break-words per gestire città con nomi lunghissimi senza spaccare il layout */}
+            
             <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
               {res.isStore ? (
                 <span className="flex flex-col gap-0.5">
@@ -420,13 +407,13 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   </span>
                 </span>
               ) : (
-                <>
-                  {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
-                </>
+                <>{capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})</>
               )}
             </h3>
           </div>
         </div>
+        
+        {/* Pulsanti laterali (Share, ClipboardList, Trash2) */}
         <div className="flex gap-2 shrink-0">
           <button
             onClick={(e) => handleShare(e)}
@@ -438,53 +425,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             {isCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
             {isCopied && <span className="text-[10px] font-bold uppercase">Copiato!</span>}
           </button>
-
-          {activeTab === 'search' && (
-            <button
-              onClick={() => toggleSave(res)}
-              className={`p-2 rounded-xl transition-all ${
-                isInGiro 
-                  ? 'bg-brand-100 text-brand-600' 
-                  : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-              }`}
-              title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
-            >
-              <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
-            </button>
-          )}
-          
-          {(isCrmTab || activeTab === 'rip' || activeTab === 'store') && (
-            <>
-              <button
-                onClick={() => toggleSave(res)}
-                className={`p-2 rounded-xl transition-all ${
-                  isInGiro 
-                    ? 'bg-brand-100 text-brand-600' 
-                    : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-                }`}
-                title={isInGiro ? "Rimuovi dal giro visite" : "Pianifica visita (Giro)"}
-              >
-                <ClipboardList className={`w-5 h-5 ${isInGiro ? 'fill-current' : ''}`} />
-              </button>
-              <button
-                onClick={() => res.isStore ? removeStore(res) : removeFromCrm(res)}
-                className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all shrink-0"
-                title={res.isStore ? "Elimina Store" : "Elimina dal CRM"}
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            </>
-          )}
-
-          {activeTab === 'giro' && (
-            <button
-              onClick={() => toggleSave(res)}
-              className="p-2 bg-pink-50 text-pink-500 rounded-xl hover:bg-pink-100 transition-all shrink-0"
-              title="Rimuovi dal giro visite"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-          )}
+          <button
+            onClick={() => toggleSave(res)}
+            className={`p-2 rounded-xl transition-all ${isInGiro ? 'bg-brand-100 text-brand-600' : 'bg-slate-50 text-slate-400'}`}
+          >
+            <ClipboardList className="w-5 h-5" />
+          </button>
         </div>
       </div>
       
@@ -497,6 +443,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <span className="leading-snug line-clamp-2">
             {toTitleCase(res['Indirizzo'])}
             {capToDisplay ? `, ${capToDisplay}` : ''}
+            {extra.zona && <span className="font-black text-brand-600 ml-1.5 tracking-tight">• {extra.zona.toUpperCase()}</span>}
           </span>
         </div>
       </div>
@@ -639,16 +586,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               </div>
             </div>
 
-            {enrichedDetails.email && enrichedDetails.email !== 'Non disponibile' && (
+            {enrichedDetails.zona && enrichedDetails.zona !== 'Non disponibile' && enrichedDetails.zona !== 'N/D' && (
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0">
-                  <Mail className="w-4 h-4 text-brand-600" />
-                </div>
+                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0"><MapPin className="w-4 h-4 text-brand-600" /></div>
                 <div className="min-w-0">
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Email</span>
-                  <a href={`mailto:${enrichedDetails.email}`} className="text-brand-600 hover:text-brand-700 font-bold text-sm truncate block transition-colors">
-                    {enrichedDetails.email}
-                  </a>
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-0.5">Zona / Quartiere</span>
+                  <span className="text-slate-800 font-bold text-sm block truncate">{enrichedDetails.zona}</span>
                 </div>
               </div>
             )}
@@ -779,14 +722,24 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1 col-span-1 sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
+                  <div className="space-y-1 col-span-1 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. Manuale</label>
                     <input
                       type="text"
                       maxLength={5}
                       value={extra.manualCap || ''}
                       onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
                       placeholder="Es. 80100"
+                      className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                    />
+                  </div>
+                  <div className="space-y-1 col-span-1 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Zona / Quartiere</label>
+                    <input
+                      type="text"
+                      value={extra.zona || ''}
+                      onChange={(e) => handleRubricaUpdate(id, 'zona', e.target.value)}
+                      placeholder="Es. Vomero"
                       className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
                     />
                   </div>
@@ -872,14 +825,24 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-              <div className="space-y-1 col-span-1 sm:col-span-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. (Inserimento Manuale)</label>
+              <div className="space-y-1 col-span-1 sm:col-span-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. Manuale</label>
                 <input
                   type="text"
                   maxLength={5}
                   value={extra.manualCap || ''}
                   onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
                   placeholder="Es. 80100"
+                  className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                />
+              </div>
+              <div className="space-y-1 col-span-1 sm:col-span-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Zona / Quartiere</label>
+                <input
+                  type="text"
+                  value={extra.zona || ''}
+                  onChange={(e) => handleRubricaUpdate(id, 'zona', e.target.value)}
+                  placeholder="Es. Vomero"
                   className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
                 />
               </div>
@@ -1906,22 +1869,6 @@ export default function App() {
     }
   };
 
-  const handleEnrich = useCallback(async (id: string, res: SearchResult) => {
-    if (enrichedData[id]) return;
-    
-    try {
-      setEnrichingId(id);
-      const details = await enrichRivendita(res);
-      setEnrichedData(prev => ({ ...prev, [id]: details }));
-      showToast('Dati arricchiti con successo!');
-    } catch (err) {
-      console.error(err);
-      showToast('Errore durante l\'arricchimento dati', 'error');
-    } finally {
-      setEnrichingId(null);
-    }
-  }, [enrichedData, showToast]);
-
   const handleCopyAddress = useCallback((address: string, id: string) => {
     navigator.clipboard.writeText(address).then(() => {
       setCopiedId(id);
@@ -1958,6 +1905,7 @@ export default function App() {
             telefono: '',
             pIva: '',
             mail: '',
+            zona: '',
             richiestaOrdine: false,
             noteOrdine: '',
             dataOrdine: '',
@@ -2062,6 +2010,7 @@ export default function App() {
             telefono: '',
             pIva: '',
             mail: '',
+            zona: '',
             richiestaOrdine: false,
             noteOrdine: '',
             dataOrdine: '',
@@ -2077,6 +2026,24 @@ export default function App() {
       };
     });
   }, []);
+
+  const handleEnrich = useCallback(async (id: string, res: SearchResult) => {
+    if (enrichedData[id]) return;
+    try {
+      setEnrichingId(id);
+      const details = await enrichRivendita(res);
+      setEnrichedData(prev => ({ ...prev, [id]: details }));
+      
+      if (details.zona && details.zona !== 'Non disponibile' && details.zona !== 'N/D') {
+        handleRubricaUpdate(id, 'zona', details.zona);
+      }
+      showToast('Dati recuperati!');
+    } catch (err) {
+      showToast('Errore AI', 'error');
+    } finally {
+      setEnrichingId(null);
+    }
+  }, [enrichedData, handleRubricaUpdate]);
 
   const isSaved = useCallback((res: SearchResult) => {
     return giroVisite.some(s => 
@@ -3030,6 +2997,7 @@ export default function App() {
                           enrichedDetails={enrichedData[id]}
                           rubrica={expandedCardId === id ? rubrica : undefined}
                           {...cardProps}
+                          jumpToPosition={jumpToPosition}
                         />
                       );
                     })}
@@ -3626,6 +3594,7 @@ export default function App() {
                           enrichedDetails={enrichedData[id]}
                           rubrica={expandedCardId === id ? rubrica : undefined}
                           {...cardProps}
+                          jumpToPosition={jumpToPosition}
                         />
                       </div>
                     );
@@ -3652,6 +3621,7 @@ export default function App() {
                         enrichedDetails={enrichedData[id]}
                         rubrica={expandedCardId === id ? rubrica : undefined}
                         {...cardProps}
+                        jumpToPosition={jumpToPosition}
                       />
                     </div>
                   );
