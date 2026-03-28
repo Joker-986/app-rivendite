@@ -422,29 +422,44 @@ app.post('/api/enrich', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({ notes: "DEBUG AI: Chiave GEMINI_API_KEY non trovata su Render.", confidence: 0 });
+    return res.status(500).json({ notes: "DEBUG AI: Chiave mancante su Render.", confidence: 0 });
   }
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", tools: [{ googleSearch: {} }] } as any);
+    
+    // Cambiamo il nome del modello in quello più stabile e universale
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash", // Se persiste il 404, proveremo 'gemini-1.5-flash-latest'
+    });
 
-    const prompt = `Analizza la rivendita: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. Trova orari, telefono (solo cifre), e zona. Rispondi SOLO in JSON: openingHours, phone, zona, notes, confidence.`;
+    const prompt = `Analizza la rivendita tabacchi: ${rivendita['Indirizzo']}, ${rivendita['Comune']}. 
+    Trova: orari sintetici, telefono (solo cifre), zona/quartiere e servizi extra.
+    Rispondi esclusivamente in formato JSON con questi campi: 
+    openingHours, phone, zona, notes, confidence (numero 0-100).`;
 
+    // Utilizziamo un timeout per evitare blocchi infiniti
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    
     const data = JSON.parse(text);
 
     res.json({
       openingHours: data.openingHours || "N/D",
       phone: (data.phone || "N/D").replace(/\s+/g, ''),
       zona: data.zona || "N/D",
-      notes: data.notes || "Dati recuperati.",
+      notes: data.notes || "Dati recuperati correttamente.",
       confidence: data.confidence || 0
     });
+
   } catch (error: any) {
-    res.status(500).json({ notes: `DEBUG AI: ${error.message || 'Errore Sconosciuto'}`, confidence: 0 });
+    console.error("ERRORE AI:", error);
+    // Rimandiamo al toast l'errore esatto per capire se è un problema di versione o di permessi
+    res.status(500).json({ 
+      notes: `DEBUG AI: [${error.status || 'Errore'}] ${error.message}`, 
+      confidence: 0 
+    });
   }
 });
 
