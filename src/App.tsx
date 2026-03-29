@@ -364,6 +364,28 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   handleDeleteHistory
 }) => {
   const id = getRivenditaId(res);
+
+  // Funzione per pulire l'indirizzo prima di inviarlo a Google Maps / Apple Maps
+  const cleanStreetForNav = (rawStreet: string) => {
+    if (!rawStreet) return '';
+    let s = rawStreet;
+    // Taglia l'indirizzo alla prima occorrenza di "Ang.", "angolo", o del pallino "•"
+    s = s.split(/\s+ang\.?\s+/i)[0]; 
+    s = s.split(/\s+angolo\s+/i)[0];
+    s = s.split('•')[0];
+    // Sistema le virgole errate attaccate ai numeri (es. "Via Villa ,124" -> "Via Villa 124")
+    s = s.replace(/\s*,\s*(\d+)/g, ' $1');
+    return s.trim();
+  };
+
+  const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
+  const street = toTitleCase(res['Indirizzo']?.trim() || '');
+  const streetForNav = cleanStreetForNav(street); // La via ripulita per il GPS
+  const city = (res['Comune']?.trim() || '').toUpperCase();
+  const prov = res['Prov.']?.trim() || '';
+  
+  const fullAddress = [street, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
+  const navAddress = [streetForNav, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
@@ -371,11 +393,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
 
-  const capToDisplay = extra.manualCap || res['CAP'] || res['Cap'] || '';
-  const street = toTitleCase(res['Indirizzo']?.trim() || '');
-  const city = (res['Comune']?.trim() || '').toUpperCase();
-  const prov = res['Prov.']?.trim() || '';
-  const fullAddress = [street, capToDisplay, city, prov].filter(Boolean).join(', ').trim();
   const encodedAddress = encodeURIComponent(fullAddress);
   // Definisce se i dati del CRM devono essere mostrati (vero sia nel CRM che nel Giro)
   const showCrmData = isCrmTab || activeTab === 'giro';
@@ -718,7 +735,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => handleNavigation(fullAddress)}
+            onClick={() => handleNavigation(navAddress)}
             className="flex items-center justify-center gap-2 bg-brand-50 hover:bg-brand-100 active:scale-95 text-brand-700 py-2.5 px-3 rounded-xl text-xs font-bold transition-all no-underline shadow-sm"
           >
             <Navigation className="w-3.5 h-3.5" />
