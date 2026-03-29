@@ -65,6 +65,8 @@ export interface RivenditaExtra {
   showHostessModule?: boolean;
   ultimaHostessInfo?: string;
   zona?: string;
+  importoMesePrecedente?: number;
+  targetMese?: number;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -172,6 +174,8 @@ interface RivenditaCardProps {
   openRevisitModal: (id: string) => void;
   aiLockedUntil: number | null;
   cooldownSeconds: number;
+  handleEditHistory: (id: string, index: number, note: string, importo: number) => void;
+  handleDeleteHistory: (id: string, index: number) => void;
 }
 
 
@@ -245,7 +249,16 @@ const calcolaFineTurno = (inizio: string) => {
   return `${fineOre.toString().padStart(2, '0')}:${minuti.toString().padStart(2, '0')}`;
 };
 
-const TimelineItem: React.FC<{ entry: RivenditaHistoryEntry }> = ({ entry }) => {
+const TimelineItem: React.FC<{ 
+  entry: RivenditaHistoryEntry; 
+  index: number; 
+  onEdit: (index: number, note: string, importo: number) => void; 
+  onDelete: (index: number) => void; 
+}> = ({ entry, index, onEdit, onDelete }) => {
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editNote, setEditNote] = React.useState(entry.note);
+  const [editImporto, setEditImporto] = React.useState(entry.importo || 0);
+
   const configs = {
     VISITA: { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Visita' },
     ORDINE: { icon: <ClipboardList className="w-3 h-3" />, color: 'bg-blue-100 text-blue-600', label: 'Ordine' },
@@ -263,20 +276,56 @@ const TimelineItem: React.FC<{ entry: RivenditaHistoryEntry }> = ({ entry }) => 
         <div className="w-0.5 h-full bg-slate-100 -mt-1"></div>
       </div>
       
-      <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm">
+      <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm relative">
         <div className="flex justify-between items-center mb-1">
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
-          <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100">
-            {dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • {dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
-        <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
-          {entry.note}
-        </p>
-        {entry.importo > 0 && (
-          <div className="mt-2 pt-2 border-t border-slate-200/50">
-            <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100">
+              {dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • {dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {!isEditing && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setIsEditing(true)} className="p-1.5 bg-white border border-slate-100 rounded-md text-slate-400 hover:text-brand-600 active:scale-95 transition-all shadow-sm"><Edit3 className="w-3 h-3" /></button>
+                <button onClick={() => onDelete(index)} className="p-1.5 bg-white border border-slate-100 rounded-md text-slate-400 hover:text-red-600 active:scale-95 transition-all shadow-sm"><Trash2 className="w-3 h-3" /></button>
+              </div>
+            )}
           </div>
+        </div>
+
+        {isEditing ? (
+          <div className="mt-3 space-y-2 animate-in fade-in zoom-in-95 duration-200">
+            <textarea
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 min-h-[60px] resize-none"
+              placeholder="Inserisci note..."
+            />
+            {entry.tipo === 'ORDINE' && (
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editImporto || ''}
+                onChange={(e) => setEditImporto(Number(e.target.value))}
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Importo €"
+              />
+            )}
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => { setIsEditing(false); setEditNote(entry.note); setEditImporto(entry.importo || 0); }} className="flex-1 py-2 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl hover:bg-slate-300 transition-colors">Annulla</button>
+              <button onClick={() => { onEdit(index, editNote, editImporto); setIsEditing(false); }} className="flex-1 py-2 bg-brand-600 text-white text-[11px] font-bold rounded-xl shadow-md shadow-brand-100 hover:bg-brand-700 transition-colors">Salva</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
+              {entry.note}
+            </p>
+            {entry.importo > 0 && (
+              <div className="mt-2 pt-2 border-t border-slate-200/50">
+                <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -310,7 +359,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   jumpToPosition,
   openRevisitModal,
   aiLockedUntil,
-  cooldownSeconds
+  cooldownSeconds,
+  handleEditHistory,
+  handleDeleteHistory
 }) => {
   const id = getRivenditaId(res);
   const isExpanded = expandedCardId === id;
@@ -719,7 +770,13 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="mt-4 space-y-1 border-t border-slate-100 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="relative">
               {extra.history.slice(0, 10).map((h, i) => (
-                <TimelineItem key={i} entry={h} />
+                <TimelineItem 
+                  key={i} 
+                  entry={h} 
+                  index={i}
+                  onEdit={(idx, note, imp) => handleEditHistory(id, idx, note, imp)}
+                  onDelete={(idx) => handleDeleteHistory(id, idx)}
+                />
               ))}
             </div>
           </div>
@@ -1027,6 +1084,66 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 placeholder="Inserisci note libere..."
                 className="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
               />
+            </div>
+
+            {/* SEZIONE OBIETTIVI E TARGET (Nuova) */}
+            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl shadow-sm mt-4 space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b border-indigo-100/50">
+                <Target className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-indigo-800 uppercase tracking-tight">Obiettivi Mensili</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block">Target Mese (€)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={extra.targetMese || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'targetMese', parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-indigo-700"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block">Mese Precedente (€)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={extra.importoMesePrecedente || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'importoMesePrecedente', parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700"
+                  />
+                </div>
+              </div>
+
+              {/* Logica di Calcolo Dinamico */}
+              {(extra.targetMese !== undefined && extra.targetMese > 0) && (
+                <div className="pt-2">
+                  {(() => {
+                    const precedente = extra.importoMesePrecedente || 0;
+                    const target = extra.targetMese || 0;
+                    const mancante = target - precedente;
+                    
+                    if (mancante > 0) {
+                      return (
+                        <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-indigo-100">
+                          <span className="text-xs font-bold text-slate-500">Mancano al target:</span>
+                          <span className="text-sm font-black text-amber-600">€ {mancante.toLocaleString('it-IT')}</span>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="flex items-center justify-between p-2.5 bg-emerald-500 rounded-xl shadow-inner border border-emerald-600">
+                          <span className="text-xs font-bold text-white">Target Superato di:</span>
+                          <span className="text-sm font-black text-white">€ {Math.abs(mancante).toLocaleString('it-IT')} 🎉</span>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-slate-200">
@@ -1353,6 +1470,7 @@ export default function App() {
   const [rubricaFilterStato, setRubricaFilterStato] = useState<string>('');
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [capFilter, setCapFilter] = useState<string>('');
+  const [zonaFilter, setZonaFilter] = useState<string>('');
   const [filterVisitata, setFilterVisitata] = useState<string>('');
   const [filterOrdine, setFilterOrdine] = useState<boolean>(false);
   const [rubricaSort, setRubricaSort] = useState<string>('dataVisitaAsc');
@@ -1493,6 +1611,22 @@ export default function App() {
     document.body.style.overscrollBehaviorY = 'none';
     return () => {
       document.body.style.overscrollBehaviorY = 'auto';
+    };
+  }, []);
+
+  // --- PREVENZIONE CHIUSURA/RICARICAMENTO ACCIDENTALE ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // I browser moderni ignorano il testo personalizzato, ma richiedono 
+      // preventDefault() e returnValue per mostrare il popup nativo di avviso.
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
 
@@ -2035,6 +2169,37 @@ export default function App() {
         }
       };
     });
+    
+    showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : 'Attività salvata!', 'success');
+  }, []);
+
+  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number) => {
+    setRubrica(prev => {
+      const current = prev[id];
+      if (!current || !current.history) return prev;
+      const newHistory = [...current.history];
+      newHistory[index] = { ...newHistory[index], note: newNote, importo: newImporto };
+      return { ...prev, [id]: { ...current, history: newHistory } };
+    });
+  }, []);
+
+  const handleDeleteHistory = React.useCallback((id: string, index: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Elimina Evento',
+      message: 'Sei sicuro di voler eliminare questa voce dalla cronologia?',
+      isDestructive: true,
+      onConfirm: () => {
+        setRubrica(prev => {
+          const current = prev[id];
+          if (!current || !current.history) return prev;
+          const newHistory = [...current.history];
+          newHistory.splice(index, 1);
+          return { ...prev, [id]: { ...current, history: newHistory } };
+        });
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   }, []);
 
   const handleRubricaMultiUpdate = useCallback((id: string, updates: Partial<RivenditaExtra>) => {
@@ -2353,6 +2518,7 @@ export default function App() {
     setViewMode('list');
     setRivenditaFilter('');
     setComuneFilter('');
+    setZonaFilter('');
     window.scrollTo(0, 0);
   }, []);
 
@@ -2410,10 +2576,33 @@ export default function App() {
       list = [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase());
     }
     
-    // Create strings like "Comune (Prov.)"
-    const formattedComuni = list.map(res => `${res['Comune']} (${res['Prov.']})`);
+    const formattedComuni = list.map(res => {
+      const c = (res['Comune'] || '').toUpperCase().trim();
+      const p = (res['Prov.'] || '').toUpperCase().trim();
+      return `${c} (${p})`;
+    }).filter(val => val !== ' ()');
     return Array.from(new Set(formattedComuni)).sort();
   }, [activeTab, giroVisiteList, crmList, storeList, ripList]);
+
+  const getUniqueZoneForTab = useCallback(() => {
+    let list: SearchResult[] = [];
+    if (activeTab === 'search') return [];
+    if (activeTab === 'giro') list = giroVisiteList;
+    else if (activeTab === 'crm') list = crmList;
+    else if (activeTab === 'store') list = storeList;
+    else if (activeTab === 'rip') list = ripList;
+    else if (activeTab.startsWith('prov_')) {
+      const prov = activeTab.replace('prov_', '');
+      list = [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase());
+    }
+    
+    const zones = list.map(res => {
+      const id = getRivenditaId(res);
+      return (rubrica[id]?.zona || '').toUpperCase().trim();
+    }).filter(z => z !== '' && z !== 'NON DISPONIBILE' && z !== 'N/D');
+    
+    return Array.from(new Set(zones)).sort();
+  }, [activeTab, giroVisiteList, crmList, storeList, ripList, rubrica]);
 
   const getBaseListLength = useCallback(() => {
     if (activeTab === 'crm') return crmList.length;
@@ -2482,9 +2671,13 @@ export default function App() {
       });
     }
 
-    // Filtro Comune
+    // Filtro Comune (Case Insensitive)
     if (comuneFilter) {
-      list = list.filter(res => `${res['Comune']} (${res['Prov.']})` === comuneFilter);
+      list = list.filter(res => {
+        const c = (res['Comune'] || '').toUpperCase().trim();
+        const p = (res['Prov.'] || '').toUpperCase().trim();
+        return `${c} (${p})` === comuneFilter;
+      });
     }
 
     // Filtro CAP
@@ -2493,6 +2686,15 @@ export default function App() {
         const id = getRivenditaId(res);
         const manualCap = rubrica[id]?.manualCap || '';
         return manualCap.toString().includes(capFilter);
+      });
+    }
+
+    // Filtro Zona (Case Insensitive)
+    if (zonaFilter) {
+      list = list.filter(res => {
+        const id = getRivenditaId(res);
+        const z = (rubrica[id]?.zona || '').toUpperCase().trim();
+        return z === zonaFilter;
       });
     }
 
@@ -2515,7 +2717,7 @@ export default function App() {
     }
 
     return list;
-  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica]);
+  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, zonaFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica]);
 
   const getSortedList = useMemo(() => {
     const list = getCurrentList;
@@ -2790,7 +2992,9 @@ export default function App() {
     setShareModal,
     openRevisitModal: setRevisitModalId,
     aiLockedUntil,
-    cooldownSeconds
+    cooldownSeconds,
+    handleEditHistory,
+    handleDeleteHistory
   }), [
     activeTab,
     expandedCardId,
@@ -2810,7 +3014,9 @@ export default function App() {
     setShareModal,
     setRevisitModalId,
     aiLockedUntil,
-    cooldownSeconds
+    cooldownSeconds,
+    handleEditHistory,
+    handleDeleteHistory
   ]);
 
   return (
@@ -3204,7 +3410,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <Filter className="w-3.5 h-3.5" /> Filtri Avanzati
                     {/* Indicatore luminoso se c'è almeno un filtro attivo */}
-                    {(rubricaFilterStato || filterVisitata || filterOrdine || capFilter || rubricaSort !== 'none') && (
+                    {(rubricaFilterStato || filterVisitata || filterOrdine || capFilter || zonaFilter || rubricaSort !== 'none') && (
                       <span className="flex h-2 w-2 relative">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
@@ -3216,7 +3422,7 @@ export default function App() {
                 
                 {showFilters && (
                   <div className="p-3 pt-0 grid grid-cols-2 gap-3 border-t border-slate-100 mt-1 pt-3 bg-white/50">
-                    <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P.</label>
                       <input
                         type="text"
@@ -3225,6 +3431,19 @@ export default function App() {
                         onChange={(e) => setCapFilter(e.target.value)}
                         className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm placeholder:text-slate-300"
                       />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Zona / Quartiere</label>
+                      <select
+                        value={zonaFilter}
+                        onChange={(e) => setZonaFilter(e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium shadow-sm"
+                      >
+                        <option value="">Tutte le zone</option>
+                        {getUniqueZoneForTab().map(zona => (
+                          <option key={zona} value={zona}>{zona}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Stato CRM</label>
@@ -3252,7 +3471,7 @@ export default function App() {
                         <option value="No">Non Visitate</option>
                       </select>
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 col-span-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Ordini</label>
                       <select
                         value={filterOrdine ? 'true' : 'false'}
