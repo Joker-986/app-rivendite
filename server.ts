@@ -432,8 +432,25 @@ app.post('/api/enrich', async (req, res) => {
   }
 
   // --- Prompt Base da usare per ENTRAMBI i motori ---
-  const systemPrompt = `Sei un assistente esperto in tabaccherie italiane. REGOLA FONDAMENTALE: NON INVENTARE GLI ORARI. Se non trovi su internet informazioni certe e specifiche per QUESTA esatta tabaccheria, scrivi "Non disponibile" nei campi e imposta "confidence" a 0. Non usare mai orari standard generici. Restituisci SEMPRE un JSON valido: { "openingHours": "...", "phone": "...", "zona": "...", "notes": "...", "confidence": 0, "engine": "..." }`;
-  const userPrompt = `Trova orari veri e telefono per la tabaccheria in ${rivendita['Indirizzo']}, ${rivendita['Comune']}. Confidence deve essere un numero da 0 a 100.`;
+  const systemPrompt = `Sei un analista dati spietato, preciso e specializzato in geografia italiana. Il tuo compito è estrarre dati reali per le tabaccherie.
+DEVI rispettare categoricamente queste REGOLE DI COMPILAZIONE JSON:
+
+1. "zona": DEVI estrarre il QUARTIERE specifico, la micro-zona o la frazione basandoti sull'indirizzo e sul comune (es. se l'indirizzo è 'Via Scarlatti' a 'Napoli', la zona DEVE essere 'Vomero'). NON ripetere MAI semplicemente il nome del comune. Se il comune è molto piccolo (< 10.000 abitanti), indica se è "Centro Storico", "Zona Periferica" o "Strada Statale".
+2. "openingHours": Cerca l'indirizzo esatto. Se NON trovi una pagina web reale (Google Maps, PagineGialle, ecc.) che riporta esplicitamente gli orari per QUESTA esatta tabaccheria, DEVI scrivere "Non disponibile". È ASSOLUTAMENTE VIETATO usare orari standard (es. 08:00-13:00 / 16:00-19:30) se non hai una fonte certa.
+3. "confidence": NON indovinare questo numero. Usa ESCLUSIVAMENTE questo schema di punteggio matematico:
+   - 90 a 100: Hai trovato gli orari su una fonte web verificata (Google Maps, sito web).
+   - 50 a 80: Hai trovato il numero di telefono o la tabaccheria su un elenco online, ma gli orari non sono chiari o sono assenti.
+   - 0: Non hai trovato nessuna informazione su internet e hai scritto "Non disponibile" negli orari.
+4. "phone": Solo cifre, nessuna spaziatura. "Non disponibile" se non lo trovi online.
+5. "notes": Indica esplicitamente la fonte dei dati se li hai trovati (es. "Fonte: Google Maps"), oppure scrivi "Dati online non reperibili".
+6. "engine": (Questo campo deve essere popolato dal codice backend, non dall'IA).`;
+
+  const userPrompt = `Analizza la seguente tabaccheria usando strumenti di ricerca web (se disponibili) o le tue conoscenze geografiche.
+Indirizzo: ${rivendita['Indirizzo']}
+Comune: ${rivendita['Comune']}
+Provincia: ${rivendita['Prov.']}
+
+Restituisci ESCLUSIVAMENTE un JSON valido con le chiavi: openingHours, phone, zona, notes, confidence.`;
 
   try {
     // --- TENTATIVO 1: GEMINI ---
@@ -443,7 +460,6 @@ app.post('/api/enrich', async (req, res) => {
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -465,10 +481,10 @@ app.post('/api/enrich', async (req, res) => {
     
     return res.json({
       openingHours: geminiData.openingHours || "Non disponibile",
-      phone: (geminiData.phone || "Non disponibile").replace(/\s+/g, ''),
+      phone: (geminiData.phone || "Non disponibile").toString().replace(/\s+/g, ''),
       zona: geminiData.zona || "Non disponibile",
       notes: geminiData.notes || "",
-      confidence: typeof geminiData.confidence === 'number' ? geminiData.confidence : 0,
+      confidence: Number(geminiData.confidence) || 0,
       engine: "Gemini 3 Flash"
     });
 
@@ -503,10 +519,10 @@ app.post('/api/enrich', async (req, res) => {
 
       return res.json({
         openingHours: cohereData.openingHours || "Non disponibile",
-        phone: (cohereData.phone || "Non disponibile").replace(/\s+/g, ''),
+        phone: (cohereData.phone || "Non disponibile").toString().replace(/\s+/g, ''),
         zona: cohereData.zona || "Non disponibile",
         notes: cohereData.notes || "",
-        confidence: typeof cohereData.confidence === 'number' ? cohereData.confidence : 0,
+        confidence: Number(cohereData.confidence) || 0,
         engine: "Cohere Command R"
       });
 
