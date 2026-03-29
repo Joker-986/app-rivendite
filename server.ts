@@ -431,7 +431,10 @@ app.post('/api/enrich', async (req, res) => {
   const systemPrompt = `Sei un analista dati spietato, preciso e specializzato in geografia italiana. Il tuo compito è estrarre dati reali per le tabaccherie.
 DEVI rispettare categoricamente queste REGOLE DI COMPILAZIONE JSON:
 1. "zona": DEVI estrarre il QUARTIERE specifico, la micro-zona o la frazione basandoti sull'indirizzo e sul comune (es. se l'indirizzo è 'Via Scarlatti' a 'Napoli', la zona DEVE essere 'Vomero'). NON ripetere MAI semplicemente il nome del comune.
-2. "openingHours": Se NON hai dati certi per QUESTA esatta tabaccheria, DEVI scrivere "Non disponibile". È ASSOLUTAMENTE VIETATO usare orari standard o indovinare.
+2. "openingHours": Per il campo 'openingHours': Raggruppa in modo intelligente i giorni consecutivi che hanno gli stessi orari per risparmiare spazio visivo. Usa le abbreviazioni di 3 lettere per i giorni (es. Lun, Mar, Mer, Gio, Ven, Sab, Dom). Usa ESCLUSIVAMENTE il carattere speciale di a capo testuale (\\n) per separare un gruppo di giorni dall'altro. NON usare MAI il punto e virgola (;).
+   Ecco un esempio esatto del formato compatto che devi generare:
+   Lun-Ven: 07:00-13:00, 16:00-20:00\\nSab: 07:00-13:00\\nDom: Chiuso
+   Devi essere il più pulito e riassuntivo possibile, eliminando ogni ripetizione inutile. Se NON hai dati certi per QUESTA esatta tabaccheria, DEVI scrivere "Non disponibile". È ASSOLUTAMENTE VIETATO usare orari standard o indovinare.
 3. "confidence": NON indovinare questo numero. Usa ESCLUSIVAMENTE questo schema:
    - 90 a 100: Dati trovati su fonte web verificata.
    - 50 a 80: Dati parziali trovati su elenchi online o nel tuo database interno.
@@ -456,21 +459,21 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
       config: {
         systemInstruction: systemPrompt,
         tools: [{ googleSearch: {} }], // <-- Ricerca Web Attivata
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            openingHours: { type: Type.STRING }, phone: { type: Type.STRING },
-            zona: { type: Type.STRING }, notes: { type: Type.STRING }, confidence: { type: Type.NUMBER }
-          },
-          required: ["openingHours", "phone", "zona", "notes", "confidence"]
-        }
+        temperature: 0.1
+        // RIMOSSI responseMimeType e responseSchema per compatibilità con googleSearch
       }
     });
 
-    let textWeb = responseWeb.text || '{}';
-    textWeb = textWeb.replace(/```json/g, '').replace(/```/g, '').trim();
-    const dataWeb = JSON.parse(textWeb || '{}');
+    let responseText = responseWeb.text;
+    
+    // Pulizia del markdown prima del parsing
+    if (responseText.startsWith('```json')) {
+      responseText = responseText.replace(/^```json/, '').replace(/```$/, '').trim();
+    } else if (responseText.startsWith('```')) {
+      responseText = responseText.replace(/^```/, '').replace(/```$/, '').trim();
+    }
+
+    const dataWeb = JSON.parse(responseText || '{}');
     
     return res.json({
       openingHours: dataWeb.openingHours || "Non disponibile",
