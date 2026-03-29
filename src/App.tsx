@@ -4251,7 +4251,7 @@ export default function App() {
                   
                   {/* CONTATORE AI CON FORMATTAZIONE ITALIANA */}
                   <div className="py-1 border-y border-amber-200/50 my-1">
-                    <p>Richieste AI Oggi: <span className={`font-bold ${dailyAiCount >= 45 ? 'text-red-600' : ''}`}>{dailyAiCount} / 50</span></p>
+                    <p>Richieste AI Oggi: <span className={`font-bold ${dailyAiCount >= 1450 ? 'text-red-600' : ''}`}>{dailyAiCount} / 1500</span></p>
                     <p className="text-[9px] text-amber-600/70 italic mt-0.5">* Il contatore si azzera alle 09:00 (Ora Italiana)</p>
                   </div>
 

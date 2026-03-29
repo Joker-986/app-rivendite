@@ -451,7 +451,7 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
   try {
     // TENTATIVO 1: GEMINI CON RICERCA WEB
     const responseWeb = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
@@ -487,7 +487,7 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
     try {
       // TENTATIVO 2: GEMINI OFFLINE (Senza tools)
       const responseOffline = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,
