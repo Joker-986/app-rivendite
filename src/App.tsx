@@ -568,11 +568,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       {enrichedDetails && (
         <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-brand-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi Gemini Flash</span>
+            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi {enrichedDetails.engine || 'AI'}</span>
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
               enrichedDetails.confidence > 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
             }`}>
-              Affidabilità: {enrichedDetails.confidence || 'N/D'}%
+              {enrichedDetails.confidence > 0 ? `Affidabilità: ${enrichedDetails.confidence}%` : 'Affidabilità: Nessun dato trovato'}
             </span>
           </div>
           

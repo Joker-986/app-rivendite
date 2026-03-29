@@ -4,6 +4,7 @@ export interface EnrichedDetails {
   zona: string;
   notes: string;
   confidence: number;
+  engine?: string;
 }
 
 export async function enrichRivendita(rivendita: any): Promise<EnrichedDetails> {

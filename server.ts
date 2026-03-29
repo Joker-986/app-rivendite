@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import * as cheerio from 'cheerio';
 import { GoogleGenAI, Type } from "@google/genai";
-import { CohereClient } from 'cohere-ai';
+import { CohereClientV2 } from 'cohere-ai';
 import dotenv from 'dotenv';
 dotenv.config(); // Carica la chiave da Render
 
@@ -431,25 +431,18 @@ app.post('/api/enrich', async (req, res) => {
     });
   }
 
+  // --- Prompt Base da usare per ENTRAMBI i motori ---
+  const systemPrompt = `Sei un assistente esperto in tabaccherie italiane. REGOLA FONDAMENTALE: NON INVENTARE GLI ORARI. Se non trovi su internet informazioni certe e specifiche per QUESTA esatta tabaccheria, scrivi "Non disponibile" nei campi e imposta "confidence" a 0. Non usare mai orari standard generici. Restituisci SEMPRE un JSON valido: { "openingHours": "...", "phone": "...", "zona": "...", "notes": "...", "confidence": 0, "engine": "..." }`;
+  const userPrompt = `Trova orari veri e telefono per la tabaccheria in ${rivendita['Indirizzo']}, ${rivendita['Comune']}. Confidence deve essere un numero da 0 a 100.`;
+
   try {
     // --- TENTATIVO 1: GEMINI ---
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `Analizza la seguente rivendita di tabacchi italiana:
-    Numero: ${rivendita['Num. Rivendita']}
-    Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
-    Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
-
-    TROVA TRAMITE GOOGLE SEARCH:
-    1. openingHours: Sii ultra-sintetico (es. "Lun-Sab: 08-13 / 15-20. Dom: Chiuso").
-    2. phone: Solo cifre, senza spazi.
-    3. zona: Quartiere o zona geografica.
-    4. notes: Avvisa in MAIUSCOLO se risulta CHIUSO DEFINITIVAMENTE, altrimenti indica servizi extra.
-    5. confidence: Valuta da 0 a 100 in base alle fonti.`;
-
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
+      contents: userPrompt,
       config: {
+        systemInstruction: systemPrompt,
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
@@ -466,79 +459,61 @@ app.post('/api/enrich', async (req, res) => {
       }
     });
 
-    let text = response.text || '';
+    let text = response.text || '{}';
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(text || '{}');
+    const geminiData = JSON.parse(text || '{}');
     
     return res.json({
-      openingHours: data.openingHours || "Non disponibile",
-      phone: (data.phone || "Non disponibile").replace(/\s+/g, ''),
-      zona: data.zona || "Non disponibile",
-      notes: data.notes || "Dettagli recuperati con successo.",
-      confidence: typeof data.confidence === 'number' ? data.confidence : 0
+      openingHours: geminiData.openingHours || "Non disponibile",
+      phone: (geminiData.phone || "Non disponibile").replace(/\s+/g, ''),
+      zona: geminiData.zona || "Non disponibile",
+      notes: geminiData.notes || "",
+      confidence: typeof geminiData.confidence === 'number' ? geminiData.confidence : 0,
+      engine: "Gemini 3 Flash"
     });
 
   } catch (geminiError: any) {
-    console.warn("Gemini fallito, tento il fallback su Cohere...", geminiError.message);
+    console.warn("Gemini fallito, attivo Cohere v2...", geminiError.message);
     
     // --- TENTATIVO 2: COHERE (IL PARACADUTE CON WEB SEARCH) ---
     if (!cohereApiKey) {
       return res.status(500).json({ 
-        openingHours: "N/D", phone: "N/D", zona: "N/D", 
+        openingHours: "Non disponibile", phone: "Non disponibile", zona: "Non disponibile", 
         notes: `DEBUG AI: Gemini fallito (${geminiError.message}) e Cohere non configurato.`, 
         confidence: 0 
       });
     }
 
-    const cohere = new CohereClient({ token: cohereApiKey });
+    const cohere = new CohereClientV2({ token: cohereApiKey });
 
     try {
-      const cohereMessage = `Analizza questa rivendita di tabacchi italiana.
-      Indirizzo: ${rivendita['Indirizzo']}, ${rivendita['CAP'] || ''}
-      Comune: ${rivendita['Comune']} (${rivendita['Prov.']})
-      
-      Rispondi ESCLUSIVAMENTE con un JSON valido contenente queste chiavi (senza markdown o testo extra):
-      - openingHours (string: orari ultra-sintetici o "Non disponibile")
-      - phone (string: solo cifre o "Non disponibile")
-      - zona (string: quartiere/frazione o "Non disponibile")
-      - notes (string: avvisi o servizi extra)
-      - confidence (number: da 0 a 100)`;
-
-      const cohereResponse = await cohere.chat({
-        model: "command-r-plus",
-        message: cohereMessage,
-        tools: [{ 
-          name: "internet_search", 
-          description: "Performs a search on the internet to find up-to-date information." 
-        }], // Sintassi aggiornata 2026 con fix TS
+      const response = await cohere.chat({
+        model: "command-r-08-2024", // Versione stabile live
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        responseFormat: { type: "json_object" }
       });
 
-      let cohereText = cohereResponse.text || '{}';
-      // Pulizia robusta del JSON
-      cohereText = cohereText.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      // Tentativo di estrarre solo il blocco JSON se c'è testo extra
-      const jsonMatch = cohereText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        cohereText = jsonMatch[0];
-      }
-
-      const cohereData = JSON.parse(cohereText);
+      // Estrazione testo secondo standard API v2
+      const contentItem = response.message?.content?.[0];
+      const rawText = (contentItem?.type === 'text' ? contentItem.text : '') || '{}';
+      const cohereData = JSON.parse(rawText);
 
       return res.json({
         openingHours: cohereData.openingHours || "Non disponibile",
         phone: (cohereData.phone || "Non disponibile").replace(/\s+/g, ''),
         zona: cohereData.zona || "Non disponibile",
-        notes: cohereData.notes ? `[Via Cohere] ${cohereData.notes}` : "Dati recuperati tramite Cohere.",
-        confidence: typeof cohereData.confidence === 'number' ? cohereData.confidence : 0
+        notes: cohereData.notes || "",
+        confidence: typeof cohereData.confidence === 'number' ? cohereData.confidence : 0,
+        engine: "Cohere Command R"
       });
 
     } catch (cohereError: any) {
-      console.error("Anche Cohere ha fallito:", cohereError);
+      console.error("Fallimento totale:", cohereError.message);
       return res.status(500).json({ 
-        openingHours: "N/D", phone: "N/D", zona: "N/D", 
-        notes: `DEBUG AI: Gemini e Cohere falliti. (${cohereError.message})`, 
-        confidence: 0 
+        notes: `Tutti i motori falliti. (Cohere: ${cohereError.message})` 
       });
     }
   }
