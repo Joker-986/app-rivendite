@@ -422,7 +422,6 @@ app.post('/api/enrich', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.error("GEMINI_API_KEY mancante nel server");
     return res.status(500).json({
       openingHours: "N/D", phone: "N/D", zona: "N/D",
       notes: "DEBUG AI: Chiave API Gemini non configurata.", confidence: 0
@@ -431,69 +430,104 @@ app.post('/api/enrich', async (req, res) => {
 
   const systemPrompt = `Sei un analista dati spietato, preciso e specializzato in geografia italiana. Il tuo compito è estrarre dati reali per le tabaccherie.
 DEVI rispettare categoricamente queste REGOLE DI COMPILAZIONE JSON:
-1. "zona": DEVI estrarre il QUARTIERE specifico, la micro-zona o la frazione basandoti sull'indirizzo e sul comune (es. se l'indirizzo è 'Via Scarlatti' a 'Napoli', la zona DEVE essere 'Vomero'). NON ripetere MAI semplicemente il nome del comune. Se il comune è molto piccolo (< 10.000 abitanti), indica se è "Centro Storico", "Zona Periferica" o "Strada Statale".
-2. "openingHours": Cerca l'indirizzo esatto. Se NON trovi una pagina web reale che riporta esplicitamente gli orari per QUESTA esatta tabaccheria, DEVI scrivere "Non disponibile". È ASSOLUTAMENTE VIETATO usare orari standard.
+1. "zona": DEVI estrarre il QUARTIERE specifico, la micro-zona o la frazione basandoti sull'indirizzo e sul comune (es. se l'indirizzo è 'Via Scarlatti' a 'Napoli', la zona DEVE essere 'Vomero'). NON ripetere MAI semplicemente il nome del comune.
+2. "openingHours": Se NON hai dati certi per QUESTA esatta tabaccheria, DEVI scrivere "Non disponibile". È ASSOLUTAMENTE VIETATO usare orari standard o indovinare.
 3. "confidence": NON indovinare questo numero. Usa ESCLUSIVAMENTE questo schema:
-   - 90 a 100: Hai trovato gli orari su una fonte web verificata.
-   - 50 a 80: Hai trovato il numero di telefono o la tabaccheria online, ma gli orari non sono chiari.
-   - 0: Non hai trovato nessuna informazione su internet e hai scritto "Non disponibile" negli orari.
-4. "phone": Solo cifre, nessuna spaziatura. "Non disponibile" se non lo trovi online.
-5. "notes": Indica esplicitamente la fonte dei dati se li hai trovati, oppure scrivi "Dati online non reperibili".`;
+   - 90 a 100: Dati trovati su fonte web verificata.
+   - 50 a 80: Dati parziali trovati su elenchi online o nel tuo database interno.
+   - 0: Nessuna informazione sicura trovata, orari impostati su "Non disponibile".
+4. "phone": Solo cifre. "Non disponibile" se non lo sai con certezza.
+5. "notes": Indica la fonte dei dati (es. "Google Maps", "Database Interno"), oppure scrivi "Dati non reperibili".`;
 
-  const userPrompt = `Analizza la seguente tabaccheria usando strumenti di ricerca web:
+  const userPrompt = `Analizza la seguente tabaccheria:
 Indirizzo: ${rivendita['Indirizzo']}
 Comune: ${rivendita['Comune']}
 Provincia: ${rivendita['Prov.']}
 
-Restituisci ESCLUSIVAMENTE un JSON valido con le chiavi: openingHours, phone, zona, notes, confidence.`;
+Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidence}`;
+
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
+    // TENTATIVO 1: GEMINI CON RICERCA WEB
+    const responseWeb = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: userPrompt,
       config: {
         systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }],
+        tools: [{ googleSearch: {} }], // <-- Ricerca Web Attivata
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            openingHours: { type: Type.STRING },
-            phone: { type: Type.STRING },
-            zona: { type: Type.STRING },
-            notes: { type: Type.STRING },
-            confidence: { type: Type.NUMBER }
+            openingHours: { type: Type.STRING }, phone: { type: Type.STRING },
+            zona: { type: Type.STRING }, notes: { type: Type.STRING }, confidence: { type: Type.NUMBER }
           },
           required: ["openingHours", "phone", "zona", "notes", "confidence"]
         }
       }
     });
 
-    let text = response.text || '{}';
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const geminiData = JSON.parse(text || '{}');
+    let textWeb = responseWeb.text || '{}';
+    textWeb = textWeb.replace(/```json/g, '').replace(/```/g, '').trim();
+    const dataWeb = JSON.parse(textWeb || '{}');
     
     return res.json({
-      openingHours: geminiData.openingHours || "Non disponibile",
-      phone: (geminiData.phone || "Non disponibile").toString().replace(/\s+/g, ''),
-      zona: geminiData.zona || "Non disponibile",
-      notes: geminiData.notes || "",
-      confidence: Number(geminiData.confidence) || 0,
-      engine: "Gemini 3 Flash"
+      openingHours: dataWeb.openingHours || "Non disponibile",
+      phone: (dataWeb.phone || "Non disponibile").toString().replace(/\s+/g, ''),
+      zona: dataWeb.zona || "Non disponibile",
+      notes: dataWeb.notes || "",
+      confidence: Number(dataWeb.confidence) || 0,
+      engine: "Gemini 3 Flash (Web)"
     });
 
-  } catch (error: any) {
-    console.warn("Chiamata a Gemini fallita:", error.message);
+  } catch (errorWeb: any) {
+    console.warn("Ricerca Web fallita, tento Gemini Offline...", errorWeb.message);
     
-    return res.json({
-      openingHours: "Non disponibile",
-      phone: "Non disponibile",
-      zona: "Non disponibile",
-      notes: "Ricerca AI temporaneamente non disponibile (Limite Richieste).",
-      confidence: 0,
-      engine: "Offline"
-    });
+    try {
+      // TENTATIVO 2: GEMINI OFFLINE (Senza tools)
+      const responseOffline = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          // NESSUN TOOL INSERITO: Interroga solo il database interno
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              openingHours: { type: Type.STRING }, phone: { type: Type.STRING },
+              zona: { type: Type.STRING }, notes: { type: Type.STRING }, confidence: { type: Type.NUMBER }
+            },
+            required: ["openingHours", "phone", "zona", "notes", "confidence"]
+          }
+        }
+      });
+
+      let textOffline = responseOffline.text || '{}';
+      textOffline = textOffline.replace(/```json/g, '').replace(/```/g, '').trim();
+      const dataOffline = JSON.parse(textOffline || '{}');
+      
+      return res.json({
+        openingHours: dataOffline.openingHours || "Non disponibile",
+        phone: (dataOffline.phone || "Non disponibile").toString().replace(/\s+/g, ''),
+        zona: dataOffline.zona || "Non disponibile",
+        notes: `[Modalità Offline] ${dataOffline.notes || ''}`.trim(),
+        confidence: Number(dataOffline.confidence) || 0,
+        engine: "Gemini 3 Flash (Offline)"
+      });
+
+    } catch (errorOffline: any) {
+      console.error("Fallimento totale Gemini:", errorOffline.message);
+      
+      // TENTATIVO 3: FALLBACK ESTREMO
+      return res.json({
+        openingHours: "Non disponibile", phone: "Non disponibile", zona: "Non disponibile",
+        notes: "Servizio AI temporaneamente non disponibile.",
+        confidence: 0,
+        engine: "Sistema Disconnesso"
+      });
+    }
   }
 });
 
