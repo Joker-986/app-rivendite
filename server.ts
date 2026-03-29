@@ -440,7 +440,14 @@ DEVI rispettare categoricamente queste REGOLE DI COMPILAZIONE JSON:
    - 50 a 80: Dati parziali trovati su elenchi online o nel tuo database interno.
    - 0: Nessuna informazione sicura trovata, orari impostati su "Non disponibile".
 4. "phone": Solo cifre. "Non disponibile" se non lo sai con certezza.
-5. "notes": Indica la fonte dei dati (es. "Google Maps", "Database Interno"), oppure scrivi "Dati non reperibili".`;
+5. "notes": Per il campo 'notes': Devi agire come un analista di intelligence per un agente di commercio. Non limitarti a scrivere 'Nessuna nota'. Analizza i risultati web ed estrai ogni singolo dettaglio utile per una prima visita. 
+   Cerca e riassumi: 
+   - Servizi extra offerti (Sisal, Lottomatica, ricariche, pagamento bollette, valori bollati).
+   - Hub spedizioni (Amazon Locker, Punto Poste, InPost, BRT).
+   - Prodotti extra (articoli da regalo, cartoleria, profumeria, edicola integrata).
+   - Se menzionato, il nome della tabaccheria o del titolare.
+   - Punti di riferimento geografici (es. 'Situata di fronte alla farmacia' o 'Vicino alla stazione').
+   Scrivi un riassunto discorsivo, altamente professionale, compatto e diviso da virgole. Se trovi recensioni rilevanti sull'ampiezza del locale, citalo brevemente.`;
 
   const userPrompt = `Analizza la seguente tabaccheria:
 Indirizzo: ${rivendita['Indirizzo']}
