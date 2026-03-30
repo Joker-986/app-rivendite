@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3 } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, History } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -34,7 +34,7 @@ export interface RivenditaHistoryEntry {
 }
 
 export interface RivenditaExtra {
-  stato: 'Attivata' | 'Non Attiva' | 'Basso Rendente' | 'RIP' | '';
+  stato: 'Attivata' | 'Non Attiva' | 'RIP' | '';
   visitata: 'Si' | 'Da Rivisitare' | 'No' | '';
   dataVisita?: string;
   oraVisita?: string;
@@ -67,6 +67,16 @@ export interface RivenditaExtra {
   zona?: string;
   importoMesePrecedente?: number;
   targetMese?: number;
+  hasTarget?: boolean;
+  targetSpecifico?: number;
+}
+
+export interface ArchiveEntry {
+  mese: string;
+  brAssegnati: number;
+  brCompletati: number;
+  targetMensile: number;
+  globalFatto: number;
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
@@ -176,6 +186,8 @@ interface RivenditaCardProps {
   cooldownSeconds: number;
   handleEditHistory: (id: string, index: number, note: string, importo: number) => void;
   handleDeleteHistory: (id: string, index: number) => void;
+  targetBassoRendente: number;
+  targetMensile: number;
 }
 
 
@@ -361,7 +373,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   aiLockedUntil,
   cooldownSeconds,
   handleEditHistory,
-  handleDeleteHistory
+  handleDeleteHistory,
+  targetBassoRendente,
+  targetMensile
 }) => {
   const id = getRivenditaId(res);
 
@@ -479,6 +493,18 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                 {res['Stato']}
               </span>
+              {extra.hasTarget && (
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
+                  (targetBassoRendente - (extra.importoMesePrecedente || 0)) <= 0 
+                    ? 'bg-emerald-500 text-white border-emerald-600' 
+                    : 'bg-amber-100 text-amber-700 border-amber-200'
+                }`}>
+                  {(() => {
+                    const mancante = targetBassoRendente - (extra.importoMesePrecedente || 0);
+                    return mancante <= 0 ? '🎯 Focus: OK' : `🎯 Focus: Manca €${mancante.toLocaleString('it-IT')}`;
+                  })()}
+                </div>
+              )}
             </div>
             
             <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
@@ -992,7 +1018,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 <option value="">Seleziona</option>
                 <option value="Attivata">Attivata</option>
                 <option value="Non Attiva">Non Attiva</option>
-                <option value="Basso Rendente">Basso Rendente</option>
                 <option value="RIP">RIP</option>
               </select>
             </div>
@@ -1103,61 +1128,44 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               />
             </div>
 
-            {/* SEZIONE OBIETTIVI E TARGET (Nuova) */}
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl shadow-sm mt-4 space-y-4">
-              <div className="flex items-center gap-2 pb-2 border-b border-indigo-100/50">
-                <Target className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-bold text-indigo-800 uppercase tracking-tight">Obiettivi Mensili</span>
+            {/* SEZIONE OBIETTIVI E TARGET (Ottimizzata v2.5) */}
+            <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl mt-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-indigo-800 uppercase tracking-wider">Obiettivi</span>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded-lg border border-indigo-100 shadow-sm active:scale-95 transition-all">
+                  <input type="checkbox" checked={extra.hasTarget || false} onChange={(e) => handleRubricaUpdate(id, 'hasTarget', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
+                  <span className="text-[10px] font-bold text-indigo-700 uppercase">
+                    🎯 Campagna Focus Mensile
+                  </span>
+                </label>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block">Target Mese (€)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={extra.targetMese || ''}
-                    onChange={(e) => handleRubricaUpdate(id, 'targetMese', parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-indigo-700"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block">Mese Precedente (€)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={extra.importoMesePrecedente || ''}
-                    onChange={(e) => handleRubricaUpdate(id, 'importoMesePrecedente', parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700"
-                  />
-                </div>
-              </div>
-
-              {/* Logica di Calcolo Dinamico */}
-              {(extra.targetMese !== undefined && extra.targetMese > 0) && (
-                <div className="pt-2">
+              {extra.hasTarget && (
+                <div className="flex flex-wrap items-center gap-3 animate-in slide-in-from-top-1 duration-200">
+                  <div className="flex-1 min-w-[120px]">
+                    <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-indigo-300 shadow-sm">
+                      <span className="text-[9px] font-black text-indigo-500 uppercase leading-none pl-1">Fatto (€)</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={extra.importoMesePrecedente || ''}
+                        onChange={(e) => handleRubricaUpdate(id, 'importoMesePrecedente', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="flex-1 bg-transparent outline-none text-sm font-black text-indigo-900 text-right pr-1 w-full"
+                      />
+                    </div>
+                  </div>
+                  
                   {(() => {
                     const precedente = extra.importoMesePrecedente || 0;
-                    const target = extra.targetMese || 0;
-                    const mancante = target - precedente;
-                    
-                    if (mancante > 0) {
-                      return (
-                        <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-indigo-100">
-                          <span className="text-xs font-bold text-slate-500">Mancano al target:</span>
-                          <span className="text-sm font-black text-amber-600">€ {mancante.toLocaleString('it-IT')}</span>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div className="flex items-center justify-between p-2.5 bg-emerald-500 rounded-xl shadow-inner border border-emerald-600">
-                          <span className="text-xs font-bold text-white">Target Superato di:</span>
-                          <span className="text-sm font-black text-white">€ {Math.abs(mancante).toLocaleString('it-IT')} 🎉</span>
-                        </div>
-                      );
-                    }
+                    const mancante = targetBassoRendente - precedente;
+                    return (
+                      <div className={`px-2 py-2 rounded-lg border text-[10px] font-black uppercase tracking-tight flex-1 text-center shadow-sm ${mancante <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                        {mancante <= 0 ? `Target Focus OK` : `Mancano €${mancante.toLocaleString('it-IT')}`}
+                      </div>
+                    );
                   })()}
                 </div>
               )}
@@ -1396,13 +1404,18 @@ export default function App() {
   const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
   const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => loadFromStorage('crmAnagrafiche', []));
   const [stores, setStores] = useState<SearchResult[]>(() => loadFromStorage('stores', []));
-  const [mensileTarget, setMensileTarget] = useState(() => {
-    const saved = localStorage.getItem('tgest_target');
-    return saved ? Number(saved) : 10000;
-  });
+  const [targetMensile, setTargetMensile] = useState(() => Number(localStorage.getItem('tgest_target_mensile')) || 20000);
+  const [targetBassoRendente, setTargetBassoRendente] = useState(() => Number(localStorage.getItem('tgest_target_br')) || 200);
+  const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
+  const [archive, setArchive] = useState<any[]>(() => loadFromStorage('tgest_archive', []));
+
+  useEffect(() => {
+    localStorage.setItem('tgest_target_mensile', targetMensile.toString());
+    localStorage.setItem('tgest_target_br', targetBassoRendente.toString());
+  }, [targetMensile, targetBassoRendente]);
 
   const [showTargetModal, setShowTargetModal] = useState(false);
-  const [tempTarget, setTempTarget] = useState(mensileTarget.toString());
+  const [tempTarget, setTempTarget] = useState(targetMensile.toString());
 
   const frasiTarget = {
     bassa: ["🚀 Inizia il viaggio! Ogni ordine conta.", "💪 Riscaldiamo i motori...", "🔭 Obiettivo nel mirino, partiamo!"],
@@ -1467,10 +1480,37 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('tgest_target', mensileTarget.toString());
-  }, [mensileTarget]);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const savedMonth = localStorage.getItem('tgest_current_month');
 
-  const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
+    if (!savedMonth) {
+      localStorage.setItem('tgest_current_month', currentMonth);
+    } else if (savedMonth !== currentMonth) {
+      const rubricaValues = Object.values(rubrica) as RivenditaExtra[];
+      const brTargetizzati = rubricaValues.filter(r => r.hasTarget);
+      const brCompletati = brTargetizzati.filter(r => (r.importoMesePrecedente || 0) >= targetBassoRendente).length;
+      const globalFatto = rubricaValues.reduce((acc, r) => acc + (r.importoMesePrecedente || 0), 0);
+
+      const newArchiveEntry = { mese: savedMonth, brAssegnati: brTargetizzati.length, brCompletati, targetMensile, globalFatto };
+      const currentArchive = loadFromStorage<any[]>('tgest_archive', []);
+      const newArchiveList = [newArchiveEntry, ...currentArchive];
+      
+      localStorage.setItem('tgest_archive', JSON.stringify(newArchiveList));
+      setArchive(newArchiveList);
+
+      setRubrica(prev => {
+        const resetRubrica = { ...prev };
+        Object.keys(resetRubrica).forEach(id => {
+          if (resetRubrica[id].importoMesePrecedente) {
+            resetRubrica[id] = { ...resetRubrica[id], importoMesePrecedente: 0 };
+          }
+        });
+        return resetRubrica;
+      });
+
+      localStorage.setItem('tgest_current_month', currentMonth);
+    }
+  }, [rubrica, targetMensile, targetBassoRendente]);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [revisitModalId, setRevisitModalId] = useState<string | null>(null);
   const [showConfirmVisitModal, setShowConfirmVisitModal] = useState(false);
@@ -2913,7 +2953,7 @@ export default function App() {
   }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
 
   const crmStats = useMemo(() => {
-    let attivate = 0, nonAttive = 0, bassoRendente = 0, rip = 0, daAssegnare = 0;
+    let attivate = 0, nonAttive = 0, rip = 0, daAssegnare = 0;
     const combined = [...crmAnagrafiche, ...stores];
     
     // Filtriamo per conversione nel periodo
@@ -2928,12 +2968,29 @@ export default function App() {
       const s = rubrica[getRivenditaId(r)]?.stato;
       if (s === 'Attivata') attivate++;
       else if (s === 'Non Attiva') nonAttive++;
-      else if (s === 'Basso Rendente') bassoRendente++;
       else if (s === 'RIP') rip++;
       else daAssegnare++;
     });
-    return { total: filtrati.length, attivate, nonAttive, bassoRendente, rip, daAssegnare };
+    return { total: filtrati.length, attivate, nonAttive, rip, daAssegnare };
   }, [crmAnagrafiche, stores, rubrica, statsPeriod, customRange]);
+
+  const brStats = useMemo(() => {
+    const attuali = Object.values(rubrica) as RivenditaExtra[];
+    // Il totale (denominatore) è dato da quante rivendite hanno 'hasTarget' a true
+    const targetizzate = attuali.filter(r => r.hasTarget === true);
+    
+    // Il parziale (numeratore) aumenta solo se l'importo è >= targetBassoRendente
+    const completate = targetizzate.filter(r => {
+      const fatto = Number(r.importoMesePrecedente) || 0;
+      return fatto >= targetBassoRendente;
+    });
+
+    return {
+      assegnati: targetizzate.length,
+      completati: completate.length,
+      percentuale: targetizzate.length > 0 ? (completate.length / targetizzate.length) * 100 : 0
+    };
+  }, [rubrica, targetBassoRendente]);
 
   const visitStats = useMemo(() => {
     const combined = [...crmAnagrafiche, ...stores];
@@ -3011,7 +3068,9 @@ export default function App() {
     aiLockedUntil,
     cooldownSeconds,
     handleEditHistory,
-    handleDeleteHistory
+    handleDeleteHistory,
+    targetBassoRendente,
+    targetMensile
   }), [
     activeTab,
     expandedCardId,
@@ -3033,7 +3092,9 @@ export default function App() {
     aiLockedUntil,
     cooldownSeconds,
     handleEditHistory,
-    handleDeleteHistory
+    handleDeleteHistory,
+    targetBassoRendente,
+    targetMensile
   ]);
 
   return (
@@ -3472,7 +3533,6 @@ export default function App() {
                         <option value="">Tutti</option>
                         <option value="Attivata">Attivata</option>
                         <option value="Non Attiva">Non Attiva</option>
-                        <option value="Basso Rendente">Basso Rendente</option>
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -3555,8 +3615,8 @@ export default function App() {
 
                 {/* TARGET MENSILE (v2.45) */}
                 {(() => {
-                  const percentuale = mensileTarget > 0 ? Math.min(Math.round((fatturatoPeriodo / mensileTarget) * 100), 100) : 0;
-                  const mancano = Math.max(mensileTarget - fatturatoPeriodo, 0);
+                  const percentuale = targetMensile > 0 ? Math.min(Math.round((fatturatoPeriodo / targetMensile) * 100), 100) : 0;
+                  const mancano = Math.max(targetMensile - fatturatoPeriodo, 0);
                   const frase = getFraseMotivazionale(percentuale);
 
                   return (
@@ -3566,12 +3626,12 @@ export default function App() {
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Il Tuo Obiettivo</span>
                           <button 
                             onClick={() => {
-                              setTempTarget(mensileTarget.toString());
+                              setTempTarget(targetMensile.toString());
                               setShowTargetModal(true);
                             }}
                             className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95"
                           >
-                            <span className="text-xs font-black text-brand-700">€{mensileTarget.toLocaleString('it-IT')}</span>
+                            <span className="text-xs font-black text-brand-700">€{targetMensile.toLocaleString('it-IT')}</span>
                             <Edit3 className="w-3 h-3 text-brand-500" />
                           </button>
                         </div>
@@ -3596,10 +3656,10 @@ export default function App() {
                       <div className="flex flex-col gap-1 mt-3 px-1">
                         <div className="flex justify-between items-center">
                           <p className="text-[10px] font-bold text-slate-400 italic">
-                            {fatturatoPeriodo >= mensileTarget ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}
+                            {fatturatoPeriodo >= targetMensile ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}
                           </p>
                           <p className="text-[10px] font-bold text-slate-400">
-                            €{fatturatoPeriodo.toLocaleString('it-IT')} / €{mensileTarget.toLocaleString('it-IT')}
+                            €{fatturatoPeriodo.toLocaleString('it-IT')} / €{targetMensile.toLocaleString('it-IT')}
                           </p>
                         </div>
                         <p className="text-[11px] font-medium text-brand-600/80 mt-1">
@@ -3609,6 +3669,38 @@ export default function App() {
                     </div>
                   );
                 })()}
+
+                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm mb-4">
+                  <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <Target className="w-4 h-4 text-orange-500" /> Focus Campagna Mensile
+                  </h3>
+                  <div className="flex justify-between items-center bg-orange-50 p-3 rounded-xl border border-orange-100">
+                    <span className="text-xs font-bold text-orange-800 uppercase">Obiettivi Raggiunti</span>
+                    <span className="text-xl font-black text-orange-600">{brStats.completati} / {brStats.assegnati}</span>
+                  </div>
+                  {brStats.assegnati > 0 && (
+                    <div className="w-full bg-orange-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                      <div className="bg-orange-500 h-full transition-all duration-500" style={{ width: `${brStats.percentuale}%` }} />
+                    </div>
+                  )}
+                  
+                  {archive.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Archivio Storico Mesi</h4>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {archive.map((a, i) => (
+                          <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg text-xs">
+                            <span className="font-bold text-slate-700">{a.mese}</span>
+                            <div className="text-right">
+                              <span className="block font-bold text-brand-600">Fatt. €{a.globalFatto.toLocaleString('it-IT')}</span>
+                              <span className="block text-[10px] text-slate-500">BR: {a.brCompletati}/{a.brAssegnati}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="px-1">
                   <button
@@ -3851,7 +3943,6 @@ export default function App() {
                           <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex mt-2">
                             {crmStats.attivate > 0 && <div className="h-full bg-emerald-500" style={{ width: `${(crmStats.attivate / crmStats.total) * 100}%` }}></div>}
                             {crmStats.nonAttive > 0 && <div className="h-full bg-amber-400" style={{ width: `${(crmStats.nonAttive / crmStats.total) * 100}%` }}></div>}
-                            {crmStats.bassoRendente > 0 && <div className="h-full bg-orange-500" style={{ width: `${(crmStats.bassoRendente / crmStats.total) * 100}%` }}></div>}
                             {crmStats.rip > 0 && <div className="h-full bg-slate-800" style={{ width: `${(crmStats.rip / crmStats.total) * 100}%` }}></div>}
                             {crmStats.daAssegnare > 0 && <div className="h-full bg-slate-300" style={{ width: `${(crmStats.daAssegnare / crmStats.total) * 100}%` }}></div>}
                           </div>
@@ -3864,10 +3955,6 @@ export default function App() {
                             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                               <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div><span className="text-xs font-bold text-slate-600">Non Attive</span></div>
                               <span className="font-black text-slate-800">{crmStats.nonAttive}</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div><span className="text-xs font-bold text-slate-600 truncate max-w-[70px]">Basso Rend.</span></div>
-                              <span className="font-black text-slate-800">{crmStats.bassoRendente}</span>
                             </div>
                             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
                               <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-800"></div><span className="text-xs font-bold text-slate-600">RIP</span></div>
@@ -4255,6 +4342,18 @@ export default function App() {
                     <p className="text-[9px] text-amber-600/70 italic mt-0.5">* Il contatore si azzera alle 09:00 (Ora Italiana)</p>
                   </div>
 
+                  {/* TARGET GLOBALE (v2.5) */}
+                  <div className="py-2 border-b border-amber-200/50 mb-1 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-xs">Target Mensile (€):</span>
+                      <input type="number" inputMode="decimal" value={targetMensile} onChange={(e) => setTargetMensile(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-xs">Target Focus Mensile (€):</span>
+                      <input type="number" inputMode="decimal" value={targetBassoRendente} onChange={(e) => setTargetBassoRendente(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
+                    </div>
+                  </div>
+
                   <p>Stato Rete: <span className={`font-bold ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>{isOnline ? 'Online' : 'Offline'}</span></p>
                   <p>Versione App: <span className="font-bold">{DATA_VERSION}</span></p>
                 </div>
@@ -4501,8 +4600,8 @@ export default function App() {
                   onClick={() => {
                     const val = parseFloat(tempTarget);
                     if (!isNaN(val) && val > 0) {
-                      setMensileTarget(val);
-                      localStorage.setItem('tgest_target', val.toString());
+                      setTargetMensile(val);
+                      localStorage.setItem('tgest_target_mensile', val.toString());
                       setShowTargetModal(false);
                       showToast('Obiettivo aggiornato con successo!');
                     }
