@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Ricerca Rivendite Tabacchi",
-  "short_name": "Rivendite",
+  "name": "TgesT",
+  "short_name": "TgesT",
   "description": "App gestionale per la ricerca e il tracciamento delle rivendite",
   "start_url": "/",
   "scope": "/",
@@ -25,20 +25,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "https://picsum.photos/seed/screen1/1080/1920",
-      "sizes": "1080x1920",
-      "type": "image/jpeg",
-      "form_factor": "narrow"
-    },
-    {
-      "src": "https://picsum.photos/seed/screen2/1080/1920",
-      "sizes": "1080x1920",
-      "type": "image/jpeg",
-      "form_factor": "narrow"
     }
   ],
   "shortcuts": [
