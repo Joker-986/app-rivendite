@@ -528,37 +528,81 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   <TrendingDown className="w-3.5 h-3.5" />
                 </span>
               )}
-              {extra.hasTarget && (
-                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
-                  (targetBassoRendente - (extra.history?.reduce((acc, curr) => {
-                    if (curr.tipo === 'ORDINE') {
-                      const d = new Date(curr.data);
-                      const ora = new Date();
-                      if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
-                        return acc + (Number(curr.importo) || 0);
-                      }
-                    }
-                    return acc;
-                  }, 0) || 0)) <= 0 
-                    ? 'bg-emerald-500 text-white border-emerald-600' 
-                    : 'bg-amber-100 text-amber-700 border-amber-200'
-                }`}>
-                  {(() => {
-                    const fattoMese = extra.history?.reduce((acc, curr) => {
-                      if (curr.tipo === 'ORDINE') {
-                        const d = new Date(curr.data);
+              {/* BADGES KPI MULTI-MODALI (Aggiornati) */}
+              {(extra.hasTarget || extra.kpiAttivazione || extra.kpiProdotto) &&
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {/* KPI FATTURATO */}
+                  {extra.hasTarget && (
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
+                      (() => {
                         const ora = new Date();
-                        if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
-                          return acc + (Number(curr.importo) || 0);
-                        }
-                      }
-                      return acc;
-                    }, 0) || 0;
-                    const mancante = targetBassoRendente - fattoMese;
-                    return mancante <= 0 ? '🎯 Focus: OK' : `🎯 Focus: Manca €${mancante.toLocaleString('it-IT')}`;
-                  })()}
+                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
+                          if (curr.tipo === 'ORDINE') {
+                            const d = new Date(curr.data);
+                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
+                          }
+                          return acc;
+                        }, 0);
+                        return (targetBassoRendente - fattoMese) <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-200';
+                      })()
+                    }`}>
+                      <Target className="w-2.5 h-2.5" />
+                      {(() => {
+                        const ora = new Date();
+                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
+                          if (curr.tipo === 'ORDINE') {
+                            const d = new Date(curr.data);
+                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
+                          }
+                          return acc;
+                        }, 0);
+                        const mancante = targetBassoRendente - fattoMese;
+                        return mancante <= 0 ? 'Fatturato OK' : `Manca €${mancante.toLocaleString('it-IT')}`;
+                      })()}
+                    </div>
+                  )}
+
+                  {/* KPI ATTIVAZIONE */}
+                  {extra.kpiAttivazione && (
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
+                      (() => {
+                        const ora = new Date();
+                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
+                          if (curr.tipo === 'ORDINE') {
+                            const d = new Date(curr.data);
+                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
+                          }
+                          return acc;
+                        }, 0);
+                        return fattoMese > 0 ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200';
+                      })()
+                    }`}>
+                      <Activity className="w-2.5 h-2.5" />
+                      {(() => {
+                        const ora = new Date();
+                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
+                          if (curr.tipo === 'ORDINE') {
+                            const d = new Date(curr.data);
+                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
+                          }
+                          return acc;
+                        }, 0);
+                        return fattoMese > 0 ? 'Attivata' : 'Da Attivare';
+                      })()}
+                    </div>
+                  )}
+
+                  {/* KPI PRODOTTO */}
+                  {extra.kpiProdotto && (
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
+                      extra.kpiProdottoCompletato ? 'bg-purple-500 text-white border-purple-600' : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}>
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      {extra.kpiProdottoCompletato ? 'Piazzato' : (extra.kpiProdottoNome || 'Prodotto')}
+                    </div>
+                  )}
                 </div>
-              )}
+              }
             </div>
             
             <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
@@ -655,14 +699,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       
       {/* GRIGLIA PULITA DALLE RIDONDANZE */}
       <div className="grid grid-cols-2 gap-y-3 gap-x-2 pt-3 border-t border-slate-100 mt-2">
-        <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5 font-medium">Tipo</span>
-          <span className="font-bold text-slate-700">{res['Tipo Rivendita']}</span>
-        </div>
-        <div className="text-xs">
-          <span className="text-slate-400 block mb-0.5 font-medium">Distr. Automatico</span>
-          <span className="font-bold text-slate-700">{res['Distr. Automatico']}</span>
-        </div>
         {showCrmData && extra.giornoLevata && (
           <div className="text-xs">
             <span className="text-slate-400 block mb-0.5 font-medium">Giorno Levata</span>
@@ -880,16 +916,16 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         )}
       </div>
 
-      {/* Expandable Form -> Trasformato in Modal Responsive */}
+      {/* Expandable Form -> Trasformato in Modal Responsive Centrato */}
       {isExpanded && (
-        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setExpandedCardId(null)}>
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setExpandedCardId(null)}>
           <div 
-            className="bg-slate-50 w-full max-w-2xl sm:rounded-3xl rounded-t-[2rem] shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300"
+            className="bg-slate-50 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300"
             onClick={(e) => e.stopPropagation()} // Evita che il click dentro il modale lo chiuda
           >
             
             {/* Modal Header Fisso - Versione Dinamica e Responsive */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white sm:rounded-t-3xl rounded-t-[2rem] shrink-0">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-3xl shrink-0">
               <h4 className="font-bold text-slate-800 flex items-center gap-2 min-w-0 flex-1 mr-2">
                 <BookOpen className="w-5 h-5 text-brand-600 shrink-0" />
                 <span className="truncate text-sm sm:text-base">
@@ -906,6 +942,41 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
             {/* Modal Body Scrollabile */}
             <div className="p-5 overflow-y-auto space-y-5">
+              
+              {/* DATI UFFICIALI ADM (Nuova Sezione) */}
+              {!res.isStore && (
+                <details className="bg-slate-100/50 border border-slate-200 rounded-2xl overflow-hidden group">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-100 transition-colors list-none">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center">
+                        <Database className="w-4 h-4 text-slate-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Dati Ufficiali ADM</h4>
+                        <p className="text-[9px] text-slate-500 font-medium">Informazioni ministeriali registrate</p>
+                      </div>
+                    </div>
+                    <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
+                  </summary>
+                  <div className="p-4 pt-0 grid grid-cols-2 gap-4 border-t border-slate-200/50 bg-white/50">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Tipo Rivendita</span>
+                      <span className="text-xs font-black text-slate-700">{res['Tipo Rivendita'] || '-'}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Distr. Automatico</span>
+                      <span className="text-xs font-black text-slate-700">{res['Distr. Automatico'] || '-'}</span>
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Stato ADM</span>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${res['Stato'] === 'ATTIVA' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <span className="text-xs font-black text-slate-700">{res['Stato'] || 'NON SPECIFICATO'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              )}
               
               {res.isStore ? (
                 <div className="space-y-4">
@@ -1038,24 +1109,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       onChange={(e) => handleRubricaUpdate(id, 'zona', e.target.value)}
                       placeholder="Es. Vomero"
                       className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
-                    <input
-                      type="text"
-                      value={res['Distr. Automatico'] || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Distr. Automatico', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stato (Attiva/Chiusa)</label>
-                    <input
-                      type="text"
-                      value={res['Stato'] || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Stato', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
                     />
                   </div>
                 </div>
@@ -1448,7 +1501,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </div>
 
             {/* Modal Footer Fisso */}
-            <div className="p-4 bg-white border-t border-slate-200 shrink-0 sm:rounded-b-3xl rounded-none">
+            <div className="p-4 bg-white border-t border-slate-200 shrink-0 rounded-b-3xl">
               <button
                 onClick={() => {
                   if (!isCrmTab && activeTab !== 'rip') {
@@ -3379,7 +3432,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-md mx-auto p-4 space-y-6 overflow-hidden">
+      <main className="max-w-md mx-auto p-4 space-y-6 overflow-hidden" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
         <div 
           className="min-h-[calc(100vh-140px)]"
           onTouchStart={(e) => {
@@ -4254,7 +4307,7 @@ export default function App() {
       </main>
 
       {/* Multi-Function Floating Action Button (FAB) v2.13 */}
-      <div className="fixed bottom-6 right-6 z-40 h-16 w-16">
+      <div className="fixed right-6 z-40 h-16 w-16" style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
         {/* Overlay scuro sullo sfondo quando il menu è aperto (opzionale, decommenta se desiderato) */}
         {/* fabMenuOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[-1]" onClick={() => setFabMenuOpen(false)}></div> */}
 
