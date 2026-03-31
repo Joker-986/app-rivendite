@@ -1,11 +1,18 @@
 {
+  "id": "/",
   "name": "Ricerca Rivendite Tabacchi",
   "short_name": "Rivendite",
   "description": "App gestionale per la ricerca e il tracciamento delle rivendite",
   "start_url": "/",
+  "scope": "/",
+  "lang": "it",
+  "dir": "ltr",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#033d6b",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icon-196.png",
@@ -18,6 +25,34 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://picsum.photos/seed/screen1/1080/1920",
+      "sizes": "1080x1920",
+      "type": "image/jpeg",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "https://picsum.photos/seed/screen2/1080/1920",
+      "sizes": "1080x1920",
+      "type": "image/jpeg",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Giro Visite",
+      "short_name": "Giro",
+      "description": "Apri direttamente il giro",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icon-196.png",
+          "sizes": "196x196"
+        }
+      ]
     }
   ]
 }
