@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
@@ -1901,21 +1901,7 @@ export default function App() {
     };
   }, []);
 
-  // --- PREVENZIONE CHIUSURA/RICARICAMENTO ACCIDENTALE ---
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // I browser moderni ignorano il testo personalizzato, ma richiedono 
-      // preventDefault() e returnValue per mostrare il popup nativo di avviso.
-      e.preventDefault();
-      e.returnValue = '';
-    };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, []);
 
   useEffect(() => {
     const activeTabElement = document.getElementById(activeTab.startsWith('prov_') ? `tab-${activeTab}` : `tab-${activeTab}`);
@@ -3407,6 +3393,71 @@ export default function App() {
     targetBassoRendente,
     targetMensile
   ]);
+
+  // --- GESTIONE TASTO INDIETRO ANDROID (HARDWARE BACK BUTTON) ---
+  const uiStateRef = useRef<any>({});
+  useEffect(() => {
+    // Memorizziamo lo stato attuale della UI senza innescare re-render continui
+    uiStateRef.current = {
+      expandedCardId, showSettingsModal, showCreateStoreModal, revisitModalId,
+      showConfirmVisitModal, showClearGiroConfirmModal, showTargetModal, showGuideModal,
+      confirmModalOpen: confirmModal.isOpen, shareModalOpen: shareModal.isOpen,
+      showChangelog, fabMenuOpen, activeTab
+    };
+  });
+
+  const exitPromptRef = useRef(false);
+
+  useEffect(() => {
+    // Inizializza la "trappola" nella cronologia del browser
+    window.history.pushState({ isApp: true }, '');
+
+    const handlePopState = () => {
+      const s = uiStateRef.current;
+
+      // 1. Chiusura Popup e Modali (Priorità Massima)
+      if (
+        s.expandedCardId || s.showSettingsModal || s.showCreateStoreModal || 
+        s.revisitModalId || s.showConfirmVisitModal || s.showClearGiroConfirmModal || 
+        s.showTargetModal || s.showGuideModal || s.confirmModalOpen || 
+        s.shareModalOpen || s.showChangelog || s.fabMenuOpen
+      ) {
+        window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
+        setExpandedCardId(null); setShowSettingsModal(false); setShowCreateStoreModal(false);
+        setRevisitModalId(null); setShowConfirmVisitModal(false); setShowClearGiroConfirmModal(false);
+        setShowTargetModal(false); setShowGuideModal(false); 
+        setConfirmModal(prev => ({ ...prev, isOpen: false })); setShareModal(prev => ({ ...prev, isOpen: false }));
+        setShowChangelog(false); setFabMenuOpen(false);
+        return;
+      }
+
+      // 2. Ritorno alla Home (Scheda Giro)
+      if (s.activeTab !== 'giro') {
+        window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
+        setActiveTab('giro'); setViewMode('list'); 
+        setRivenditaFilter(''); setComuneFilter(''); setZonaFilter(''); setRubricaSort('none'); 
+        window.scrollTo(0, 0);
+        return;
+      }
+
+      // 3. Uscita con doppio tap se siamo già in Home
+      if (!exitPromptRef.current) {
+        window.history.pushState({ isApp: true }, ''); // Ripristina la trappola per catturare il secondo tap
+        exitPromptRef.current = true;
+        setToast({ show: true, message: 'Premi di nuovo indietro per uscire', type: 'info' });
+        
+        setTimeout(() => {
+          exitPromptRef.current = false;
+        }, 2000);
+      } else {
+        // L'utente ha premuto due volte entro 2 secondi. Facciamo tornare indietro il browser per uscire.
+        window.history.go(-2);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans" style={{ overscrollBehaviorY: 'contain' }}>
