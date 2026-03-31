@@ -5,18 +5,118 @@ import fs from 'fs';
 import * as cheerio from 'cheerio';
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from 'dotenv';
+import Database from 'better-sqlite3';
+
 dotenv.config(); // Carica la chiave da Render
 
 const app = express();
 const PORT = 3000;
 const APP_VERSION = Date.now().toString(); // Versione dinamica basata sul timestamp di avvio server
 
+// Inizializzazione Database SQLite
+const dbPath = path.join(process.cwd(), 'tgest.db');
+const dbSqlite = new Database(dbPath);
+
+// Creazione tabelle se non esistono
+dbSqlite.exec(`
+  CREATE TABLE IF NOT EXISTS crm_data (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS giro_visite (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS stores (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS rubrica (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Verifica variabili d'ambiente all'avvio
 if (!process.env.GEMINI_API_KEY) {
   console.warn("ATTENZIONE: GEMINI_API_KEY non configurata nelle variabili d'ambiente.");
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// API per la persistenza dei dati
+app.get('/api/db/sync', (req, res) => {
+  try {
+    const crm = dbSqlite.prepare('SELECT data FROM crm_data').all().map((row: any) => JSON.parse(row.data));
+    const giro = dbSqlite.prepare('SELECT data FROM giro_visite').all().map((row: any) => JSON.parse(row.data));
+    const stores = dbSqlite.prepare('SELECT data FROM stores').all().map((row: any) => JSON.parse(row.data));
+    const rubricaRows = dbSqlite.prepare('SELECT id, data FROM rubrica').all();
+    const rubrica: Record<string, any> = {};
+    rubricaRows.forEach((row: any) => {
+      rubrica[row.id] = JSON.parse(row.data);
+    });
+
+    res.json({ crm, giro, stores, rubrica });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch data from DB' });
+  }
+});
+
+app.post('/api/db/save', (req, res) => {
+  const { type, data } = req.body;
+  try {
+    if (type === 'crm') {
+      const deleteStmt = dbSqlite.prepare('DELETE FROM crm_data');
+      const insertStmt = dbSqlite.prepare('INSERT INTO crm_data (id, data) VALUES (?, ?)');
+      const transaction = dbSqlite.transaction((items: any[]) => {
+        deleteStmt.run();
+        for (const item of items) {
+          const id = item.uid || `${item['Comune']}_${item['Num. Rivendita']}`;
+          insertStmt.run(id, JSON.stringify(item));
+        }
+      });
+      transaction(data);
+    } else if (type === 'giro') {
+      const deleteStmt = dbSqlite.prepare('DELETE FROM giro_visite');
+      const insertStmt = dbSqlite.prepare('INSERT INTO giro_visite (id, data) VALUES (?, ?)');
+      const transaction = dbSqlite.transaction((items: any[]) => {
+        deleteStmt.run();
+        for (const item of items) {
+          const id = item.uid || `${item['Comune']}_${item['Num. Rivendita']}`;
+          insertStmt.run(id, JSON.stringify(item));
+        }
+      });
+      transaction(data);
+    } else if (type === 'stores') {
+      const deleteStmt = dbSqlite.prepare('DELETE FROM stores');
+      const insertStmt = dbSqlite.prepare('INSERT INTO stores (id, data) VALUES (?, ?)');
+      const transaction = dbSqlite.transaction((items: any[]) => {
+        deleteStmt.run();
+        for (const item of items) {
+          const id = item.uid || `${item['Comune']}_${item['Num. Rivendita']}`;
+          insertStmt.run(id, JSON.stringify(item));
+        }
+      });
+      transaction(data);
+    } else if (type === 'rubrica') {
+      const insertStmt = dbSqlite.prepare('INSERT OR REPLACE INTO rubrica (id, data) VALUES (?, ?)');
+      const transaction = dbSqlite.transaction((entries: Record<string, any>) => {
+        for (const [id, value] of Object.entries(entries)) {
+          insertStmt.run(id, JSON.stringify(value));
+        }
+      });
+      transaction(data);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to save data to DB' });
+  }
+});
 
 // Anti-caching middleware for critical files
 app.use((req, res, next) => {

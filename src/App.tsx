@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, History } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -54,9 +54,12 @@ export interface RivenditaExtra {
   ordineEvaso?: boolean;
   note?: string;
   manualCap?: string;
+  ordinante?: 'alto' | 'basso' | '';
+  kpiAttivazione?: boolean;
+  kpiProdotto?: boolean;
+  kpiProdottoNome?: string;
+  kpiProdottoCompletato?: boolean;
   history?: RivenditaHistoryEntry[];
-  ultimoOrdine?: string;
-  ultimoImporto?: number;
   importoOrdine?: number;
   hostessData?: string;
   hostessInizio?: string;
@@ -65,7 +68,6 @@ export interface RivenditaExtra {
   showHostessModule?: boolean;
   ultimaHostessInfo?: string;
   zona?: string;
-  importoMesePrecedente?: number;
   targetMese?: number;
   hasTarget?: boolean;
   targetSpecifico?: number;
@@ -203,27 +205,39 @@ const getGoogleResetDate = () => {
 
 
 const LastOrderTile = ({ data }: { data: any }) => {
-  if (!data?.ultimoOrdine && !data?.ultimoImporto) return null;
+  const lastOrder = useMemo(() => {
+    if (!data?.history || data.history.length === 0) return null;
+    return [...data.history]
+      .filter(h => h.tipo === 'ORDINE')
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
+  }, [data?.history]);
+
+  if (!lastOrder) return null;
 
   return (
     <div className="mt-1 p-3 bg-white border border-slate-100 rounded-xl flex items-start gap-2 shadow-inner">
       <div className="flex-shrink-0 mt-0.5">
-        <ClipboardList className="w-3.5 h-3.5 text-slate-400" />
+        <Package className="w-3.5 h-3.5 text-brand-500" />
       </div>
       
       <div className="flex-grow flex items-center justify-between min-w-0">
         <div className="flex flex-col min-w-0">
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">
-            Ordine Precedente:
-          </span>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">
+              Ordine Precedente:
+            </span>
+            <span className="text-[9px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+              {new Date(lastOrder.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+            </span>
+          </div>
           <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">
-            {data.ultimoOrdine || "Nessuna nota"}
+            {lastOrder.note || "Nessuna nota"}
           </p>
         </div>
         
         <div className="text-right flex-shrink-0">
-          <span className="text-[10px] font-black text-brand-600 bg-brand-50 px-2.5 py-1 rounded-md">
-            {data.ultimoImporto ? `${data.ultimoImporto}€` : "0€"}
+          <span className="text-[10px] font-black text-brand-700">
+            €{Number(lastOrder.importo || 0).toLocaleString('it-IT')}
           </span>
         </div>
       </div>
@@ -490,17 +504,57 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
                 {res.isStore ? <span className="flex items-center gap-1"><Store className="w-3 h-3" />STORE #{res.storeNumber || res['Num. Rivendita']}</span> : `RIV. ${res['Num. Rivendita']}`}
               </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                {res['Stato']}
-              </span>
+              {activeTab === 'search' ? (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {res['Stato']}
+                </span>
+              ) : (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
+                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
+                  extra.stato === 'Non Attiva' ? 'bg-amber-100 text-amber-700' : 
+                  extra.stato === 'RIP' ? 'bg-slate-800 text-slate-100' : 
+                  'bg-slate-100 text-slate-500 border border-slate-200'
+                }`}>
+                  {extra.stato || 'Da definire'}
+                </span>
+              )}
+              {extra.ordinante === 'alto' && (
+                <span className="flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </span>
+              )}
+              {extra.ordinante === 'basso' && (
+                <span className="flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
+                  <TrendingDown className="w-3.5 h-3.5" />
+                </span>
+              )}
               {extra.hasTarget && (
                 <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
-                  (targetBassoRendente - (extra.importoMesePrecedente || 0)) <= 0 
+                  (targetBassoRendente - (extra.history?.reduce((acc, curr) => {
+                    if (curr.tipo === 'ORDINE') {
+                      const d = new Date(curr.data);
+                      const ora = new Date();
+                      if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
+                        return acc + (Number(curr.importo) || 0);
+                      }
+                    }
+                    return acc;
+                  }, 0) || 0)) <= 0 
                     ? 'bg-emerald-500 text-white border-emerald-600' 
                     : 'bg-amber-100 text-amber-700 border-amber-200'
                 }`}>
                   {(() => {
-                    const mancante = targetBassoRendente - (extra.importoMesePrecedente || 0);
+                    const fattoMese = extra.history?.reduce((acc, curr) => {
+                      if (curr.tipo === 'ORDINE') {
+                        const d = new Date(curr.data);
+                        const ora = new Date();
+                        if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
+                          return acc + (Number(curr.importo) || 0);
+                        }
+                      }
+                      return acc;
+                    }, 0) || 0;
+                    const mancante = targetBassoRendente - fattoMese;
                     return mancante <= 0 ? '🎯 Focus: OK' : `🎯 Focus: Manca €${mancante.toLocaleString('it-IT')}`;
                   })()}
                 </div>
@@ -826,23 +880,145 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         )}
       </div>
 
-      {/* Expandable Form */}
+      {/* Expandable Form -> Trasformato in Modal Responsive */}
       {isExpanded && (
-        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-in slide-in-from-top-2 duration-200">
-          <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
-            <BookOpen className="w-4 h-4 text-brand-600" />
-            Informazioni Extra
-          </h4>
+        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setExpandedCardId(null)}>
+          <div 
+            className="bg-slate-50 w-full max-w-2xl sm:rounded-3xl rounded-t-[2rem] shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()} // Evita che il click dentro il modale lo chiuda
+          >
+            
+            {/* Modal Header Fisso - Versione Dinamica e Responsive */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white sm:rounded-t-3xl rounded-t-[2rem] shrink-0">
+              <h4 className="font-bold text-slate-800 flex items-center gap-2 min-w-0 flex-1 mr-2">
+                <BookOpen className="w-5 h-5 text-brand-600 shrink-0" />
+                <span className="truncate text-sm sm:text-base">
+                  {res.isStore ? 'Store' : 'Riv.'} #{res.isStore ? (res.storeNumber || res['Num. Rivendita']) : res['Num. Rivendita']} • {city}
+                </span>
+              </h4>
+              <button 
+                onClick={() => setExpandedCardId(null)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors bg-slate-50 shrink-0"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
 
-          {res.isStore ? (
-            <div className="space-y-4">
-              {/* Sezione Identità */}
-              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
-                  <Store className="w-4 h-4 text-brand-600" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
+            {/* Modal Body Scrollabile */}
+            <div className="p-5 overflow-y-auto space-y-5">
+              
+              {res.isStore ? (
+                <div className="space-y-4">
+                  {/* Sezione Identità */}
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
+                      <Store className="w-4 h-4 text-brand-600" />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Identità Store</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1 col-span-1 sm:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. Manuale</label>
+                        <input
+                          type="text"
+                          maxLength={5}
+                          value={extra.manualCap || ''}
+                          onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
+                          placeholder="Es. 80100"
+                          className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                        />
+                      </div>
+                      <div className="space-y-1 col-span-1 sm:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Zona / Quartiere</label>
+                        <input
+                          type="text"
+                          value={extra.zona || ''}
+                          onChange={(e) => handleRubricaUpdate(id, 'zona', e.target.value)}
+                          placeholder="Es. Vomero"
+                          className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                        />
+                      </div>
+                      <div className="space-y-1 col-span-1 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Insegna</label>
+                        <input
+                          type="text"
+                          value={res.storeName || ''}
+                          onChange={(e) => handleStoreUpdate?.(id, 'storeName', e.target.value)}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Identificativo</label>
+                        <input
+                          type="text"
+                          value={res.storeNumber || res['Num. Rivendita'] || ''}
+                          onChange={(e) => handleStoreUpdate?.(id, 'storeNumber', e.target.value)}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipologia</label>
+                        <select
+                          value={res.isChain ? 'true' : 'false'}
+                          onChange={(e) => handleStoreUpdate?.(id, 'isChain', e.target.value === 'true')}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                        >
+                          <option value="false">Punto Vendita Singolo</option>
+                          <option value="true">Parte di una Catena</option>
+                        </select>
+                      </div>
+                      {res.isChain && (
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Totale Punti Vendita</label>
+                          <input
+                            type="number"
+                            value={res.chainCount || 1}
+                            onChange={(e) => handleStoreUpdate?.(id, 'chainCount', parseInt(e.target.value) || 1)}
+                            className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sezione Localizzazione */}
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
+                      <MapPin className="w-4 h-4 text-brand-600" />
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Localizzazione</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia</label>
+                        <input
+                          type="text"
+                          value={res['Prov.']}
+                          onChange={(e) => handleStoreUpdate?.(id, 'Prov.', e.target.value.toUpperCase())}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune</label>
+                        <input
+                          type="text"
+                          value={res['Comune']}
+                          onChange={(e) => handleStoreUpdate?.(id, 'Comune', e.target.value)}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo Completo</label>
+                        <input
+                          type="text"
+                          value={res['Indirizzo']}
+                          onChange={(e) => handleStoreUpdate?.(id, 'Indirizzo', e.target.value)}
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
                   <div className="space-y-1 col-span-1 sm:col-span-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. Manuale</label>
                     <input
@@ -864,454 +1040,431 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
                     />
                   </div>
-                  <div className="space-y-1 col-span-1 sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Insegna</label>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
                     <input
                       type="text"
-                      value={res.storeName || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'storeName', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Identificativo</label>
-                    <input
-                      type="text"
-                      value={res.storeNumber || res['Num. Rivendita'] || ''}
-                      onChange={(e) => handleStoreUpdate?.(id, 'storeNumber', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipologia</label>
-                    <select
-                      value={res.isChain ? 'true' : 'false'}
-                      onChange={(e) => handleStoreUpdate?.(id, 'isChain', e.target.value === 'true')}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    >
-                      <option value="false">Punto Vendita Singolo</option>
-                      <option value="true">Parte di una Catena</option>
-                    </select>
-                  </div>
-                  {res.isChain && (
-                    <div className="space-y-1 col-span-1 sm:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Totale Punti Vendita</label>
-                      <input
-                        type="number"
-                        value={res.chainCount || 1}
-                        onChange={(e) => handleStoreUpdate?.(id, 'chainCount', parseInt(e.target.value) || 1)}
-                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Sezione Localizzazione */}
-              <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-50">
-                  <MapPin className="w-4 h-4 text-brand-600" />
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Localizzazione</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia</label>
-                    <input
-                      type="text"
-                      value={res['Prov.']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Prov.', e.target.value.toUpperCase())}
+                      value={res['Distr. Automatico'] || ''}
+                      onChange={(e) => handleStoreUpdate?.(id, 'Distr. Automatico', e.target.value)}
                       className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stato (Attiva/Chiusa)</label>
                     <input
                       type="text"
-                      value={res['Comune']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Comune', e.target.value)}
+                      value={res['Stato'] || ''}
+                      onChange={(e) => handleStoreUpdate?.(id, 'Stato', e.target.value)}
                       className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
                     />
                   </div>
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo Completo</label>
-                    <input
-                      type="text"
-                      value={res['Indirizzo']}
-                      onChange={(e) => handleStoreUpdate?.(id, 'Indirizzo', e.target.value)}
-                      className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-              <div className="space-y-1 col-span-1 sm:col-span-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">C.A.P. Manuale</label>
-                <input
-                  type="text"
-                  maxLength={5}
-                  value={extra.manualCap || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'manualCap', e.target.value.replace(/\D/g, ''))}
-                  placeholder="Es. 80100"
-                  className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                />
-              </div>
-              <div className="space-y-1 col-span-1 sm:col-span-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Zona / Quartiere</label>
-                <input
-                  type="text"
-                  value={extra.zona || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'zona', e.target.value)}
-                  placeholder="Es. Vomero"
-                  className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
-                <input
-                  type="text"
-                  value={res['Distr. Automatico'] || ''}
-                  onChange={(e) => handleStoreUpdate?.(id, 'Distr. Automatico', e.target.value)}
-                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stato (Attiva/Chiusa)</label>
-                <input
-                  type="text"
-                  value={res['Stato'] || ''}
-                  onChange={(e) => handleStoreUpdate?.(id, 'Stato', e.target.value)}
-                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
-                />
-              </div>
-            </div>
-          )}
-          
-          {(extra.lastDataVisita || (extra.visitata === 'Si' && extra.dataVisita)) && (
-            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-2">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold text-[10px] uppercase tracking-wider mb-1">
-                <Clock className="w-3.5 h-3.5" />
-                {extra.visitata === 'Si' ? 'VISITATA IL' : 'ULTIMA VISITA'}
-              </div>
-              <p className="text-xs text-emerald-700">
-                Data: <span className="font-bold">
-                  {extra.visitata === 'Si' 
-                    ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
-                    : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
-                  }
-                </span> alle <span className="font-bold">
-                  {extra.visitata === 'Si' ? extra.oraVisita : extra.lastOraVisita}
-                </span>
-              </p>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Stato</label>
-              <select
-                value={extra.stato}
-                onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              >
-                <option value="">Seleziona</option>
-                <option value="Attivata">Attivata</option>
-                <option value="Non Attiva">Non Attiva</option>
-                <option value="RIP">RIP</option>
-              </select>
-            </div>
-
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Data e Ora Prossima Visita (Programmata)</label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={extra.dataRivisita || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
-                  className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-                <select
-                  value={extra.oraRivisita || ''}
-                  onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
-                  className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                >
-                  <option value="">Ora</option>
-                  {getAvailableTimes(extra.dataRivisita || '', id, rubrica || {}).map(time => (
-                    <option key={time} value={time}>{time}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Giorno Levata</label>
-              <select
-                value={extra.giornoLevata}
-                onChange={(e) => handleRubricaUpdate(id, 'giornoLevata', e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              >
-                <option value="">Seleziona</option>
-                <option value="Lunedì">Lunedì</option>
-                <option value="Martedì">Martedì</option>
-                <option value="Mercoledì">Mercoledì</option>
-                <option value="Giovedì">Giovedì</option>
-                <option value="Venerdì">Venerdì</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Riferimento (Referente)</label>
-              <input
-                type="text"
-                value={extra.riferimento}
-                onChange={(e) => handleRubricaUpdate(id, 'riferimento', e.target.value)}
-                placeholder="Nome del referente"
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Telefono</label>
-              <input
-                type="tel"
-                value={extra.telefono}
-                onChange={(e) => handleRubricaUpdate(id, 'telefono', e.target.value)}
-                placeholder="Numero di telefono"
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Mail</label>
-              <input
-                type="email"
-                value={extra.mail}
-                onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
-                placeholder="Indirizzo email"
-                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">P. IVA</label>
-                <input
-                  type="text"
-                  value={extra.pIva}
-                  onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
-                  placeholder="11 cifre"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Codice SDI</label>
-                <input
-                  type="text"
-                  value={extra.codiceUnivoco || ''}
-                  maxLength={7}
-                  onChange={(e) => handleRubricaUpdate(id, 'codiceUnivoco', e.target.value.toUpperCase())}
-                  placeholder="7 caratteri"
-                  className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm uppercase font-bold"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Note</label>
-              <textarea
-                value={extra.note || ''}
-                onChange={(e) => handleRubricaUpdate(id, 'note', e.target.value)}
-                placeholder="Inserisci note libere..."
-                className="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
-              />
-            </div>
-
-            {/* SEZIONE OBIETTIVI E TARGET (Ottimizzata v2.5) */}
-            <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl mt-4">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-indigo-800 uppercase tracking-wider">Obiettivi</span>
-                </div>
-                <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded-lg border border-indigo-100 shadow-sm active:scale-95 transition-all">
-                  <input type="checkbox" checked={extra.hasTarget || false} onChange={(e) => handleRubricaUpdate(id, 'hasTarget', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase">
-                    🎯 Campagna Focus Mensile
-                  </span>
-                </label>
-              </div>
-              
-              {extra.hasTarget && (
-                <div className="flex flex-wrap items-center gap-3 animate-in slide-in-from-top-1 duration-200">
-                  <div className="flex-1 min-w-[120px]">
-                    <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-indigo-300 shadow-sm">
-                      <span className="text-[9px] font-black text-indigo-500 uppercase leading-none pl-1">Fatto (€)</span>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={extra.importoMesePrecedente || ''}
-                        onChange={(e) => handleRubricaUpdate(id, 'importoMesePrecedente', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="flex-1 bg-transparent outline-none text-sm font-black text-indigo-900 text-right pr-1 w-full"
-                      />
-                    </div>
-                  </div>
-                  
-                  {(() => {
-                    const precedente = extra.importoMesePrecedente || 0;
-                    const mancante = targetBassoRendente - precedente;
-                    return (
-                      <div className={`px-2 py-2 rounded-lg border text-[10px] font-black uppercase tracking-tight flex-1 text-center shadow-sm ${mancante <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
-                        {mancante <= 0 ? `Target Focus OK` : `Mancano €${mancante.toLocaleString('it-IT')}`}
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
-            </div>
-
-            <div className="pt-2 border-t border-slate-200">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={extra.richiestaOrdine || false}
-                  onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
-                  className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-                />
-                <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
-              </label>
-            </div>
-
-            {extra.richiestaOrdine && (
-              <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
-                  <input
-                    type="date"
-                    value={extra.dataOrdine || ''}
-                    onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Note ordine (articoli da ordinare)</label>
-                  <textarea
-                    value={extra.noteOrdine || ''}
-                    onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
-                    placeholder="Inserisci qui gli articoli da ordinare..."
-                    rows={3}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Importo Ordine (€)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={extra.importoOrdine || ''}
-                    onChange={(e) => handleRubricaUpdate(id, 'importoOrdine', parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                  />
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={extra.ordineEvaso || false}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        handleActivitySave(id, 'ORDINE', extra.noteOrdine || '', extra.importoOrdine || 0);
-                      } else {
-                        handleRubricaUpdate(id, 'ordineEvaso', false);
+              
+              {(extra.lastDataVisita || (extra.visitata === 'Si' && extra.dataVisita)) && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-2">
+                  <div className="flex items-center gap-2 text-emerald-800 font-bold text-[10px] uppercase tracking-wider mb-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    {extra.visitata === 'Si' ? 'VISITATA IL' : 'ULTIMA VISITA'}
+                  </div>
+                  <p className="text-xs text-emerald-700">
+                    Data: <span className="font-bold">
+                      {extra.visitata === 'Si' 
+                        ? (extra.dataVisita ? new Date(extra.dataVisita).toLocaleDateString('it-IT') : '-')
+                        : (extra.lastDataVisita ? new Date(extra.lastDataVisita).toLocaleDateString('it-IT') : '-')
                       }
-                    }}
-                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                  />
-                  <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
-                </label>
-              </div>
-            )}
-
-            {/* SEZIONE HOSTESS - NUOVA LOGICA v2.37 */}
-            <div className="pt-2 border-t border-slate-200">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={extra.showHostessModule || false}
-                  onChange={(e) => handleRubricaUpdate(id, 'showHostessModule', e.target.checked)}
-                  className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
-                />
-                <span className="text-sm font-bold text-purple-700">Richiedi Hostess</span>
-              </label>
-            </div>
-
-            {extra.showHostessModule && (
-              <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl shadow-sm space-y-3">
-                <div className="flex items-center gap-2 mb-1 pb-2 border-b border-purple-100">
-                  <UserCheck className="w-4 h-4 text-purple-600" />
-                  <span className="text-xs font-bold text-purple-800 uppercase tracking-tight">Dettagli Servizio</span>
+                    </span> alle <span className="font-bold">
+                      {extra.visitata === 'Si' ? extra.oraVisita : extra.lastOraVisita}
+                    </span>
+                  </p>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Stato</label>
+                  <select
+                    value={extra.stato}
+                    onChange={(e) => handleRubricaUpdate(id, 'stato', e.target.value)}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  >
+                    <option value="">Seleziona</option>
+                    <option value="Attivata">Attivata</option>
+                    <option value="Non Attiva">Non Attiva</option>
+                    <option value="RIP">RIP</option>
+                  </select>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Giorno Servizio</label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Classificazione Ordini</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleRubricaUpdate(id, 'ordinante', extra.ordinante === 'alto' ? '' : 'alto')}
+                      className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border text-sm font-bold transition-all ${extra.ordinante === 'alto' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      <TrendingUp className={`w-4 h-4 ${extra.ordinante === 'alto' ? 'text-emerald-600' : ''}`} />
+                      Alto
+                    </button>
+                    <button
+                      onClick={() => handleRubricaUpdate(id, 'ordinante', extra.ordinante === 'basso' ? '' : 'basso')}
+                      className={`flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border text-sm font-bold transition-all ${extra.ordinante === 'basso' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      <TrendingDown className={`w-4 h-4 ${extra.ordinante === 'basso' ? 'text-red-600' : ''}`} />
+                      Basso
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Data e Ora Prossima Visita (Programmata)</label>
+                  <div className="flex gap-2">
                     <input
                       type="date"
-                      value={extra.hostessData || ''}
-                      onChange={(e) => handleRubricaUpdate(id, 'hostessData', e.target.value)}
-                      className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                      value={extra.dataRivisita || ''}
+                      onChange={(e) => handleRubricaUpdate(id, 'dataRivisita', e.target.value)}
+                      className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Inizio Turno</label>
                     <select
-                      value={extra.hostessInizio || ''}
-                      onChange={(e) => {
-                        const inizio = e.target.value;
-                        const fine = calcolaFineTurno(inizio);
-                        handleRubricaUpdate(id, 'hostessInizio', inizio);
-                        handleRubricaUpdate(id, 'hostessFine', fine);
-                      }}
-                      className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold text-purple-700"
+                      value={extra.oraRivisita || ''}
+                      onChange={(e) => handleRubricaUpdate(id, 'oraRivisita', e.target.value)}
+                      className="w-24 h-10 px-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     >
-                      <option value="">Seleziona Orario</option>
-                      {ORARI_INIZIO.map(ora => (
-                        <option key={ora} value={ora}>{ora}</option>
+                      <option value="">Ora</option>
+                      {getAvailableTimes(extra.dataRivisita || '', id, rubrica || {}).map(time => (
+                        <option key={time} value={time}>{time}</option>
                       ))}
                     </select>
                   </div>
-
-                  <button
-                    onClick={() => {
-                      if (extra.hostessData && extra.hostessInizio) {
-                        const notes = `${extra.hostessData} - dalle ${extra.hostessInizio} alle ${extra.hostessFine}`;
-                        handleActivitySave(id, 'HOSTESS', notes);
-                      }
-                    }}
-                    className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-xl shadow-sm active:scale-95 transition-all"
-                  >
-                    Salva Servizio
-                  </button>
                 </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Giorno Levata</label>
+                  <select
+                    value={extra.giornoLevata}
+                    onChange={(e) => handleRubricaUpdate(id, 'giornoLevata', e.target.value)}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  >
+                    <option value="">Seleziona</option>
+                    <option value="Lunedì">Lunedì</option>
+                    <option value="Martedì">Martedì</option>
+                    <option value="Mercoledì">Mercoledì</option>
+                    <option value="Giovedì">Giovedì</option>
+                    <option value="Venerdì">Venerdì</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Riferimento (Referente)</label>
+                  <input
+                    type="text"
+                    value={extra.riferimento}
+                    onChange={(e) => handleRubricaUpdate(id, 'riferimento', e.target.value)}
+                    placeholder="Nome del referente"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Telefono</label>
+                  <input
+                    type="tel"
+                    value={extra.telefono}
+                    onChange={(e) => handleRubricaUpdate(id, 'telefono', e.target.value)}
+                    placeholder="Numero di telefono"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Mail</label>
+                  <input
+                    type="email"
+                    value={extra.mail}
+                    onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
+                    placeholder="Indirizzo email"
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">P. IVA</label>
+                    <input
+                      type="text"
+                      value={extra.pIva}
+                      onChange={(e) => handleRubricaUpdate(id, 'pIva', e.target.value.replace(/\D/g, ''))}
+                      placeholder="11 cifre"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Codice SDI</label>
+                    <input
+                      type="text"
+                      value={extra.codiceUnivoco || ''}
+                      maxLength={7}
+                      onChange={(e) => handleRubricaUpdate(id, 'codiceUnivoco', e.target.value.toUpperCase())}
+                      placeholder="7 caratteri"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm uppercase font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Note</label>
+                  <textarea
+                    value={extra.note || ''}
+                    onChange={(e) => handleRubricaUpdate(id, 'note', e.target.value)}
+                    placeholder="Inserisci note libere..."
+                    className="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
+                  />
+                </div>
+
+                {/* SEZIONE KPI MULTIPLI (v3.0) */}
+                <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl mt-4">
+                  <div className="flex flex-col gap-1 mb-3">
+                    <span className="text-[10px] font-black text-indigo-800 uppercase tracking-wider flex items-center gap-1"><Target className="w-3.5 h-3.5"/> KPI Mensili Assegnati</span>
+                    <span className="text-[9px] text-indigo-500 font-medium">Seleziona uno o più obiettivi per questa rivendita</span>
+                  </div>
+
+                  {/* Toggles */}
+                  <div className="grid grid-cols-1 gap-2 mb-3">
+                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
+                      <input type="checkbox" checked={extra.hasTarget || false} onChange={(e) => handleRubricaUpdate(id, 'hasTarget', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
+                      <span className="text-xs font-bold text-indigo-700">🎯 KPI Fatturato Minimo</span>
+                    </label>
+                    
+                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
+                      <input type="checkbox" checked={extra.kpiAttivazione || false} onChange={(e) => handleRubricaUpdate(id, 'kpiAttivazione', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
+                      <span className="text-xs font-bold text-indigo-700">🚀 KPI Attivazione (1° Ordine)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
+                      <input type="checkbox" checked={extra.kpiProdotto || false} onChange={(e) => handleRubricaUpdate(id, 'kpiProdotto', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
+                      <span className="text-xs font-bold text-indigo-700">📦 KPI Prodotto Specifico</span>
+                    </label>
+                  </div>
+
+                  {/* Dettagli KPI Attivi */}
+                  {(extra.hasTarget || extra.kpiAttivazione || extra.kpiProdotto) && (
+                    <div className="space-y-2 pt-2 border-t border-indigo-100/50">
+                      {/* Calcolo base mese corrente */}
+                      {(() => {
+                        const ora = new Date();
+                        const meseCorrente = ora.getMonth();
+                        const annoCorrente = ora.getFullYear();
+                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
+                          if (curr.tipo === 'ORDINE') {
+                            const d = new Date(curr.data);
+                            if (d.getMonth() === meseCorrente && d.getFullYear() === annoCorrente) {
+                              return acc + (Number(curr.importo) || 0);
+                            }
+                          }
+                          return acc;
+                        }, 0);
+
+                        return (
+                          <>
+                            {extra.hasTarget && (
+                              <div className="flex flex-wrap items-center gap-2 animate-in slide-in-from-top-1 duration-200">
+                                <div className="flex-1 bg-white p-1.5 rounded-lg border border-indigo-200 flex justify-between items-center shadow-sm">
+                                  <span className="text-[9px] font-black text-indigo-500 uppercase">Fatto Mese</span>
+                                  <span className="text-xs font-black text-indigo-900">€{fattoMese.toFixed(2)}</span>
+                                </div>
+                                {(() => {
+                                  const mancante = targetBassoRendente - fattoMese;
+                                  return (
+                                    <div className={`px-2 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-tight flex-[1.5] text-center shadow-sm ${mancante <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                                      {mancante <= 0 ? '🎯 Fatturato OK' : `Mancano €${mancante.toLocaleString('it-IT')}`}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {extra.kpiAttivazione && (
+                              <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-indigo-200 shadow-sm animate-in slide-in-from-top-1 duration-200">
+                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stato Attivazione</span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${fattoMese > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {fattoMese > 0 ? '🚀 Attivata OK' : '⏳ In attesa'}
+                                </span>
+                              </div>
+                            )}
+
+                            {extra.kpiProdotto && (
+                              <div className="bg-white p-2 rounded-lg border border-indigo-200 shadow-sm space-y-2 animate-in slide-in-from-top-1 duration-200">
+                                <input 
+                                  type="text" 
+                                  placeholder="Nome prodotto (es. Bundle Waka)"
+                                  value={extra.kpiProdottoNome || ''}
+                                  onChange={(e) => handleRubricaUpdate(id, 'kpiProdottoNome', e.target.value)}
+                                  className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-1.5 rounded-md border border-slate-100">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={extra.kpiProdottoCompletato || false}
+                                    onChange={(e) => handleRubricaUpdate(id, 'kpiProdottoCompletato', e.target.checked)}
+                                    className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-700">Piazzato / Completato</span>
+                                </label>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={extra.richiestaOrdine || false}
+                      onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
+                      className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
+                  </label>
+                </div>
+
+                {extra.richiestaOrdine && (
+                  <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
+                      <input
+                        type="date"
+                        value={extra.dataOrdine || ''}
+                        onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-600">Note ordine (articoli da ordinare)</label>
+                      <textarea
+                        value={extra.noteOrdine || ''}
+                        onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
+                        placeholder="Inserisci qui gli articoli da ordinare..."
+                        rows={3}
+                        className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-600">Importo Ordine (€)</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={extra.importoOrdine || ''}
+                        onChange={(e) => handleRubricaUpdate(id, 'importoOrdine', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={extra.ordineEvaso || false}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            handleActivitySave(id, 'ORDINE', extra.noteOrdine || '', extra.importoOrdine || 0);
+                          } else {
+                            handleRubricaUpdate(id, 'ordineEvaso', false);
+                          }
+                        }}
+                        className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                      />
+                      <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
+                    </label>
+                  </div>
+                )}
+
+                {/* SEZIONE HOSTESS */}
+                <div className="pt-2 border-t border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={extra.showHostessModule || false}
+                      onChange={(e) => handleRubricaUpdate(id, 'showHostessModule', e.target.checked)}
+                      className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+                    />
+                    <span className="text-sm font-bold text-purple-700">Richiedi Hostess</span>
+                  </label>
+                </div>
+
+                {extra.showHostessModule && (
+                  <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl shadow-sm space-y-3">
+                    <div className="flex items-center gap-2 mb-1 pb-2 border-b border-purple-100">
+                      <UserCheck className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs font-bold text-purple-800 uppercase tracking-tight">Dettagli Servizio</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Giorno Servizio</label>
+                        <input
+                          type="date"
+                          value={extra.hostessData || ''}
+                          onChange={(e) => handleRubricaUpdate(id, 'hostessData', e.target.value)}
+                          className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Inizio Turno</label>
+                        <select
+                          value={extra.hostessInizio || ''}
+                          onChange={(e) => {
+                            const inizio = e.target.value;
+                            const fine = calcolaFineTurno(inizio);
+                            handleRubricaUpdate(id, 'hostessInizio', inizio);
+                            handleRubricaUpdate(id, 'hostessFine', fine);
+                          }}
+                          className="w-full h-10 px-3 bg-white border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold text-purple-700"
+                        >
+                          <option value="">Seleziona Orario</option>
+                          {ORARI_INIZIO.map(ora => (
+                            <option key={ora} value={ora}>{ora}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (extra.hostessData && extra.hostessInizio) {
+                            const notes = `${extra.hostessData} - dalle ${extra.hostessInizio} alle ${extra.hostessFine}`;
+                            handleActivitySave(id, 'HOSTESS', notes);
+                          }
+                        }}
+                        className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-xl shadow-sm active:scale-95 transition-all"
+                      >
+                        Salva Servizio
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Modal Footer Fisso */}
+            <div className="p-4 bg-white border-t border-slate-200 shrink-0 sm:rounded-b-3xl rounded-none">
+              <button
+                onClick={() => {
+                  if (!isCrmTab && activeTab !== 'rip') {
+                    if (!res.isStore) {
+                      addToCrm(res);
+                    }
+                  }
+                  setExpandedCardId(null);
+                }}
+                className="w-full py-3.5 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
+              >
+                {(isCrmTab || activeTab === 'rip') ? 'Salva Modifiche' : 'Salva nel CRM'}
+              </button>
+            </div>
+
           </div>
-          
-          <button
-            onClick={() => {
-              if (!isCrmTab && activeTab !== 'rip') {
-                if (!res.isStore) {
-                  addToCrm(res);
-                }
-              }
-              setExpandedCardId(null);
-            }}
-            className="w-full mt-4 py-3 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
-          >
-            {(isCrmTab || activeTab === 'rip') ? 'Salva Modifiche' : 'Salva nel CRM'}
-          </button>
         </div>
       )}
     </div>
@@ -1488,8 +1641,23 @@ export default function App() {
     } else if (savedMonth !== currentMonth) {
       const rubricaValues = Object.values(rubrica) as RivenditaExtra[];
       const brTargetizzati = rubricaValues.filter(r => r.hasTarget);
-      const brCompletati = brTargetizzati.filter(r => (r.importoMesePrecedente || 0) >= targetBassoRendente).length;
-      const globalFatto = rubricaValues.reduce((acc, r) => acc + (r.importoMesePrecedente || 0), 0);
+      
+      // Calcolo fatto del mese precedente per l'archivio
+      const [prevYear, prevMonth] = savedMonth.split('-').map(Number);
+      const getFattoMese = (r: RivenditaExtra, month: number, year: number) => {
+        return (r.history || []).reduce((acc, curr) => {
+          if (curr.tipo === 'ORDINE') {
+            const d = new Date(curr.data);
+            if (d.getMonth() === (month - 1) && d.getFullYear() === year) {
+              return acc + (Number(curr.importo) || 0);
+            }
+          }
+          return acc;
+        }, 0);
+      };
+
+      const brCompletati = brTargetizzati.filter(r => getFattoMese(r, prevMonth, prevYear) >= targetBassoRendente).length;
+      const globalFatto = rubricaValues.reduce((acc, r) => acc + getFattoMese(r, prevMonth, prevYear), 0);
 
       const newArchiveEntry = { mese: savedMonth, brAssegnati: brTargetizzati.length, brCompletati, targetMensile, globalFatto };
       const currentArchive = loadFromStorage<any[]>('tgest_archive', []);
@@ -1497,16 +1665,6 @@ export default function App() {
       
       localStorage.setItem('tgest_archive', JSON.stringify(newArchiveList));
       setArchive(newArchiveList);
-
-      setRubrica(prev => {
-        const resetRubrica = { ...prev };
-        Object.keys(resetRubrica).forEach(id => {
-          if (resetRubrica[id].importoMesePrecedente) {
-            resetRubrica[id] = { ...resetRubrica[id], importoMesePrecedente: 0 };
-          }
-        });
-        return resetRubrica;
-      });
 
       localStorage.setItem('tgest_current_month', currentMonth);
     }
@@ -1579,11 +1737,19 @@ export default function App() {
       let migratedCount = 0;
 
       Object.keys(newRubrica).forEach(id => {
-        const data = newRubrica[id];
+        // 0. GHOST BUSTER (Garbage Collector): Se non esiste in CRM, Store o Giro, eliminalo dal DB
+        const exists = [...crmAnagrafiche, ...stores, ...giroVisite].some(r => getRivenditaId(r) === id);
+        if (!exists) {
+          delete newRubrica[id];
+          migratedCount++;
+          return; // Salta il resto del ciclo per questo record eliminato
+        }
+
+        const data = newRubrica[id] as any;
         if (!data.history) data.history = [];
 
-        // 1. Migrazione Vecchie Visite (se non già in history)
-        if (data.dataVisita && !data.history.some(h => h.tipo === 'VISITA' && h.data.includes(data.dataVisita!))) {
+        // 1. Migrazione Vecchie Visite
+        if (data.dataVisita && !data.history.some((h: any) => h.tipo === 'VISITA' && h.data.includes(data.dataVisita!))) {
           data.history.push({
             data: new Date(data.dataVisita).toISOString(),
             tipo: 'VISITA',
@@ -1594,7 +1760,7 @@ export default function App() {
         }
 
         // 2. Migrazione Vecchi Ordini Evasi
-        if (data.ordineEvaso && data.noteOrdine && !data.history.some(h => h.tipo === 'ORDINE' && h.note === data.noteOrdine)) {
+        if (data.ordineEvaso && data.noteOrdine && !data.history.some((h: any) => h.tipo === 'ORDINE' && h.note === data.noteOrdine)) {
           data.history.push({
             data: data.dataOrdine ? new Date(data.dataOrdine).toISOString() : new Date().toISOString(),
             tipo: 'ORDINE',
@@ -1604,15 +1770,26 @@ export default function App() {
           migratedCount++;
         }
         
-        // Ordina la history per data decrescente dopo la migrazione
-        data.history.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+        // 3. Automazione "Attivata"
+        const hasOrders = data.history.some((h: any) => h.tipo === 'ORDINE');
+        const hasFatturato = (data.importoMesePrecedente || 0) > 0 || (data.ultimoImporto || 0) > 0 || (data.importoOrdine || 0) > 0;
+        if ((hasOrders || hasFatturato) && data.stato !== 'Attivata') {
+          data.stato = 'Attivata';
+          migratedCount++;
+        }
+
+        // 4. Pulizia dati ridondanti
+        if (data.ultimoOrdine !== undefined) { delete data.ultimoOrdine; migratedCount++; }
+        if (data.ultimoImporto !== undefined) { delete data.ultimoImporto; migratedCount++; }
+        if (data.importoMesePrecedente !== undefined) { delete data.importoMesePrecedente; migratedCount++; }
+
+        // Ordina history
+        data.history.sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
       });
 
       if (migratedCount > 0) {
-        console.log(`Migrazione completata: ${migratedCount} record allineati.`);
-        showToast(`Riparazione completata: ${migratedCount} record allineati`, 'success');
-      } else {
-        showToast('Nessun dato da riparare', 'info');
+        console.log(`Pulizia profonda completata: rimossi fantasmi e dati ridondanti.`);
+        showToast(`Ottimizzazione completata!`, 'success');
       }
       return newRubrica;
     });
@@ -1628,9 +1805,9 @@ export default function App() {
 
   useEffect(() => {
     const lastRepair = localStorage.getItem('last_repair_v');
-    if (lastRepair !== '2.51') {
+    if (lastRepair !== '2.68') {
       runDataMigration();
-      localStorage.setItem('last_repair_v', '2.51');
+      localStorage.setItem('last_repair_v', '2.68');
     }
   }, []);
 
@@ -2144,6 +2321,11 @@ export default function App() {
         [id]: {
           ...(existing || {
             stato: '',
+            ordinante: '',
+            kpiAttivazione: false,
+            kpiProdotto: false,
+            kpiProdottoNome: '',
+            kpiProdottoCompletato: false,
             visitata: '',
             giornoLevata: '',
             riferimento: '',
@@ -2184,13 +2366,16 @@ export default function App() {
 
       const updates: Partial<RivenditaExtra> = {
         history: [newHistoryEntry, ...(current.history || [])].slice(0, 20),
-        ultimoOrdine: type === 'ORDINE' ? notes : (current.ultimoOrdine || ""),
-        ultimoImporto: type === 'ORDINE' ? amount : (current.ultimoImporto || 0),
         richiestaOrdine: type === 'ORDINE' ? false : current.richiestaOrdine,
         ordineEvaso: type === 'ORDINE' ? false : current.ordineEvaso,
         noteOrdine: type === 'ORDINE' ? "" : current.noteOrdine,
         importoOrdine: type === 'ORDINE' ? 0 : current.importoOrdine
       };
+
+      // Se è un ordine e la rivendita non è ancora attivata, la attiviamo in automatico
+      if (type === 'ORDINE' && current.stato !== 'Attivata') {
+        updates.stato = 'Attivata';
+      }
 
       // Gestione Persistenza Hostess
       if (type === 'HOSTESS' || (current.showHostessModule && current.hostessData && current.hostessInizio)) {
@@ -2280,6 +2465,11 @@ export default function App() {
         [id]: {
           ...(existing || {
             stato: '',
+            ordinante: '',
+            kpiAttivazione: false,
+            kpiProdotto: false,
+            kpiProdottoNome: '',
+            kpiProdottoCompletato: false,
             visitata: '',
             giornoLevata: '',
             riferimento: '',
@@ -2566,6 +2756,7 @@ export default function App() {
     const tabs = ['search', 'giro', 'crm', 'store'];
     provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
     tabs.push('rip');
+    tabs.push('kpi');
     tabs.push('statistiche');
     return tabs;
   }, [provincesInCrm]);
@@ -2576,6 +2767,9 @@ export default function App() {
     setRivenditaFilter('');
     setComuneFilter('');
     setZonaFilter('');
+    if (tab === 'giro') {
+      setRubricaSort('none');
+    }
     window.scrollTo(0, 0);
   }, []);
 
@@ -2662,6 +2856,7 @@ export default function App() {
   }, [activeTab, giroVisiteList, crmList, storeList, ripList, rubrica]);
 
   const getBaseListLength = useCallback(() => {
+    if (activeTab === 'giro') return giroVisiteList.length;
     if (activeTab === 'crm') return crmList.length;
     if (activeTab === 'store') return storeList.length;
     if (activeTab === 'rip') return ripList.length;
@@ -2670,7 +2865,7 @@ export default function App() {
       return [...crmList, ...storeList].filter(res => (res['Prov.'] || '').toUpperCase() === prov.toUpperCase()).length;
     }
     return 0;
-  }, [activeTab, crmList, storeList, ripList]);
+  }, [activeTab, giroVisiteList, crmList, storeList, ripList]);
 
   const handleFabSyncGenerate = useCallback(async () => {
     try {
@@ -2931,11 +3126,12 @@ export default function App() {
     const allEntries = Object.entries(rubrica) as [string, RivenditaExtra][];
     const mapEntry = (id: string, data: any) => {
       const riv = [...crmAnagrafiche, ...stores, ...giroVisite].find(r => getRivenditaId(r) === id);
+      if (!riv) return { nome: null }; // Evita i record fantasma negli ordini
       return { 
         id, 
-        nome: riv?.isStore ? (riv.storeName || 'Store') : `Riv. ${riv?.['Num. Rivendita']}`,
-        soloNumero: riv?.isStore ? (riv.storeNumber || '') : (riv?.['Num. Rivendita'] || ''),
-        comune: riv?.['Comune'] || '',
+        nome: riv.isStore ? (riv.storeName || 'Store') : `Riv. ${riv['Num. Rivendita']}`,
+        soloNumero: riv.isStore ? (riv.storeNumber || '') : (riv['Num. Rivendita'] || ''),
+        comune: riv['Comune'] || '',
         dataOrdine: data.dataOrdine,
         note: data.noteOrdine || 'Nessuna nota'
       };
@@ -2976,13 +3172,23 @@ export default function App() {
 
   const brStats = useMemo(() => {
     const attuali = Object.values(rubrica) as RivenditaExtra[];
-    // Il totale (denominatore) è dato da quante rivendite hanno 'hasTarget' a true
     const targetizzate = attuali.filter(r => r.hasTarget === true);
     
-    // Il parziale (numeratore) aumenta solo se l'importo è >= targetBassoRendente
+    const ora = new Date();
+    const meseCorrente = ora.getMonth();
+    const annoCorrente = ora.getFullYear();
+
     const completate = targetizzate.filter(r => {
-      const fatto = Number(r.importoMesePrecedente) || 0;
-      return fatto >= targetBassoRendente;
+      const fattoMese = (r.history || []).reduce((acc, curr) => {
+        if (curr.tipo === 'ORDINE') {
+          const d = new Date(curr.data);
+          if (d.getMonth() === meseCorrente && d.getFullYear() === annoCorrente) {
+            return acc + (Number(curr.importo) || 0);
+          }
+        }
+        return acc;
+      }, 0);
+      return fattoMese >= targetBassoRendente;
     });
 
     return {
@@ -2991,6 +3197,58 @@ export default function App() {
       percentuale: targetizzate.length > 0 ? (completate.length / targetizzate.length) * 100 : 0
     };
   }, [rubrica, targetBassoRendente]);
+
+  const kpiStats = useMemo(() => {
+    const attuali = Object.entries(rubrica) as [string, RivenditaExtra][];
+    const targetizzati = attuali.filter(([_, r]) => r.hasTarget || r.kpiAttivazione || r.kpiProdotto);
+
+    const ora = new Date();
+    const meseCorrente = ora.getMonth();
+    const annoCorrente = ora.getFullYear();
+
+    let fatturatoAssegnati = 0, fatturatoCompletati = 0;
+    let attivazioneAssegnati = 0, attivazioneCompletati = 0;
+    let prodottoAssegnati = 0, prodottoCompletati = 0;
+
+    const lista = targetizzati.map(([id, r]) => {
+      const riv = [...crmAnagrafiche, ...stores, ...giroVisite].find(x => getRivenditaId(x) === id);
+      if (!riv) return null; // Filtro anti-fantasma a runtime
+
+      const fattoMese = (r.history || []).reduce((acc: number, curr: any) => {
+        if (curr.tipo === 'ORDINE') {
+          const d = new Date(curr.data);
+          if (d.getMonth() === meseCorrente && d.getFullYear() === annoCorrente) {
+            return acc + (Number(curr.importo) || 0);
+          }
+        }
+        return acc;
+      }, 0);
+
+      if (r.hasTarget) { fatturatoAssegnati++; if (fattoMese >= targetBassoRendente) fatturatoCompletati++; }
+      if (r.kpiAttivazione) { attivazioneAssegnati++; if (fattoMese > 0) attivazioneCompletati++; }
+      if (r.kpiProdotto) { prodottoAssegnati++; if (r.kpiProdottoCompletato) prodottoCompletati++; }
+
+      return {
+        id,
+        nome: riv.isStore ? (riv.storeName || 'Store') : `Riv. ${riv['Num. Rivendita']}`,
+        comune: riv['Comune'] || '',
+        soloNumero: riv.isStore ? (riv.storeNumber || '') : (riv['Num. Rivendita'] || ''),
+        fattoMese,
+        hasTarget: r.hasTarget,
+        kpiAttivazione: r.kpiAttivazione,
+        kpiProdotto: r.kpiProdotto,
+        kpiProdottoNome: r.kpiProdottoNome,
+        kpiProdottoCompletato: r.kpiProdottoCompletato
+      };
+    }).filter(x => x !== null);
+
+    return {
+      fatturato: { assegnati: fatturatoAssegnati, completati: fatturatoCompletati },
+      attivazione: { assegnati: attivazioneAssegnati, completati: attivazioneCompletati },
+      prodotto: { assegnati: prodottoAssegnati, completati: prodottoCompletati },
+      lista
+    };
+  }, [rubrica, targetBassoRendente, crmAnagrafiche, stores, giroVisite]);
 
   const visitStats = useMemo(() => {
     const combined = [...crmAnagrafiche, ...stores];
@@ -3103,82 +3361,20 @@ export default function App() {
       <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
         <div className="max-w-md mx-auto px-3 py-3">
           <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] [will-change:scroll-position] whitespace-nowrap">
-            <button
-              id="tab-search"
-              onClick={() => handleTabChange('search')}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Search className="w-4 h-4" />
-              Cerca
-            </button>
-            <button
-              id="tab-giro"
-              onClick={() => handleTabChange('giro')}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Navigation className="w-4 h-4" />
-              Giro ({giroVisiteList.length})
-            </button>
-            <button
-              id="tab-crm"
-              onClick={() => handleTabChange('crm')}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              CRM ({crmList.length})
-            </button>
-            <button
-              id="tab-store"
-              onClick={() => handleTabChange('store')}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Store className="w-4 h-4" />
-              Store ({storeList.length})
-            </button>
+            <button id="tab-search" onClick={() => handleTabChange('search')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Cerca</button>
+            <button id="tab-giro" onClick={() => handleTabChange('giro')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Giro ({giroVisiteList.length})</button>
+            <button id="tab-crm" onClick={() => handleTabChange('crm')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>CRM ({crmList.length})</button>
+            <button id="tab-store" onClick={() => handleTabChange('store')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Store ({storeList.length})</button>
             
             {provincesInCrm.map(prov => (
-              <button
-                key={prov}
-                id={`tab-prov_${prov}`}
-                onClick={() => handleTabChange(`prov_${prov}`)}
-                className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                  activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <MapPin className="w-4 h-4" />
-                {prov}
-              </button>
+              <button key={prov} id={`tab-prov_${prov}`} onClick={() => handleTabChange(`prov_${prov}`)} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{prov}</button>
             ))}
 
-            <button
-              id="tab-rip"
-              onClick={() => handleTabChange('rip')}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <AlertCircle className="w-4 h-4" />
-              RIP ({ripList.length})
-            </button>
-
-            <button
-              id="tab-statistiche"
-              onClick={() => { setActiveTab('statistiche'); setRivenditaFilter(''); setComuneFilter(''); window.scrollTo(0,0); }}
-              className={`flex-none px-5 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl transition-all ${
-                activeTab === 'statistiche' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <BarChart2 className="w-4 h-4" />
-              Statistiche
-            </button>
+            <button id="tab-rip" onClick={() => handleTabChange('rip')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>RIP ({ripList.length})</button>
+            
+            <button id="tab-kpi" onClick={() => { handleTabChange('kpi'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'kpi' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>KPI</button>
+            
+            <button id="tab-statistiche" onClick={() => { handleTabChange('statistiche'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'statistiche' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Statistiche</button>
           </div>
         </div>
       </nav>
@@ -3479,7 +3675,7 @@ export default function App() {
               )}
             </div>
 
-            {getBaseListLength() > 0 && activeTab !== 'search' && activeTab !== 'giro' && (
+            {getBaseListLength() > 0 && activeTab !== 'search' && (
               <div className="mt-2 bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden transition-all shadow-sm mx-1">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
@@ -3592,7 +3788,109 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'statistiche' ? (
+            {activeTab === 'kpi' ? (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <h2 className="text-xl font-bold text-slate-800 px-1">Plancia KPI e Target</h2>
+
+                {/* TARGET MENSILE GLOBALE */}
+                {(() => {
+                  const percentuale = targetMensile > 0 ? Math.min(Math.round((fatturatoPeriodo / targetMensile) * 100), 100) : 0;
+                  const mancano = Math.max(targetMensile - fatturatoPeriodo, 0);
+                  return (
+                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm mb-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex flex-col gap-1 flex-1">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Obiettivo Globale Mensile</span>
+                          <button onClick={() => { setTempTarget(targetMensile.toString()); setShowTargetModal(true); }} className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95 w-fit">
+                            <span className="text-xs font-black text-brand-700">€{targetMensile.toLocaleString('it-IT')}</span>
+                            <Edit3 className="w-3 h-3 text-brand-500" />
+                          </button>
+                        </div>
+                        <div className="text-right"><p className="text-2xl font-black text-brand-600">{percentuale}%</p></div>
+                      </div>
+                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner relative">
+                        <div className="h-full bg-gradient-to-r from-brand-300 to-brand-600 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${percentuale}%` }}>
+                          <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-full blur-[1px]"></div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mt-3 px-1">
+                        <p className="text-[10px] font-bold text-slate-400 italic">{fatturatoPeriodo >= targetMensile ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}</p>
+                        <p className="text-[10px] font-bold text-slate-400">€{fatturatoPeriodo.toLocaleString('it-IT')} / €{targetMensile.toLocaleString('it-IT')}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* RIEPILOGO KPI SECONDARI */}
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-2">🎯 KPI Fatturato ({targetBassoRendente}€)</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno superato la soglia</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-black text-indigo-600">{kpiStats.fatturato.completati}</span>
+                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.fatturato.assegnati}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-2">🚀 KPI Attivazioni</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno fatto il 1° ordine</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-black text-emerald-600">{kpiStats.attivazione.completati}</span>
+                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.attivazione.assegnati}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2">📦 KPI Prodotti</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Prodotti specifici piazzati</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-black text-purple-600">{kpiStats.prodotto.completati}</span>
+                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.prodotto.assegnati}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LISTA RIVENDITE IN KPI */}
+                {kpiStats.lista.length > 0 && (
+                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+                    <h3 className="font-bold text-slate-800 mb-3 text-sm">Dettaglio Rivendite in KPI</h3>
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                      {kpiStats.lista.map(k => (
+                        <div key={k.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">{k.nome}</p>
+                              <p className="text-[10px] text-slate-500">{k.comune}</p>
+                            </div>
+                            <button onClick={() => { setRivenditaFilter(k.soloNumero); setActiveTab('crm'); }} className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                              <ChevronRight className="w-3 h-3 text-slate-400" />
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {k.hasTarget && (
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese >= targetBassoRendente ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200'}`}>🎯 {k.fattoMese.toFixed(0)}€ / {targetBassoRendente}€</span>
+                            )}
+                            {k.kpiAttivazione && (
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese > 0 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-200'}`}>🚀 Attivazione</span>
+                            )}
+                            {k.kpiProdotto && (
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.kpiProdottoCompletato ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200'}`}>📦 {k.kpiProdottoNome || 'Prodotto'}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : activeTab === 'statistiche' ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <h2 className="text-xl font-bold text-slate-800 px-1">Le tue Statistiche</h2>
 
@@ -3604,7 +3902,6 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  
                   {statsPeriod === 'custom' && (
                     <div className="flex gap-2 animate-in fade-in zoom-in-95">
                       <input type="date" value={customRange.start} onChange={(e) => setCustomRange(prev => ({...prev, start: e.target.value}))} className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
@@ -3613,99 +3910,10 @@ export default function App() {
                   )}
                 </div>
 
-                {/* TARGET MENSILE (v2.45) */}
-                {(() => {
-                  const percentuale = targetMensile > 0 ? Math.min(Math.round((fatturatoPeriodo / targetMensile) * 100), 100) : 0;
-                  const mancano = Math.max(targetMensile - fatturatoPeriodo, 0);
-                  const frase = getFraseMotivazionale(percentuale);
-
-                  return (
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm mb-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex flex-col gap-1 flex-1">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Il Tuo Obiettivo</span>
-                          <button 
-                            onClick={() => {
-                              setTempTarget(targetMensile.toString());
-                              setShowTargetModal(true);
-                            }}
-                            className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95"
-                          >
-                            <span className="text-xs font-black text-brand-700">€{targetMensile.toLocaleString('it-IT')}</span>
-                            <Edit3 className="w-3 h-3 text-brand-500" />
-                          </button>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-black text-brand-600">
-                            {percentuale}%
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner relative">
-                        {/* Gradiente di base con effetto glass */}
-                        <div 
-                          className="h-full bg-gradient-to-r from-brand-300 to-brand-600 rounded-full transition-all duration-1000 ease-out relative" 
-                          style={{ width: `${percentuale}%` }}
-                        >
-                          {/* Effetto Lucido/Glass */}
-                          <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-full blur-[1px]"></div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col gap-1 mt-3 px-1">
-                        <div className="flex justify-between items-center">
-                          <p className="text-[10px] font-bold text-slate-400 italic">
-                            {fatturatoPeriodo >= targetMensile ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400">
-                            €{fatturatoPeriodo.toLocaleString('it-IT')} / €{targetMensile.toLocaleString('it-IT')}
-                          </p>
-                        </div>
-                        <p className="text-[11px] font-medium text-brand-600/80 mt-1">
-                          {frase}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm mb-4">
-                  <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <Target className="w-4 h-4 text-orange-500" /> Focus Campagna Mensile
-                  </h3>
-                  <div className="flex justify-between items-center bg-orange-50 p-3 rounded-xl border border-orange-100">
-                    <span className="text-xs font-bold text-orange-800 uppercase">Obiettivi Raggiunti</span>
-                    <span className="text-xl font-black text-orange-600">{brStats.completati} / {brStats.assegnati}</span>
-                  </div>
-                  {brStats.assegnati > 0 && (
-                    <div className="w-full bg-orange-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                      <div className="bg-orange-500 h-full transition-all duration-500" style={{ width: `${brStats.percentuale}%` }} />
-                    </div>
-                  )}
-                  
-                  {archive.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-100">
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Archivio Storico Mesi</h4>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {archive.map((a, i) => (
-                          <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg text-xs">
-                            <span className="font-bold text-slate-700">{a.mese}</span>
-                            <div className="text-right">
-                              <span className="block font-bold text-brand-600">Fatt. €{a.globalFatto.toLocaleString('it-IT')}</span>
-                              <span className="block text-[10px] text-slate-500">BR: {a.brCompletati}/{a.brAssegnati}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 <div className="px-1">
                   <button
                     onClick={exportHistoryToExcel}
-                    className="w-full mt-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all mb-6"
+                    className="w-full mt-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all mb-6"
                   >
                     <Download className="w-5 h-5" />
                     ESPORTA STORICO EXCEL (.CSV)
@@ -3972,8 +4180,8 @@ export default function App() {
               </div>
             ) : activeTab === 'giro' ? (
               viewMode === 'map' ? (
-                <MapView results={getCurrentList} />
-              ) : getCurrentList.length === 0 ? (
+                <MapView results={getSortedList} />
+              ) : getSortedList.length === 0 ? (
                 <div className="bg-white p-12 rounded-3xl text-center border border-slate-100 shadow-sm space-y-4">
                   <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                     <BookOpen className="w-10 h-10 text-slate-200" />
@@ -3991,7 +4199,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {getCurrentList.map((res: SearchResult) => {
+                  {getSortedList.map((res: SearchResult) => {
                     const id = getRivenditaId(res);
                     const originalIdx = giroVisite.findIndex(r => getRivenditaId(r) === id);
                     const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
