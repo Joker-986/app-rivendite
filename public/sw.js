@@ -1,7 +1,6 @@
-const VERSION = '{{VERSION}}'; // Iniettato dinamicamente dal server all'avvio
+const VERSION = '{{VERSION}}';
 const CACHE_NAME = 'tgest-cache-' + VERSION;
 
-// Risorse fondamentali da scaricare subito al primo avvio
 const APP_STATIC_RESOURCES = [
   '/',
   '/index.html',
@@ -38,13 +37,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/api/')) {
+  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
     return;
   }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // Ritorna la cache se c'è, altrimenti fai la chiamata di rete
       if (cachedResponse) {
         return cachedResponse;
       }
@@ -61,12 +59,15 @@ self.addEventListener('fetch', (event) => {
 
         return response;
       }).catch(() => {
-        // Fallback offline generico se la rete è assente e la risorsa non è in cache
-        return new Response('Sei offline. Controlla la tua connessione internet.', {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: new Headers({ 'Content-Type': 'text/plain' })
-        });
+        // IL TRUCCO PER PWABUILDER: Ritorna sempre status 200 con una vera paginetta HTML
+        return new Response(
+          '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Offline</title><style>body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#334155;}h1{font-size:1.5rem;margin-bottom:0.5rem;color:#0f172a;}</style></head><body><h1>Sei Offline 📶</h1><p>Controlla la connessione per usare l\'app.</p></body></html>',
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'text/html' })
+          }
+        );
       });
     })
   );
