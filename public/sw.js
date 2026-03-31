@@ -1,17 +1,28 @@
 const VERSION = '{{VERSION}}'; // Iniettato dinamicamente dal server all'avvio
 const CACHE_NAME = 'tgest-cache-' + VERSION;
 
+// Risorse fondamentali da scaricare subito al primo avvio
+const APP_STATIC_RESOURCES = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icon-196.png',
+  '/icon-512.png'
+];
+
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active service worker.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(APP_STATIC_RESOURCES);
+    })
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  // Take control of all open clients immediately.
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Delete old caches
       caches.keys().then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
@@ -27,35 +38,36 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // EXCLUDE API CALLS FROM CACHE
   if (event.request.url.includes('/api/')) {
     return;
   }
 
-  // Simple network-first strategy to ensure fresh content
-  // but fallback to cache if offline.
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Check if we received a valid response and it's not the service worker itself
+    caches.match(event.request).then((cachedResponse) => {
+      // Ritorna la cache se c'è, altrimenti fai la chiamata di rete
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(event.request).then((response) => {
         if (!response || response.status !== 200 || response.type !== 'basic' || event.request.url.includes('sw.js')) {
           return response;
         }
 
-        // IMPORTANT: Clone the response. A response is a stream
-        // and because we want the browser to consume the response
-        // as well as the cache consuming the response, we need
-        // to clone it so we have two streams.
         const responseToCache = response.clone();
-
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
 
         return response;
-      })
-      .catch(() => {
-        return caches.match(event.request);
-      })
+      }).catch(() => {
+        // Fallback offline generico se la rete è assente e la risorsa non è in cache
+        return new Response('Sei offline. Controlla la tua connessione internet.', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' })
+        });
+      });
+    })
   );
 });
