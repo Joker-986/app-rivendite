@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -1582,7 +1582,10 @@ export default function App() {
   }, [aiLockedUntil]);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = useState<string>('search');
-  const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('oggi');
+  const [meseSelezionato, setMeseSelezionato] = useState(() => {
+    return new Date().toISOString().slice(0, 7); 
+  });
+  const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('30g');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [radarTab, setRadarTab] = useState<'completate' | 'programmate'>('completate');
   const [statsOrdiniOpen, setStatsOrdiniOpen] = useState(false);
@@ -1590,20 +1593,38 @@ export default function App() {
   const [statsRadarOpen, setStatsRadarOpen] = useState(true);
 
   const isDateInRange = (dateStr?: string) => {
-    if (!dateStr) return statsPeriod === 'all';
-    const d = new Date(dateStr); d.setHours(0,0,0,0);
-    const now = new Date(); now.setHours(0,0,0,0);
+    if (!dateStr) return false;
     
-    if (statsPeriod === 'all') return true;
-    if (statsPeriod === 'oggi') return d.getTime() === now.getTime();
-    
-    if (statsPeriod === 'custom') {
-      if (!customRange.start || !customRange.end) return true;
-      return d >= new Date(customRange.start) && d <= new Date(customRange.end);
+    // Se siamo in KPI, usiamo il mese selezionato
+    if (activeTab === 'kpi') {
+      return dateStr.startsWith(meseSelezionato);
     }
     
-    const diffDays = Math.ceil(Math.abs(now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-    return statsPeriod === '7g' ? diffDays <= 7 : diffDays <= 30;
+    // Altrimenti (Statistiche, ecc.) usiamo i filtri di periodo
+    if (statsPeriod === 'all') return true;
+    const d = new Date(dateStr);
+    const ora = new Date();
+    
+    if (statsPeriod === 'oggi') {
+      return d.toDateString() === ora.toDateString();
+    }
+    if (statsPeriod === '7g') {
+      const weekAgo = new Date();
+      weekAgo.setDate(ora.getDate() - 7);
+      return d >= weekAgo;
+    }
+    if (statsPeriod === '30g') {
+      const monthAgo = new Date();
+      monthAgo.setDate(ora.getDate() - 30);
+      return d >= monthAgo;
+    }
+    if (statsPeriod === 'custom' && customRange.start && customRange.end) {
+      const start = new Date(customRange.start);
+      const end = new Date(customRange.end);
+      end.setHours(23, 59, 59, 999);
+      return d >= start && d <= end;
+    }
+    return false;
   };
   const [rivenditaFilter, setRivenditaFilter] = useState('');
   const [comuneFilter, setComuneFilter] = useState('');
@@ -1619,6 +1640,69 @@ export default function App() {
     localStorage.setItem('tgest_target_mensile', targetMensile.toString());
     localStorage.setItem('tgest_target_br', targetBassoRendente.toString());
   }, [targetMensile, targetBassoRendente]);
+
+  useEffect(() => {
+    // Inserisce uno stato iniziale fittizio per poter intercettare il tasto indietro
+    window.history.pushState(null, "", window.location.href);
+
+    const handleBackButton = () => {
+      const wantsToExit = window.confirm("Sei sicuro di voler uscire da TgesT?");
+      if (wantsToExit) {
+        // Se l'utente conferma, torniamo indietro e l'app si chiude
+        window.history.back();
+      } else {
+        // Se l'utente annulla, reinseriamo lo stato fittizio per bloccare nuovamente l'uscita
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    window.addEventListener("popstate", handleBackButton);
+
+    return () => {
+      window.removeEventListener("popstate", handleBackButton);
+    };
+  }, []);
+
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      try {
+        // Controlla se il browser supporta l'API
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log('Wake Lock attivato: lo schermo non andrà in standby.');
+          
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock rilasciato dal sistema.');
+          });
+        }
+      } catch (err: any) {
+        console.warn(`Errore Wake Lock: ${err.name}, ${err.message}`);
+      }
+    };
+
+    // Richiede il blocco all'avvio dell'app
+    requestWakeLock();
+
+    // Gestisce il caso in cui l'utente cambia app e poi torna sulla nostra
+    const handleVisibilityChange = () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock !== null) {
+        wakeLock.release().then(() => {
+          wakeLock = null;
+        });
+      }
+    };
+  }, []);
 
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [tempTarget, setTempTarget] = useState(targetMensile.toString());
@@ -1677,7 +1761,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     
-    const periodo = statsPeriod === 'all' ? 'TOTALE' : statsPeriod.toUpperCase();
+    const periodo = meseSelezionato.replace('-', '_');
     link.href = url;
     link.download = `TgesT_Report_${periodo}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
@@ -3185,7 +3269,7 @@ export default function App() {
       .map(([id, d]) => mapEntry(id, d)).filter(o => o.nome);
 
     return { daEvadere: daEvadereList.length, evasi: evasiList.length, listaDaEvadere: daEvadereList, listaEvasi: evasiList };
-  }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const crmStats = useMemo(() => {
     let attivate = 0, nonAttive = 0, rip = 0, daAssegnare = 0;
@@ -3207,15 +3291,15 @@ export default function App() {
       else daAssegnare++;
     });
     return { total: filtrati.length, attivate, nonAttive, rip, daAssegnare };
-  }, [crmAnagrafiche, stores, rubrica, statsPeriod, customRange]);
+  }, [crmAnagrafiche, stores, rubrica, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const brStats = useMemo(() => {
     const attuali = Object.values(rubrica) as RivenditaExtra[];
     const targetizzate = attuali.filter(r => r.hasTarget === true);
     
-    const ora = new Date();
-    const meseCorrente = ora.getMonth();
-    const annoCorrente = ora.getFullYear();
+    const [year, month] = meseSelezionato.split('-').map(Number);
+    const meseCorrente = month - 1;
+    const annoCorrente = year;
 
     const completate = targetizzate.filter(r => {
       const fattoMese = (r.history || []).reduce((acc, curr) => {
@@ -3235,15 +3319,15 @@ export default function App() {
       completati: completate.length,
       percentuale: targetizzate.length > 0 ? (completate.length / targetizzate.length) * 100 : 0
     };
-  }, [rubrica, targetBassoRendente]);
+  }, [rubrica, targetBassoRendente, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const kpiStats = useMemo(() => {
     const attuali = Object.entries(rubrica) as [string, RivenditaExtra][];
     const targetizzati = attuali.filter(([_, r]) => r.hasTarget || r.kpiAttivazione || r.kpiProdotto);
 
-    const ora = new Date();
-    const meseCorrente = ora.getMonth();
-    const annoCorrente = ora.getFullYear();
+    const [year, month] = meseSelezionato.split('-').map(Number);
+    const meseCorrente = month - 1;
+    const annoCorrente = year;
 
     let fatturatoAssegnati = 0, fatturatoCompletati = 0;
     let attivazioneAssegnati = 0, attivazioneCompletati = 0;
@@ -3287,7 +3371,7 @@ export default function App() {
       prodotto: { assegnati: prodottoAssegnati, completati: prodottoCompletati },
       lista
     };
-  }, [rubrica, targetBassoRendente, crmAnagrafiche, stores, giroVisite]);
+  }, [rubrica, targetBassoRendente, crmAnagrafiche, stores, giroVisite, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const visitStats = useMemo(() => {
     const combined = [...crmAnagrafiche, ...stores];
@@ -3324,7 +3408,7 @@ export default function App() {
       prossimi: prossimi.sort((a,b) => a.dateObj.getTime() - b.dateObj.getTime()).slice(0, 10), 
       rimanentiGiro: giroVisite.filter(r => (rubrica[getRivenditaId(r)] as RivenditaExtra)?.visitata !== 'Si').length 
     };
-  }, [rubrica, crmAnagrafiche, stores, giroVisite, statsPeriod, customRange]);
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const fatturatoPeriodo = useMemo(() => {
     let totale = 0;
@@ -3339,7 +3423,7 @@ export default function App() {
       }
     });
     return totale;
-  }, [rubrica, statsPeriod, customRange]);
+  }, [rubrica, meseSelezionato, statsPeriod, customRange, activeTab]);
 
   const sortedList = getSortedList;
 
@@ -3746,7 +3830,7 @@ export default function App() {
               </div>
 
               {/* Filtri Comuni */}
-              {activeTab !== 'statistiche' && (
+              {activeTab !== 'statistiche' && activeTab !== 'kpi' && (
                 <div className="flex flex-row gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -3896,108 +3980,137 @@ export default function App() {
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <h2 className="text-xl font-bold text-slate-800 px-1">Plancia KPI e Target</h2>
 
-                {/* TARGET MENSILE GLOBALE */}
-                {(() => {
-                  const percentuale = targetMensile > 0 ? Math.min(Math.round((fatturatoPeriodo / targetMensile) * 100), 100) : 0;
-                  const mancano = Math.max(targetMensile - fatturatoPeriodo, 0);
-                  return (
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm mb-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex flex-col gap-1 flex-1">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Obiettivo Globale Mensile</span>
-                          <button onClick={() => { setTempTarget(targetMensile.toString()); setShowTargetModal(true); }} className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95 w-fit">
-                            <span className="text-xs font-black text-brand-700">€{targetMensile.toLocaleString('it-IT')}</span>
-                            <Edit3 className="w-3 h-3 text-brand-500" />
-                          </button>
-                        </div>
-                        <div className="text-right"><p className="text-2xl font-black text-brand-600">{percentuale}%</p></div>
-                      </div>
-                      <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner relative">
-                        <div className="h-full bg-gradient-to-r from-brand-300 to-brand-600 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${percentuale}%` }}>
-                          <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-full blur-[1px]"></div>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center mt-3 px-1">
-                        <p className="text-[10px] font-bold text-slate-400 italic">{fatturatoPeriodo >= targetMensile ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}</p>
-                        <p className="text-[10px] font-bold text-slate-400">€{fatturatoPeriodo.toLocaleString('it-IT')} / €{targetMensile.toLocaleString('it-IT')}</p>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* RIEPILOGO KPI SECONDARI */}
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm flex justify-between items-center">
-                    <div>
-                      <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-2">🎯 KPI Fatturato ({targetBassoRendente}€)</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno superato la soglia</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xl font-black text-indigo-600">{kpiStats.fatturato.completati}</span>
-                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.fatturato.assegnati}</span>
-                    </div>
+                {/* SELETTORE MESE */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mese di Riferimento</span>
+                    <input 
+                      type="month" 
+                      value={meseSelezionato} 
+                      onChange={(e) => setMeseSelezionato(e.target.value)}
+                      className="text-sm font-bold text-brand-700 bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
+                    />
                   </div>
-
-                  <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex justify-between items-center">
-                    <div>
-                      <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-2">🚀 KPI Attivazioni</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno fatto il 1° ordine</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xl font-black text-emerald-600">{kpiStats.attivazione.completati}</span>
-                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.attivazione.assegnati}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm flex justify-between items-center">
-                    <div>
-                      <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2">📦 KPI Prodotti</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Prodotti specifici piazzati</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xl font-black text-purple-600">{kpiStats.prodotto.completati}</span>
-                      <span className="text-xs font-bold text-slate-400"> / {kpiStats.prodotto.assegnati}</span>
-                    </div>
+                  <div className="p-2 bg-brand-50 rounded-2xl">
+                    <Calendar className="w-5 h-5 text-brand-500" />
                   </div>
                 </div>
 
-                {/* LISTA RIVENDITE IN KPI */}
-                {kpiStats.lista.length > 0 && (
-                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-                    <h3 className="font-bold text-slate-800 mb-3 text-sm">Dettaglio Rivendite in KPI</h3>
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                      {kpiStats.lista.map(k => (
-                        <div key={k.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <p className="text-xs font-bold text-slate-800">{k.nome}</p>
-                              <p className="text-[10px] text-slate-500">{k.comune}</p>
-                            </div>
-                            <button onClick={() => { setRivenditaFilter(k.soloNumero); setActiveTab('crm'); }} className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
-                              <ChevronRight className="w-3 h-3 text-slate-400" />
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {k.hasTarget && (
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese >= targetBassoRendente ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200'}`}>🎯 {k.fattoMese.toFixed(0)}€ / {targetBassoRendente}€</span>
-                            )}
-                            {k.kpiAttivazione && (
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese > 0 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-200'}`}>🚀 Attivazione</span>
-                            )}
-                            {k.kpiProdotto && (
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.kpiProdottoCompletato ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200'}`}>📦 {k.kpiProdottoNome || 'Prodotto'}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                {kpiStats.lista.length === 0 ? (
+                  <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                      <BarChart3 className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-slate-800 font-bold">Nessun dato registrato</p>
+                      <p className="text-xs text-slate-500 mt-1">Non ci sono KPI o target per il mese selezionato.</p>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {/* TARGET MENSILE GLOBALE */}
+                    {(() => {
+                      const percentuale = targetMensile > 0 ? Math.min(Math.round((fatturatoPeriodo / targetMensile) * 100), 100) : 0;
+                      const mancano = Math.max(targetMensile - fatturatoPeriodo, 0);
+                      return (
+                        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm mb-4">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex flex-col gap-1 flex-1">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Obiettivo Globale Mensile</span>
+                              <button onClick={() => { setTempTarget(targetMensile.toString()); setShowTargetModal(true); }} className="flex items-center gap-2 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-100 transition-colors active:scale-95 w-fit">
+                                <span className="text-xs font-black text-brand-700">€{targetMensile.toLocaleString('it-IT')}</span>
+                                <Edit3 className="w-3 h-3 text-brand-500" />
+                              </button>
+                            </div>
+                            <div className="text-right"><p className="text-2xl font-black text-brand-600">{percentuale}%</p></div>
+                          </div>
+                          <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner relative">
+                            <div className="h-full bg-gradient-to-r from-brand-300 to-brand-600 rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${percentuale}%` }}>
+                              <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-full blur-[1px]"></div>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center mt-3 px-1">
+                            <p className="text-[10px] font-bold text-slate-400 italic">{fatturatoPeriodo >= targetMensile ? "OBIETTIVO RAGGIUNTO! 🏆" : `MANCANO €${mancano.toLocaleString('it-IT')}`}</p>
+                            <p className="text-[10px] font-bold text-slate-400">€{fatturatoPeriodo.toLocaleString('it-IT')} / €{targetMensile.toLocaleString('it-IT')}</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* RIEPILOGO KPI SECONDARI */}
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm flex justify-between items-center">
+                        <div>
+                          <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-2">🎯 KPI Fatturato ({targetBassoRendente}€)</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno superato la soglia</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-black text-indigo-600">{kpiStats.fatturato.completati}</span>
+                          <span className="text-xs font-bold text-slate-400"> / {kpiStats.fatturato.assegnati}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex justify-between items-center">
+                        <div>
+                          <h3 className="font-bold text-emerald-900 text-sm flex items-center gap-2">🚀 KPI Attivazioni</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Rivendite che hanno fatto il 1° ordine</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-black text-emerald-600">{kpiStats.attivazione.completati}</span>
+                          <span className="text-xs font-bold text-slate-400"> / {kpiStats.attivazione.assegnati}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm flex justify-between items-center">
+                        <div>
+                          <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2">📦 KPI Prodotti</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Prodotti specifici piazzati</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-black text-purple-600">{kpiStats.prodotto.completati}</span>
+                          <span className="text-xs font-bold text-slate-400"> / {kpiStats.prodotto.assegnati}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* LISTA RIVENDITE IN KPI */}
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+                      <h3 className="font-bold text-slate-800 mb-3 text-sm">Dettaglio Rivendite in KPI</h3>
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {kpiStats.lista.map(k => (
+                          <div key={k.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-xs font-bold text-slate-800">{k.nome}</p>
+                                <p className="text-[10px] text-slate-500">{k.comune}</p>
+                              </div>
+                              <button onClick={() => { setRivenditaFilter(k.soloNumero); setActiveTab('crm'); }} className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <ChevronRight className="w-3 h-3 text-slate-400" />
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {k.hasTarget && (
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese >= targetBassoRendente ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-slate-500 border-slate-200'}`}>🎯 {k.fattoMese.toFixed(0)}€ / {targetBassoRendente}€</span>
+                              )}
+                              {k.kpiAttivazione && (
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.fattoMese > 0 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-white text-slate-500 border-slate-200'}`}>🚀 Attivazione</span>
+                              )}
+                              {k.kpiProdotto && (
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${k.kpiProdottoCompletato ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white text-slate-500 border-slate-200'}`}>📦 {k.kpiProdottoNome || 'Prodotto'}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             ) : activeTab === 'statistiche' ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <h2 className="text-xl font-bold text-slate-800 px-1">Le tue Statistiche</h2>
 
+                {/* FILTRI PERIODO */}
                 <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 space-y-3">
                   <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
                     {['oggi', '7g', '30g', 'all', 'custom'].map((p) => (
@@ -4023,6 +4136,19 @@ export default function App() {
                     ESPORTA STORICO EXCEL (.CSV)
                   </button>
                 </div>
+
+                {visitStats.vPeriodo === 0 && orderStats.daEvadere === 0 && orderStats.evasi === 0 && fatturatoPeriodo === 0 ? (
+                  <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                      <BarChart3 className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-slate-800 font-bold">Nessun dato registrato</p>
+                      <p className="text-xs text-slate-500 mt-1">Non ci sono attività o ordini per il periodo selezionato.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 
     {/* 1. RIEPILOGO ATTIVITÀ (CON BADGE ESTERNI v2.25) */}
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -4280,9 +4406,10 @@ export default function App() {
                     </div>
                   )}
                 </div>
-
-              </div>
-            ) : activeTab === 'giro' ? (
+              </>
+            )}
+          </div>
+        ) : activeTab === 'giro' ? (
               viewMode === 'map' ? (
                 <MapView results={getSortedList} />
               ) : getSortedList.length === 0 ? (

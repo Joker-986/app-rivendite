@@ -17,36 +17,54 @@ const APP_VERSION = Date.now().toString(); // Versione dinamica basata sul times
 const dbPath = path.join(process.cwd(), 'tgest.db');
 const dbSqlite = new Database(dbPath);
 
-// Creazione tabelle se non esistono
+// Aggiunta tabella storico_kpi
 dbSqlite.exec(`
-  CREATE TABLE IF NOT EXISTS crm_data (
-    id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS giro_visite (
-    id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS stores (
-    id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS rubrica (
-    id TEXT PRIMARY KEY,
-    data TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  CREATE TABLE IF NOT EXISTS crm_data (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS giro_visite (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS stores (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS rubrica (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS storico_kpi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_rivendita TEXT,
+    mese_riferimento TEXT,
+    campagna TEXT,
+    obiettivo TEXT,
+    note_kpi TEXT,
+    data_archiviazione DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
-// Verifica variabili d'ambiente all'avvio
-if (!process.env.GEMINI_API_KEY) {
-  console.warn("ATTENZIONE: GEMINI_API_KEY non configurata nelle variabili d'ambiente.");
-}
-
 app.use(express.json({ limit: '10mb' }));
+
+// Endpoint per salvare lo storico KPI prima del reset
+app.post('/api/db/archive-kpi', (req, res) => {
+  const { entries } = req.body; // Array di {id_rivendita, mese_riferimento, campagna, obiettivo, note_kpi}
+  try {
+    const insertStmt = dbSqlite.prepare(`
+      INSERT INTO storico_kpi (id_rivendita, mese_riferimento, campagna, obiettivo, note_kpi)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const transaction = dbSqlite.transaction((items) => {
+      for (const item of items) {
+        insertStmt.run(item.id_rivendita, item.mese_riferimento, item.campagna, item.obiettivo, item.note_kpi);
+      }
+    });
+    transaction(entries);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Errore archiviazione storico' });
+  }
+});
+
+// Endpoint per recuperare lo storico di una rivendita
+app.get('/api/db/history/:id', (req, res) => {
+  try {
+    const rows = dbSqlite.prepare('SELECT * FROM storico_kpi WHERE id_rivendita = ? ORDER BY mese_riferimento DESC').all(req.params.id);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Errore recupero storico' });
+  }
+});
 
 // API per la persistenza dei dati
 app.get('/api/db/sync', (req, res) => {
