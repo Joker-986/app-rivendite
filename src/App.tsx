@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package, Wand2 } from 'lucide-react';
 import MapView from './components/MapView';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import packageVersion from './version.json';
@@ -1511,7 +1511,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   }
                   setExpandedCardId(null);
                 }}
-                className="w-full py-3.5 bg-brand-600 text-white font-bold rounded-xl text-sm shadow-md shadow-brand-100 active:scale-95 transition-all"
+                className="w-full py-3.5 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] text-sm transition-all shadow-md"
               >
                 {(isCrmTab || activeTab === 'rip') ? 'Salva Modifiche' : 'Salva nel CRM'}
               </button>
@@ -1585,7 +1585,7 @@ export default function App() {
   const [meseSelezionato, setMeseSelezionato] = useState(() => {
     return new Date().toISOString().slice(0, 7); 
   });
-  const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | '30g' | 'all' | 'custom'>('30g');
+  const [statsPeriod, setStatsPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('oggi');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [radarTab, setRadarTab] = useState<'completate' | 'programmate'>('completate');
   const [statsOrdiniOpen, setStatsOrdiniOpen] = useState(false);
@@ -1613,10 +1613,14 @@ export default function App() {
       weekAgo.setDate(ora.getDate() - 7);
       return d >= weekAgo;
     }
-    if (statsPeriod === '30g') {
-      const monthAgo = new Date();
-      monthAgo.setDate(ora.getDate() - 30);
-      return d >= monthAgo;
+    if (statsPeriod === 'mese') {
+      const startOfMonth = new Date(ora.getFullYear(), ora.getMonth(), 1);
+      return d >= startOfMonth;
+    }
+    if (statsPeriod === 'mese_prec') {
+      const startOfPrevMonth = new Date(ora.getFullYear(), ora.getMonth() - 1, 1);
+      const endOfPrevMonth = new Date(ora.getFullYear(), ora.getMonth(), 0, 23, 59, 59, 999);
+      return d >= startOfPrevMonth && d <= endOfPrevMonth;
     }
     if (statsPeriod === 'custom' && customRange.start && customRange.end) {
       const start = new Date(customRange.start);
@@ -1631,37 +1635,48 @@ export default function App() {
   const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
   const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => loadFromStorage('crmAnagrafiche', []));
   const [stores, setStores] = useState<SearchResult[]>(() => loadFromStorage('stores', []));
-  const [targetMensile, setTargetMensile] = useState(() => Number(localStorage.getItem('tgest_target_mensile')) || 20000);
-  const [targetBassoRendente, setTargetBassoRendente] = useState(() => Number(localStorage.getItem('tgest_target_br')) || 200);
+  const [targetStorico, setTargetStorico] = useState<Record<string, { globale: number, br: number }>>(() => {
+    const saved = localStorage.getItem('tgest_target_storico');
+    if (saved) return JSON.parse(saved);
+    // Migrazione vecchi dati per non perdere l'impostazione attuale
+    const oldGlobale = Number(localStorage.getItem('tgest_target_mensile')) || 20000;
+    const oldBr = Number(localStorage.getItem('tgest_target_br')) || 200;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return { [currentMonth]: { globale: oldGlobale, br: oldBr } };
+  });
+
+  const currentTargets = useMemo(() => {
+    if (targetStorico[meseSelezionato]) return targetStorico[meseSelezionato];
+    // Fallback: cerca il target del mese più recente inserito
+    const mesiSalvati = Object.keys(targetStorico).sort().reverse();
+    if (mesiSalvati.length > 0) return targetStorico[mesiSalvati[0]];
+    return { globale: 20000, br: 200 };
+  }, [targetStorico, meseSelezionato]);
+
+  const targetMensile = currentTargets.globale;
+  const targetBassoRendente = currentTargets.br;
+
+  const updateTargetMensile = (val: number) => {
+    setTargetStorico(prev => {
+      const currentBr = prev[meseSelezionato]?.br || targetBassoRendente;
+      const newState = { ...prev, [meseSelezionato]: { globale: val, br: currentBr } };
+      localStorage.setItem('tgest_target_storico', JSON.stringify(newState));
+      return newState;
+    });
+  };
+
+  const updateTargetBassoRendente = (val: number) => {
+    setTargetStorico(prev => {
+      const currentGlobale = prev[meseSelezionato]?.globale || targetMensile;
+      const newState = { ...prev, [meseSelezionato]: { globale: currentGlobale, br: val } };
+      localStorage.setItem('tgest_target_storico', JSON.stringify(newState));
+      return newState;
+    });
+  };
+
   const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
   const [archive, setArchive] = useState<any[]>(() => loadFromStorage('tgest_archive', []));
 
-  useEffect(() => {
-    localStorage.setItem('tgest_target_mensile', targetMensile.toString());
-    localStorage.setItem('tgest_target_br', targetBassoRendente.toString());
-  }, [targetMensile, targetBassoRendente]);
-
-  useEffect(() => {
-    // Inserisce uno stato iniziale fittizio per poter intercettare il tasto indietro
-    window.history.pushState(null, "", window.location.href);
-
-    const handleBackButton = () => {
-      const wantsToExit = window.confirm("Sei sicuro di voler uscire da TgesT?");
-      if (wantsToExit) {
-        // Se l'utente conferma, torniamo indietro e l'app si chiude
-        window.history.back();
-      } else {
-        // Se l'utente annulla, reinseriamo lo stato fittizio per bloccare nuovamente l'uscita
-        window.history.pushState(null, "", window.location.href);
-      }
-    };
-
-    window.addEventListener("popstate", handleBackButton);
-
-    return () => {
-      window.removeEventListener("popstate", handleBackButton);
-    };
-  }, []);
 
   useEffect(() => {
     let wakeLock: any = null;
@@ -1705,6 +1720,12 @@ export default function App() {
   }, []);
 
   const [showTargetModal, setShowTargetModal] = useState(false);
+  const [showKpiCleanupModal, setShowKpiCleanupModal] = useState(false);
+  const [showKpiAssignModal, setShowKpiAssignModal] = useState(false);
+  const [assignKpiSelection, setAssignKpiSelection] = useState({ fatturato: false, attivazione: false, prodotto: false, prodottoNome: '' });
+  const [assignSearchTerm, setAssignSearchTerm] = useState('');
+  const [selectedRivenditeForAssign, setSelectedRivenditeForAssign] = useState<Set<string>>(new Set());
+  const [cleanupSelection, setCleanupSelection] = useState({ fatturato: false, attivazione: false, prodotto: false });
   const [tempTarget, setTempTarget] = useState(targetMensile.toString());
 
   const frasiTarget = {
@@ -2176,6 +2197,61 @@ export default function App() {
       }
     });
   };
+
+  const handleKpiCleanup = useCallback(() => {
+    setRubrica(prev => {
+      const newRubrica = { ...prev };
+      Object.keys(newRubrica).forEach(id => {
+        const data = newRubrica[id];
+        let updated = false;
+        const updates: any = {};
+
+        if (cleanupSelection.fatturato && data.hasTarget) { updates.hasTarget = false; updated = true; }
+        if (cleanupSelection.attivazione && data.kpiAttivazione) { updates.kpiAttivazione = false; updated = true; }
+        if (cleanupSelection.prodotto && data.kpiProdotto) {
+          updates.kpiProdotto = false;
+          updates.kpiProdottoNome = '';
+          updates.kpiProdottoCompletato = false;
+          updated = true;
+        }
+
+        if (updated) {
+          newRubrica[id] = { ...data, ...updates };
+        }
+      });
+      return newRubrica;
+    });
+    setShowKpiCleanupModal(false);
+    setCleanupSelection({ fatturato: false, attivazione: false, prodotto: false });
+    showToast('Pulizia KPI completata con successo!', 'success');
+  }, [cleanupSelection]);
+
+  const handleKpiMassAssign = useCallback(() => {
+    if (selectedRivenditeForAssign.size === 0) {
+      showToast('Seleziona almeno una rivendita', 'info');
+      return;
+    }
+    setRubrica(prev => {
+      const newRubrica = { ...prev };
+      selectedRivenditeForAssign.forEach(id => {
+        const data = newRubrica[id] || {};
+        const updates: any = {};
+        if (assignKpiSelection.fatturato) updates.hasTarget = true;
+        if (assignKpiSelection.attivazione) updates.kpiAttivazione = true;
+        if (assignKpiSelection.prodotto) {
+          updates.kpiProdotto = true;
+          if (assignKpiSelection.prodottoNome) updates.kpiProdottoNome = assignKpiSelection.prodottoNome;
+        }
+        newRubrica[id] = { ...data, ...updates, isSavedToRubrica: true };
+      });
+      return newRubrica;
+    });
+    setShowKpiAssignModal(false);
+    setAssignKpiSelection({ fatturato: false, attivazione: false, prodotto: false, prodottoNome: '' });
+    setSelectedRivenditeForAssign(new Set());
+    setAssignSearchTerm('');
+    showToast('KPI assegnati con successo!', 'success');
+  }, [assignKpiSelection, selectedRivenditeForAssign]);
 
   const handleGenerateSyncCode = async () => {
     try {
@@ -2859,6 +2935,16 @@ export default function App() {
     return stato !== 'RIP';
   }), [allCrmList, rubrica, activeTab, expandedCardId]);
 
+  const filteredAssignList = useMemo(() => {
+    if (!showKpiAssignModal) return [];
+    const term = assignSearchTerm.trim().toUpperCase();
+    return crmList.filter(r => {
+       const num = r.isStore ? r.storeNumber : r['Num. Rivendita'];
+       const comune = r['Comune'] || '';
+       return num?.toString().toUpperCase().includes(term) || comune.toUpperCase().includes(term);
+    });
+  }, [showKpiAssignModal, crmList, assignSearchTerm]);
+
   const ripList = useMemo(() => allCrmList.filter(res => {
     const id = getRivenditaId(res);
     const stato = rubrica[id]?.stato;
@@ -3402,11 +3488,22 @@ export default function App() {
       }
     });
 
+    const listaRimanenti = giroVisite.filter(r => {
+      const id = getRivenditaId(r);
+      return (rubrica[id] as RivenditaExtra)?.visitata !== 'Si';
+    }).map(r => ({
+      id: getRivenditaId(r),
+      nome: r.isStore ? (r.storeName || 'Store') : `Riv. ${r['Num. Rivendita']}`,
+      soloNumero: r.isStore ? (r.storeNumber || '') : (r['Num. Rivendita'] || ''),
+      comune: r.Comune
+    }));
+
     return { 
       vPeriodo: listaVisitate.length, 
       listaVisitate, 
       prossimi: prossimi.sort((a,b) => a.dateObj.getTime() - b.dateObj.getTime()).slice(0, 10), 
-      rimanentiGiro: giroVisite.filter(r => (rubrica[getRivenditaId(r)] as RivenditaExtra)?.visitata !== 'Si').length 
+      rimanentiGiro: listaRimanenti.length,
+      listaRimanenti
     };
   }, [rubrica, crmAnagrafiche, stores, giroVisite, meseSelezionato, statsPeriod, customRange, activeTab]);
 
@@ -3484,7 +3581,7 @@ export default function App() {
     // Memorizziamo lo stato attuale della UI senza innescare re-render continui
     uiStateRef.current = {
       expandedCardId, showSettingsModal, showCreateStoreModal, revisitModalId,
-      showConfirmVisitModal, showClearGiroConfirmModal, showTargetModal, showGuideModal,
+      showConfirmVisitModal, showClearGiroConfirmModal, showTargetModal, showKpiCleanupModal, showKpiAssignModal, showGuideModal,
       confirmModalOpen: confirmModal.isOpen, shareModalOpen: shareModal.isOpen,
       showChangelog, fabMenuOpen, activeTab
     };
@@ -3503,13 +3600,13 @@ export default function App() {
       if (
         s.expandedCardId || s.showSettingsModal || s.showCreateStoreModal || 
         s.revisitModalId || s.showConfirmVisitModal || s.showClearGiroConfirmModal || 
-        s.showTargetModal || s.showGuideModal || s.confirmModalOpen || 
+        s.showTargetModal || s.showKpiCleanupModal || s.showKpiAssignModal || s.showGuideModal || s.confirmModalOpen || 
         s.shareModalOpen || s.showChangelog || s.fabMenuOpen
       ) {
         window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
         setExpandedCardId(null); setShowSettingsModal(false); setShowCreateStoreModal(false);
         setRevisitModalId(null); setShowConfirmVisitModal(false); setShowClearGiroConfirmModal(false);
-        setShowTargetModal(false); setShowGuideModal(false); 
+        setShowTargetModal(false); setShowKpiCleanupModal(false); setShowKpiAssignModal(false); setShowGuideModal(false); 
         setConfirmModal(prev => ({ ...prev, isOpen: false })); setShareModal(prev => ({ ...prev, isOpen: false }));
         setShowChangelog(false); setFabMenuOpen(false);
         return;
@@ -3528,13 +3625,15 @@ export default function App() {
       if (!exitPromptRef.current) {
         window.history.pushState({ isApp: true }, ''); // Ripristina la trappola per catturare il secondo tap
         exitPromptRef.current = true;
-        setToast({ show: true, message: 'Premi di nuovo indietro per uscire', type: 'info' });
+        
+        // Utilizza la funzione nativa dell'app che gestisce l'auto-chiusura in sicurezza
+        showToast('Premi di nuovo indietro per uscire', 'info');
         
         setTimeout(() => {
           exitPromptRef.current = false;
         }, 2000);
       } else {
-        // L'utente ha premuto due volte entro 2 secondi. Facciamo tornare indietro il browser per uscire.
+        // L'utente ha premuto due volte entro 2 secondi. Uscita dall'app.
         window.history.go(-2);
       }
     };
@@ -3705,7 +3804,7 @@ export default function App() {
             <button
               type="submit"
               disabled={loading || !selectedRegion || !selectedProvince}
-              className="w-full h-14 bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-brand-200"
+              className="w-full h-14 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {loading && !loadingOptions ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -3790,8 +3889,9 @@ export default function App() {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
+            {activeTab !== 'kpi' && activeTab !== 'statistiche' && (
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-800">
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
                    activeTab === 'crm' ? `CRM (${crmList.length})` : 
                    activeTab === 'store' ? `Store (${storeList.length})` :
@@ -3801,37 +3901,33 @@ export default function App() {
                 {activeTab === 'store' && (
                   <button
                     onClick={() => setShowCreateStoreModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white hover:bg-brand-700 rounded-xl text-xs font-bold transition-all shadow-md shadow-brand-100 active:scale-95"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 text-white hover:bg-brand-700 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-4 h-4" />
                     Aggiungi Store
                   </button>
                 )}
                 {activeTab === 'giro' && giroVisite.length > 0 && (
-                  <div className="flex items-center bg-slate-100 p-1 rounded-xl shadow-sm border border-slate-200">
-                    {/* Toggle Mappa/Lista Unificato */}
-                    <button onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')} className={`p-2 rounded-lg transition-all ${viewMode === 'map' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`} title={viewMode === 'map' ? 'Torna alla Lista' : 'Vedi Mappa'}>
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-sm">
+                    <button onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')} className={`p-2 rounded-lg transition-all ${viewMode === 'map' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`} title={viewMode === 'map' ? 'Torna alla Lista' : 'Vedi Mappa'}>
                       {viewMode === 'map' ? <List className="w-4 h-4" /> : <MapIcon className="w-4 h-4" />}
                     </button>
                     <div className="w-px h-5 bg-slate-300 mx-1"></div>
-                    {/* My Maps */}
                     <button onClick={exportGiroForMyMaps} className="p-2 rounded-lg text-emerald-600 hover:bg-white hover:shadow-sm transition-all" title="Esporta per My Maps">
                       <Download className="w-4 h-4" />
                     </button>
-                    {/* Svuota Giro */}
+                    <div className="w-px h-5 bg-slate-300 mx-1"></div>
                     <button onClick={() => setShowClearGiroConfirmModal(true)} className="p-2 rounded-lg text-red-500 hover:bg-white hover:shadow-sm transition-all" title="Svuota Giro">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 )}
-                {activeTab !== 'giro' && getCurrentList.length > 0 && (
-                  null
-                )}
               </div>
+            )}
 
               {/* Filtri Comuni */}
               {activeTab !== 'statistiche' && activeTab !== 'kpi' && (
-                <div className="flex flex-row gap-2">
+                <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
@@ -3859,6 +3955,16 @@ export default function App() {
                       <ChevronDown className="w-4 h-4 text-slate-400" />
                     </div>
                   </div>
+
+                  {(activeTab === 'crm' || activeTab.startsWith('prov_')) && (
+                    <button 
+                      onClick={() => setShowKpiAssignModal(true)}
+                      className="flex items-center justify-center w-11 h-11 bg-slate-100 text-indigo-600 border border-slate-200/60 rounded-xl hover:bg-white hover:shadow-sm transition-all shrink-0"
+                      title="Assegnazione Massiva KPI"
+                    >
+                      <Wand2 className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -3978,25 +4084,36 @@ export default function App() {
 
             {activeTab === 'kpi' ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <h2 className="text-xl font-bold text-slate-800 px-1">Plancia KPI e Target</h2>
-
-                {/* SELETTORE MESE */}
-                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mese di Riferimento</span>
-                    <input 
-                      type="month" 
-                      value={meseSelezionato} 
-                      onChange={(e) => setMeseSelezionato(e.target.value)}
-                      className="text-sm font-bold text-brand-700 bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
-                    />
-                  </div>
-                  <div className="p-2 bg-brand-50 rounded-2xl">
-                    <Calendar className="w-5 h-5 text-brand-500" />
+                <div className="flex items-center justify-between px-1 mb-4">
+                  <h2 className="text-xl font-bold text-slate-800 tracking-tight">KPI e Target</h2>
+                  
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 shadow-sm">
+                    <button 
+                      onClick={() => setShowKpiCleanupModal(true)}
+                      className="p-2 rounded-lg text-amber-500 hover:bg-white hover:shadow-sm transition-all"
+                      title="Pulizia Massiva Campagne"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                    <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                    <div className="relative inline-flex items-center">
+                      <input 
+                        type="month" 
+                        value={meseSelezionato} 
+                        onChange={(e) => setMeseSelezionato(e.target.value)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50 m-0 p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1.5 p-2 rounded-lg text-brand-600 hover:bg-white hover:shadow-sm transition-all cursor-pointer">
+                        <span className="text-xs font-bold capitalize">
+                          {new Date(meseSelezionato + '-01').toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })}
+                        </span>
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {kpiStats.lista.length === 0 ? (
+              {kpiStats.lista.length === 0 ? (
                   <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
                       <BarChart3 className="w-10 h-10 text-slate-300" />
@@ -4108,16 +4225,35 @@ export default function App() {
               </div>
             ) : activeTab === 'statistiche' ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <h2 className="text-xl font-bold text-slate-800 px-1">Le tue Statistiche</h2>
+                <div className="flex items-center justify-between px-1 mb-2">
+                  <h2 className="text-xl font-bold text-slate-800 tracking-tight">Le tue Statistiche</h2>
+                  <button 
+                    onClick={() => setStatsPeriod(statsPeriod === 'custom' ? 'oggi' : 'custom')}
+                    className={`p-2.5 rounded-xl border transition-all shadow-sm ${statsPeriod === 'custom' ? 'bg-brand-600 text-white border-brand-700' : 'bg-slate-100 text-brand-600 border-slate-200 hover:bg-white'}`}
+                    title="Intervallo personalizzato"
+                  >
+                    <Calendar className="w-4 h-4" />
+                  </button>
+                </div>
 
                 {/* FILTRI PERIODO */}
                 <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 space-y-3">
                   <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                    {['oggi', '7g', '30g', 'all', 'custom'].map((p) => (
-                      <button key={p} onClick={() => setStatsPeriod(p as any)} className={`flex-1 py-2 text-[10px] font-bold rounded-lg capitalize transition-all ${statsPeriod === p ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500'}`}>
-                        {p === 'all' ? 'Sempre' : p}
-                      </button>
-                    ))}
+                    {['oggi', '7g', 'mese', 'mese_prec', 'all'].map((p) => {
+                      let label = p;
+                      if (p === 'all') label = 'Sempre';
+                      if (p === 'mese') label = new Date().toLocaleDateString('it-IT', { month: 'short' });
+                      if (p === 'mese_prec') {
+                        const prev = new Date();
+                        prev.setMonth(prev.getMonth() - 1);
+                        label = prev.toLocaleDateString('it-IT', { month: 'short' });
+                      }
+                      return (
+                        <button key={p} onClick={() => setStatsPeriod(p as any)} className={`flex-1 py-2 text-[10px] font-bold rounded-lg capitalize transition-all ${statsPeriod === p ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500'}`}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                   {statsPeriod === 'custom' && (
                     <div className="flex gap-2 animate-in fade-in zoom-in-95">
@@ -4130,21 +4266,21 @@ export default function App() {
                 <div className="px-1">
                   <button
                     onClick={exportHistoryToExcel}
-                    className="w-full mt-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all mb-6"
+                    className="w-full mt-2 py-4 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white font-black rounded-2xl border border-emerald-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] flex items-center justify-center gap-3 transition-all shadow-md mb-6"
                   >
                     <Download className="w-5 h-5" />
                     ESPORTA STORICO EXCEL (.CSV)
                   </button>
                 </div>
 
-                {visitStats.vPeriodo === 0 && orderStats.daEvadere === 0 && orderStats.evasi === 0 && fatturatoPeriodo === 0 ? (
+                {visitStats.vPeriodo === 0 && orderStats.daEvadere === 0 && orderStats.evasi === 0 && fatturatoPeriodo === 0 && visitStats.rimanentiGiro === 0 && visitStats.prossimi.length === 0 ? (
                   <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
                       <BarChart3 className="w-10 h-10 text-slate-300" />
                     </div>
                     <div>
                       <p className="text-slate-800 font-bold">Nessun dato registrato</p>
-                      <p className="text-xs text-slate-500 mt-1">Non ci sono attività o ordini per il periodo selezionato.</p>
+                      <p className="text-xs text-slate-500 mt-1">Non ci sono attività, ordini, o rivendite nel giro in questo momento.</p>
                     </div>
                   </div>
                 ) : (
@@ -4220,6 +4356,27 @@ export default function App() {
             </div>
           ) : (
             <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna visita salvata.</p>
+          )}
+
+          {/* LISTA RIMANENTI NEL GIRO */}
+          {visitStats.listaRimanenti.length > 0 && (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1 mt-4 border-t border-slate-100 pt-4">
+              <h4 className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-2">Rimanenti nel Giro</h4>
+              {visitStats.listaRimanenti.map((v: any) => (
+                <div key={v.id} className="p-3 bg-orange-50/50 border border-orange-100 rounded-xl flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{v.nome}</p>
+                    <p className="text-[10px] text-slate-500">{v.comune}</p>
+                  </div>
+                  <button 
+                    onClick={() => { setRivenditaFilter(v.soloNumero); setActiveTab('crm'); }} 
+                    className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -4785,11 +4942,11 @@ export default function App() {
                   <div className="py-2 border-b border-amber-200/50 mb-1 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-xs">Target Mensile (€):</span>
-                      <input type="number" inputMode="decimal" value={targetMensile} onChange={(e) => setTargetMensile(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
+                      <input type="number" inputMode="decimal" value={targetMensile} onChange={(e) => updateTargetMensile(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-xs">Target Focus Mensile (€):</span>
-                      <input type="number" inputMode="decimal" value={targetBassoRendente} onChange={(e) => setTargetBassoRendente(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
+                      <input type="number" inputMode="decimal" value={targetBassoRendente} onChange={(e) => updateTargetBassoRendente(parseFloat(e.target.value) || 0)} className="w-24 h-8 px-2 bg-white border border-amber-300 rounded-lg text-right font-black text-brand-700 outline-none focus:ring-1 focus:ring-brand-500" />
                     </div>
                   </div>
 
@@ -4808,7 +4965,7 @@ export default function App() {
                 </p>
                 <button
                   onClick={handleClearAllData}
-                  className="w-full py-2.5 bg-red-600 text-white font-bold rounded-xl text-xs hover:bg-red-700 active:scale-95 transition-all shadow-sm"
+                  className="w-full py-2.5 bg-gradient-to-b from-red-500 to-red-600 text-white font-bold rounded-2xl border border-red-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] text-xs transition-all shadow-md"
                 >
                   Cancella Tutto
                 </button>
@@ -4905,7 +5062,7 @@ export default function App() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-4 bg-brand-600 text-white font-bold rounded-2xl text-sm shadow-xl shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+                    className="flex-1 py-4 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] text-sm transition-all shadow-md"
                   >
                     Crea Store
                   </button>
@@ -5000,6 +5157,178 @@ export default function App() {
         </div>
       )}
 
+      {/* KPI Mass Assign Modal */}
+      {showKpiAssignModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl relative z-[210] p-5 sm:p-6 flex flex-col h-[85vh] sm:h-[80vh] animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <Wand2 className="w-5 h-5 text-indigo-600" /> Assegnazione KPI
+              </h3>
+              <button onClick={() => setShowKpiAssignModal(false)} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto pr-1 space-y-5 flex-1 flex flex-col">
+              {/* STEP 1: Cosa assegnare */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 shrink-0">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">1. Seleziona Obiettivi</h4>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors">
+                    <input type="checkbox" checked={assignKpiSelection.fatturato} onChange={(e) => setAssignKpiSelection(prev => ({...prev, fatturato: e.target.checked}))} className="w-5 h-5 text-brand-600 rounded border-slate-300 focus:ring-brand-500" />
+                    <span className="text-sm font-bold text-slate-700">KPI Fatturato (Globale)</span>
+                  </label>
+                  <label className="flex items-center gap-3 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors">
+                    <input type="checkbox" checked={assignKpiSelection.attivazione} onChange={(e) => setAssignKpiSelection(prev => ({...prev, attivazione: e.target.checked}))} className="w-5 h-5 text-brand-600 rounded border-slate-300 focus:ring-brand-500" />
+                    <span className="text-sm font-bold text-slate-700">KPI Attivazione</span>
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 p-2 rounded-xl hover:bg-white cursor-pointer transition-colors">
+                      <input type="checkbox" checked={assignKpiSelection.prodotto} onChange={(e) => setAssignKpiSelection(prev => ({...prev, prodotto: e.target.checked}))} className="w-5 h-5 text-brand-600 rounded border-slate-300 focus:ring-brand-500" />
+                      <span className="text-sm font-bold text-slate-700">KPI Prodotto Specifico</span>
+                    </label>
+                    {assignKpiSelection.prodotto && (
+                      <input 
+                        type="text" 
+                        placeholder="Nome prodotto (es. Waka Ultra)"
+                        value={assignKpiSelection.prodottoNome}
+                        onChange={(e) => setAssignKpiSelection(prev => ({...prev, prodottoNome: e.target.value}))}
+                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none shadow-sm"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* STEP 2: A chi assegnare */}
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center justify-between mb-2 shrink-0">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">2. Seleziona Rivendite</h4>
+                  <button 
+                    onClick={() => {
+                      if (selectedRivenditeForAssign.size === filteredAssignList.length) {
+                        setSelectedRivenditeForAssign(new Set());
+                      } else {
+                        setSelectedRivenditeForAssign(new Set(filteredAssignList.map(r => getRivenditaId(r))));
+                      }
+                    }}
+                    className="text-[10px] font-bold text-brand-600 bg-brand-50 px-2 py-1 rounded-md"
+                  >
+                    {selectedRivenditeForAssign.size === filteredAssignList.length && filteredAssignList.length > 0 ? 'Deseleziona Tutto' : 'Seleziona Tutto'}
+                  </button>
+                </div>
+                
+                <div className="relative mb-3 shrink-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Cerca numero o comune..."
+                    value={assignSearchTerm}
+                    onChange={(e) => setAssignSearchTerm(e.target.value)}
+                    className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-500 outline-none"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2 border border-slate-100 rounded-xl p-2 bg-slate-50/50">
+                  {filteredAssignList.length === 0 ? (
+                    <p className="text-xs text-center text-slate-400 py-4 italic">Nessuna rivendita trovata.</p>
+                  ) : (
+                    filteredAssignList.map(r => {
+                      const id = getRivenditaId(r);
+                      const isChecked = selectedRivenditeForAssign.has(id);
+                      return (
+                        <label key={id} className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all ${isChecked ? 'bg-brand-50 border-brand-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedRivenditeForAssign);
+                              if (e.target.checked) newSet.add(id);
+                              else newSet.delete(id);
+                              setSelectedRivenditeForAssign(newSet);
+                            }}
+                            className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500" 
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">{r.isStore ? r.storeName : `Riv. ${r['Num. Rivendita']}`}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{r['Comune']}</p>
+                          </div>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-100 shrink-0">
+              <button
+                onClick={handleKpiMassAssign}
+                disabled={selectedRivenditeForAssign.size === 0 || (!assignKpiSelection.fatturato && !assignKpiSelection.attivazione && !assignKpiSelection.prodotto)}
+                className="w-full py-4 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Wand2 className="w-4 h-4" /> Assegna a {selectedRivenditeForAssign.size} rivendite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Cleanup Modal */}
+      {showKpiCleanupModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl relative z-[210] p-6 animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-brand-600" /> Pulizia Campagne
+              </h3>
+              <button onClick={() => setShowKpiCleanupModal(false)} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-500 mb-6">
+              Seleziona gli obiettivi che desideri rimuovere <b>da tutte le rivendite in rubrica</b> in un colpo solo. Le statistiche mensili non verranno alterate.
+            </p>
+
+            <div className="space-y-3 mb-8">
+              <label className="flex items-center justify-between p-3 rounded-xl border border-indigo-100 bg-indigo-50/50 cursor-pointer active:scale-[0.98] transition-all">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={cleanupSelection.fatturato} onChange={(e) => setCleanupSelection(prev => ({...prev, fatturato: e.target.checked}))} className="w-5 h-5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
+                  <span className="text-sm font-bold text-indigo-900">KPI Fatturato</span>
+                </div>
+                <span className="text-xs font-black text-indigo-500 bg-white px-2 py-1 rounded-md shadow-sm">{kpiStats.fatturato.assegnati} assegnati</span>
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-xl border border-emerald-100 bg-emerald-50/50 cursor-pointer active:scale-[0.98] transition-all">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={cleanupSelection.attivazione} onChange={(e) => setCleanupSelection(prev => ({...prev, attivazione: e.target.checked}))} className="w-5 h-5 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500" />
+                  <span className="text-sm font-bold text-emerald-900">KPI Attivazione</span>
+                </div>
+                <span className="text-xs font-black text-emerald-500 bg-white px-2 py-1 rounded-md shadow-sm">{kpiStats.attivazione.assegnati} assegnati</span>
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-xl border border-purple-100 bg-purple-50/50 cursor-pointer active:scale-[0.98] transition-all">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={cleanupSelection.prodotto} onChange={(e) => setCleanupSelection(prev => ({...prev, prodotto: e.target.checked}))} className="w-5 h-5 text-purple-600 rounded border-purple-300 focus:ring-purple-500" />
+                  <span className="text-sm font-bold text-purple-900">KPI Prodotto</span>
+                </div>
+                <span className="text-xs font-black text-purple-500 bg-white px-2 py-1 rounded-md shadow-sm">{kpiStats.prodotto.assegnati} assegnati</span>
+              </label>
+            </div>
+
+            <button
+              onClick={handleKpiCleanup}
+              disabled={!cleanupSelection.fatturato && !cleanupSelection.attivazione && !cleanupSelection.prodotto}
+              className="w-full py-4 bg-gradient-to-b from-slate-700 to-slate-800 text-white font-bold rounded-2xl border border-slate-900 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Conferma Pulizia
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Target Modal (Bottom Sheet v2.45) */}
       {showTargetModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200] flex items-end justify-center animate-in fade-in duration-300">
@@ -5039,13 +5368,12 @@ export default function App() {
                   onClick={() => {
                     const val = parseFloat(tempTarget);
                     if (!isNaN(val) && val > 0) {
-                      setTargetMensile(val);
-                      localStorage.setItem('tgest_target_mensile', val.toString());
+                      updateTargetMensile(val);
                       setShowTargetModal(false);
                       showToast('Obiettivo aggiornato con successo!');
                     }
                   }}
-                  className="flex-1 py-4 bg-brand-600 text-white font-bold rounded-2xl shadow-xl shadow-brand-100 hover:bg-brand-700 active:scale-95 transition-all"
+                  className="flex-1 py-4 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] transition-all shadow-md"
                 >
                   Salva Obiettivo
                 </button>
