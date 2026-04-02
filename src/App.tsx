@@ -23,6 +23,8 @@ interface SearchResult {
   storeNumber?: string;
   isChain?: boolean;
   chainCount?: number;
+  rivenditaUfficiale?: string;
+  pec?: string;
   [key: string]: any;
 }
 
@@ -47,6 +49,7 @@ export interface RivenditaExtra {
   telefono: string;
   pIva: string;
   mail: string;
+  pec?: string;
   isSavedToRubrica?: boolean;
   richiestaOrdine?: boolean;
   noteOrdine?: string;
@@ -180,7 +183,9 @@ interface RivenditaCardProps {
   addToCrm: (res: SearchResult) => void;
   setExpandedCardId: (id: string | null) => void;
   setShareModal: (modal: { isOpen: boolean; text: string }) => void;
+  showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
+  setGiroVisite?: React.Dispatch<React.SetStateAction<SearchResult[]>>;
   moveCard?: (index: number, direction: 'up' | 'down') => void;
   jumpToPosition?: (fromIndex: number, toPosition: string) => void;
   openRevisitModal: (id: string) => void;
@@ -380,7 +385,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   addToCrm,
   setExpandedCardId,
   setShareModal,
+  showToast,
   handleStoreUpdate,
+  setGiroVisite,
   moveCard,
   jumpToPosition,
   openRevisitModal,
@@ -501,9 +508,15 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 </div>
               )}
 
-              <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider shadow-sm ${res.isStore ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-700'}`}>
-                {res.isStore ? <span className="flex items-center gap-1"><Store className="w-3 h-3" />STORE #{res.storeNumber || res['Num. Rivendita']}</span> : `RIV. ${res['Num. Rivendita']}`}
-              </span>
+              {res.isStore ? (
+                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
+                  SVAPO ({res.storeNumber ? res.storeNumber : 'Da File'})
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider">
+                  RIV. {res['Num. Rivendita']}
+                </span>
+              )}
               {activeTab === 'search' ? (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                   {res['Stato']}
@@ -735,6 +748,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="text-xs col-span-2">
             <span className="text-slate-400 block mb-0.5 font-medium">Mail</span>
             <span className="font-bold text-slate-700">{extra.mail}</span>
+          </div>
+        )}
+        {showCrmData && (extra.pec || res.pec || res['PEC']) && (
+          <div className="text-xs col-span-2">
+            <span className="text-slate-400 block mb-0.5 font-medium">PEC</span>
+            <span className="font-bold text-slate-700 truncate select-all">{extra.pec || res.pec || res['PEC']}</span>
           </div>
         )}
         {showCrmData && extra.richiestaOrdine && (
@@ -1027,6 +1046,16 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                         />
                       </div>
                       <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">RIV. (Opzionale)</label>
+                        <input
+                          type="text"
+                          value={res.rivenditaUfficiale || ''}
+                          onChange={(e) => handleStoreUpdate?.(id, 'rivenditaUfficiale', e.target.value)}
+                          placeholder="Codice RIV"
+                          className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipologia</label>
                         <select
                           value={res.isChain ? 'true' : 'false'}
@@ -1228,15 +1257,33 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Mail</label>
-                  <input
-                    type="email"
-                    value={extra.mail}
-                    onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
-                    placeholder="Indirizzo email"
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Mail</label>
+                    <input
+                      type="email"
+                      value={extra.mail}
+                      onChange={(e) => handleRubricaUpdate(id, 'mail', e.target.value)}
+                      placeholder="Indirizzo email"
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">PEC</label>
+                    <input 
+                      type="email" 
+                      placeholder="Indirizzo PEC" 
+                      value={extra.pec || res.pec || res['PEC'] || ''} 
+                      onChange={(e) => {
+                        if (res.isStore) {
+                          handleStoreUpdate?.(id, 'pec', e.target.value);
+                        } else {
+                          handleRubricaUpdate(id, 'pec', e.target.value);
+                        }
+                      }} 
+                      className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none shadow-sm" 
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1501,19 +1548,40 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </div>
 
             {/* Modal Footer Fisso */}
-            <div className="p-4 bg-white border-t border-slate-200 shrink-0 rounded-b-3xl">
+            <div className="p-4 bg-white border-t border-slate-200 shrink-0 rounded-b-3xl flex gap-3">
+              {/* 1. Tasto Salva Dinamico (Spostato a sinistra) */}
               <button
                 onClick={() => {
-                  if (!isCrmTab && activeTab !== 'rip') {
-                    if (!res.isStore) {
-                      addToCrm(res);
+                  if (activeTab === 'giro') {
+                    // Logica per il Giro Visite: salva e rimuovi dalla lista
+                    handleActivitySave(id, 'VISITA', extra.note || '');
+                    setGiroVisite?.(prev => prev.filter(g => getRivenditaId(g) !== id));
+                    setExpandedCardId(null);
+                    showToast('Visita completata e salvata!', 'success');
+                  } else {
+                    if (!isCrmTab && activeTab !== 'rip') {
+                      if (!res.isStore) {
+                        addToCrm(res);
+                      }
                     }
+                    setExpandedCardId(null);
+                    showToast('Modifiche salvate!', 'success');
                   }
+                }}
+                className="flex-1 py-3.5 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-xl border border-brand-700 border-b-[3px] hover:brightness-110 active:border-b active:translate-y-[2px] text-sm transition-all shadow-md"
+              >
+                {activeTab === 'giro' ? 'Salva e Chiudi Visita' : res.isStore ? 'Salva in Store' : 'Salva nel CRM'}
+              </button>
+
+              {/* 2. Tasto Chiudi (Spostato a destra) */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   setExpandedCardId(null);
                 }}
-                className="w-full py-3.5 bg-gradient-to-b from-brand-500 to-brand-600 text-white font-bold rounded-2xl border border-brand-700 border-b-[4px] hover:brightness-110 active:border-b active:translate-y-[3px] text-sm transition-all shadow-md"
+                className="flex-1 py-3.5 bg-slate-100 text-slate-600 font-bold rounded-xl border border-slate-200 border-b-[3px] hover:bg-slate-200 active:border-b active:translate-y-[2px] text-sm transition-all shadow-sm"
               >
-                {(isCrmTab || activeTab === 'rip') ? 'Salva Modifiche' : 'Salva nel CRM'}
+                Chiudi
               </button>
             </div>
 
@@ -1832,6 +1900,20 @@ export default function App() {
   const [showConfirmVisitModal, setShowConfirmVisitModal] = useState(false);
   const [showClearGiroConfirmModal, setShowClearGiroConfirmModal] = useState(false);
   const [showCreateStoreModal, setShowCreateStoreModal] = useState(false);
+  const [newStore, setNewStore] = useState<Partial<SearchResult>>({
+    'Prov.': '',
+    'Comune': '',
+    'Num. Rivendita': '',
+    'Indirizzo': '',
+    'Tipo Rivendita': '',
+    'Distr. Automatico': '',
+    storeName: '',
+    storeNumber: '',
+    isChain: false,
+    chainCount: 1,
+    rivenditaUfficiale: '',
+    pec: ''
+  });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [syncCodeInput, setSyncCodeInput] = useState('');
   const [generatedSyncCode, setGeneratedSyncCode] = useState('');
@@ -3328,8 +3410,22 @@ export default function App() {
 
     setStores(prev => [...prev, storeWithUid]);
     setShowCreateStoreModal(false);
+    setNewStore({
+      'Prov.': '',
+      'Comune': '',
+      'Num. Rivendita': '',
+      'Indirizzo': '',
+      'Tipo Rivendita': '',
+      'Distr. Automatico': '',
+      storeName: '',
+      storeNumber: '',
+      isChain: false,
+      chainCount: 1,
+      rivenditaUfficiale: '',
+      pec: ''
+    });
     showToast('Store creato con successo!', 'success');
-  }, [stores, showToast]);
+  }, [stores, showToast, setNewStore]);
 
   const orderStats = useMemo(() => {
     const allEntries = Object.entries(rubrica) as [string, RivenditaExtra][];
@@ -3542,6 +3638,8 @@ export default function App() {
     moveCard,
     jumpToPosition,
     setShareModal,
+    showToast,
+    setGiroVisite,
     openRevisitModal: setRevisitModalId,
     aiLockedUntil,
     cooldownSeconds,
@@ -3566,6 +3664,8 @@ export default function App() {
     moveCard,
     jumpToPosition,
     setShareModal,
+    showToast,
+    setGiroVisite,
     setRevisitModalId,
     aiLockedUntil,
     cooldownSeconds,
@@ -4992,33 +5092,53 @@ export default function App() {
               
               <form onSubmit={(e) => {
                 e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                handleCreateStore({
-                  'Prov.': (formData.get('prov') as string).toUpperCase(),
-                  'Comune': formData.get('comune') as string,
-                  'Num. Rivendita': formData.get('num') as string,
-                  storeNumber: formData.get('num') as string,
-                  'Indirizzo': formData.get('indirizzo') as string,
-                  'Tipo Rivendita': formData.get('tipo') as string,
-                  'Distr. Automatico': formData.get('distr') as string,
-                  storeName: formData.get('storeName') as string,
-                  isChain: formData.get('isChain') === 'true',
-                  chainCount: parseInt(formData.get('chainCount') as string) || 1
-                });
+                handleCreateStore(newStore);
               }} className="space-y-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome Store *</label>
-                  <input name="storeName" required placeholder="Es. Svapo World" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700" />
+                  <input 
+                    value={newStore.storeName || ''} 
+                    onChange={(e) => setNewStore({...newStore, storeName: e.target.value})} 
+                    required 
+                    placeholder="Es. Svapo World" 
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold text-brand-700" 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <input 
+                    type="text" 
+                    placeholder="RIV. (Opzionale)" 
+                    value={newStore.rivenditaUfficiale || ''} 
+                    onChange={(e) => setNewStore({...newStore, rivenditaUfficiale: e.target.value})} 
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" 
+                  />
+                  <input 
+                    type="email" 
+                    placeholder="PEC (Opzionale)" 
+                    value={newStore.pec || ''} 
+                    onChange={(e) => setNewStore({...newStore, pec: e.target.value})} 
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" 
+                  />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Store *</label>
-                    <input name="num" required placeholder="Es. 101" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" />
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Numero Store</label>
+                    <input 
+                      value={newStore.storeNumber || ''} 
+                      onChange={(e) => setNewStore({...newStore, storeNumber: e.target.value, 'Num. Rivendita': e.target.value})} 
+                      placeholder="Es. 101" 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" 
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo Attività</label>
-                    <select name="isChain" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium">
+                    <select 
+                      value={newStore.isChain ? 'true' : 'false'} 
+                      onChange={(e) => setNewStore({...newStore, isChain: e.target.value === 'true'})} 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium"
+                    >
                       <option value="false">Attività Singola</option>
                       <option value="true">Catena</option>
                     </select>
@@ -5028,27 +5148,55 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Provincia *</label>
-                    <input name="prov" required placeholder="Es. MI" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                    <input 
+                      value={newStore['Prov.'] || ''} 
+                      onChange={(e) => setNewStore({...newStore, 'Prov.': e.target.value.toUpperCase()})} 
+                      required 
+                      placeholder="Es. MI" 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comune *</label>
-                    <input name="comune" required placeholder="Es. Milano" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                    <input 
+                      value={newStore['Comune'] || ''} 
+                      onChange={(e) => setNewStore({...newStore, 'Comune': e.target.value})} 
+                      required 
+                      placeholder="Es. Milano" 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Indirizzo *</label>
-                  <input name="indirizzo" required placeholder="Via Roma 1" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                  <input 
+                    value={newStore['Indirizzo'] || ''} 
+                    onChange={(e) => setNewStore({...newStore, 'Indirizzo': e.target.value})} 
+                    required 
+                    placeholder="Via Roma 1" 
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo Rivendita</label>
-                    <input name="tipo" placeholder="Es. SVAPO STORE" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                    <input 
+                      value={newStore['Tipo Rivendita'] || ''} 
+                      onChange={(e) => setNewStore({...newStore, 'Tipo Rivendita': e.target.value})} 
+                      placeholder="Es. SVAPO STORE" 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Distr. Automatico</label>
-                    <input name="distr" placeholder="SI/NO" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" />
+                    <input 
+                      value={newStore['Distr. Automatico'] || ''} 
+                      onChange={(e) => setNewStore({...newStore, 'Distr. Automatico': e.target.value})} 
+                      placeholder="SI/NO" 
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
+                    />
                   </div>
                 </div>
                 
