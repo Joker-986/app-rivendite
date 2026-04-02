@@ -534,7 +534,7 @@ app.post('/api/geocode', async (req, res) => {
   }
 });
 
-// --- ROTTA GEMINI CON FALLBACK SU COHERE (VERSIONE DEFINITIVA) ---
+// --- ROTTA GEMINI NATIVA (v2.98) ---
 app.post('/api/enrich', async (req, res) => {
   const { rivendita } = req.body;
   const apiKey = process.env.GEMINI_API_KEY;
