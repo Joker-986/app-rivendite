@@ -7,7 +7,7 @@ import packageVersion from './version.json';
 import { Option, SearchResult, RivenditaHistoryEntry, RivenditaExtra, ArchiveEntry, RubricaData } from './types';
 import { formatGoogleCalendarDate, getAvailableTimes, handleNavigation, toTitleCase, loadFromStorage, getRivenditaId, getGoogleResetDate, calcolaFineTurno, ORARI_INIZIO } from './utils/helpers';
 
-// TgesT Enterprise - v2.98
+// TgesT Enterprise - v2.99
 const DATA_VERSION = packageVersion.version;
 
 export default function App() {
@@ -440,6 +440,35 @@ export default function App() {
         if (data.ultimoOrdine !== undefined) { delete data.ultimoOrdine; migratedCount++; }
         if (data.ultimoImporto !== undefined) { delete data.ultimoImporto; migratedCount++; }
         if (data.importoMesePrecedente !== undefined) { delete data.importoMesePrecedente; migratedCount++; }
+
+        // 5. Riparazione Formato Date Hostess (v2.99)
+        const fixHostessString = (str: string) => {
+          if (!str) return str;
+          const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(.*)/);
+          if (match) {
+            const [_, y, m, d, resto] = match;
+            return `${d}/${m}/${y}${resto}`;
+          }
+          return str;
+        };
+
+        if (data.ultimaHostessInfo) {
+          const fixed = fixHostessString(data.ultimaHostessInfo);
+          if (fixed !== data.ultimaHostessInfo) {
+            data.ultimaHostessInfo = fixed;
+            migratedCount++;
+          }
+        }
+
+        data.history?.forEach((h: any) => {
+          if (h.tipo === 'HOSTESS' && h.note) {
+            const fixedNote = fixHostessString(h.note);
+            if (fixedNote !== h.note) {
+              h.note = fixedNote;
+              migratedCount++;
+            }
+          }
+        });
 
         // Ordina history
         data.history.sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
@@ -2843,10 +2872,11 @@ export default function App() {
                         
                         // Fallback: se non c'è in history, ma c'è "ultimaHostessInfo", creiamo un mock object
                         let infoHostess = '';
-                        if (lastHostess && lastHostess.note.includes('dalle')) {
-                          infoHostess = lastHostess.note;
-                        } else if ((d as any).ultimaHostessInfo) {
+                        // Se c'è ultimaHostessInfo (che ora viene riparata dal migrator), usiamo quella che è più affidabile
+                        if ((d as any).ultimaHostessInfo) {
                           infoHostess = (d as any).ultimaHostessInfo;
+                        } else if (lastHostess && lastHostess.note.includes('dalle')) {
+                          infoHostess = lastHostess.note;
                         }
 
                         if (!infoHostess) return null;
