@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Edit3, Package, UserCheck, CheckCircle2 } from 'lucide-react';
-import { ORARI_INIZIO, calcolaFineTurno } from '../utils/helpers';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, ShoppingBag, UserCheck, CheckCircle2, Trash2, Calendar, Clock, Edit3, Check } from 'lucide-react';
+import { useModals } from '../contexts/ModalContext';
 
 interface QuickEditModalProps {
   isOpen: boolean;
@@ -9,400 +9,191 @@ interface QuickEditModalProps {
   rivenditaId: string;
   extra: any;
   onUpdateRubrica: (id: string, field: string, value: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data: string, ora: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string) => void;
+  onDeleteHistory: (id: string, index: number) => void;
   targetHistoryIndex?: number;
 }
 
 const QuickEditModal: React.FC<QuickEditModalProps> = ({
-  isOpen,
-  onClose,
-  editType,
-  rivenditaId,
-  extra,
-  onUpdateRubrica,
-  onEditHistory,
-  targetHistoryIndex
+  isOpen, onClose, editType, rivenditaId, extra, onUpdateRubrica, onEditHistory, onDeleteHistory, targetHistoryIndex
 }) => {
-  const [activeTab, setActiveTab] = useState<'PENDING' | 'HISTORY'>('PENDING');
-  const [note, setNote] = useState('');
-  const [importo, setImporto] = useState(0);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const { openConfirm } = useModals();
 
-  // Per Hostess futura
-  const [hostessInizio, setHostessInizio] = useState('');
-  const [hostessFine, setHostessFine] = useState('');
+  const [data, setData] = useState('');
+  const [ora, setOra] = useState('');
+  const [note, setNote] = useState('');
+  const [importo, setImporto] = useState<number>(0);
+  const [isEvaso, setIsEvaso] = useState(false);
+  
+  // Stato per salvare la "Fotografia" iniziale dei dati
+  const [initialState, setInitialState] = useState({ data: '', ora: '', note: '', importo: 0, isEvaso: false });
+
+  const actualIndex = useMemo(() => {
+    if (targetHistoryIndex !== undefined) return targetHistoryIndex;
+    if (extra?.history && editType) {
+      return extra.history.findIndex((h: any) => h.tipo === editType);
+    }
+    return -1;
+  }, [targetHistoryIndex, extra, editType]);
 
   useEffect(() => {
-    if (!isOpen || !editType) return;
-
-    const history = extra.history || [];
-    
-    if (editType === 'VISITA') {
-      const idx = history.map((h: any, i: number) => ({...h, i})).filter((h: any) => h.tipo === 'VISITA').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime())[0]?.i;
-      if (idx !== undefined) {
-        const entry = history[idx];
+    if (isOpen && editType && actualIndex >= 0 && extra?.history) {
+      const entry = extra.history[actualIndex];
+      if (entry) {
         const d = new Date(entry.data);
-        setHistoryIndex(idx);
-        setNote(entry.note || '');
-        setImporto(entry.importo || 0);
-        setDate(d.toISOString().split('T')[0]);
-        setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-      } else {
-        setHistoryIndex(null);
+        const initData = d.toISOString().split('T')[0];
+        const initOra = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const initNote = entry.note || '';
+        const initImporto = entry.importo || 0;
+        const initEvaso = entry.stato === 'EVASO';
+
+        // Impostiamo i dati visibili
+        setData(initData);
+        setOra(initOra);
+        setNote(initNote);
+        setImporto(initImporto);
+        setIsEvaso(initEvaso);
+
+        // Salviamo la fotografia per il confronto
+        setInitialState({
+          data: initData,
+          ora: initOra,
+          note: initNote,
+          importo: initImporto,
+          isEvaso: initEvaso
+        });
       }
     }
+  }, [isOpen, editType, extra, actualIndex]);
 
-    if (editType === 'HOSTESS') {
-      if (targetHistoryIndex !== undefined) {
-        setActiveTab('HISTORY');
-        const entry = history[targetHistoryIndex];
-        if (entry) {
-          setHistoryIndex(targetHistoryIndex);
-          const d = new Date(entry.data);
-          setDate(d.toISOString().split('T')[0]);
-          setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-          const noteStr = entry.note || '';
-          let extractedFine = '';
-          const matchFine = noteStr.match(/Fine turno: (\d{2}:\d{2})/);
-          const matchOld = noteStr.match(/dalle \d{2}:\d{2} alle (\d{2}:\d{2})/);
-          
-          if (matchFine) extractedFine = matchFine[1];
-          else if (matchOld) extractedFine = matchOld[1];
-          
-          setHostessFine(extractedFine);
-          
-          let cleanNote = noteStr
-            .replace(/\s*\(?Fine turno: \d{2}:\d{2}\)?\s*/g, '')
-            .replace(/\d{2}\/\d{2}\/\d{4}\s*-\s*dalle\s*\d{2}:\d{2}\s*alle\s*\d{2}:\d{2}\s*/g, '')
-            .trim();
-          setNote(cleanNote);
-        }
-      } else {
-        const isFuture = extra.showHostessModule || extra.hostessData;
-        const historyEntries = history.map((h: any, i: number) => ({...h, i})).filter((h: any) => h.tipo === 'HOSTESS').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-        const hasHistory = historyEntries.length > 0;
+  if (!isOpen || !editType || actualIndex < 0) return null;
 
-        if (isFuture) {
-          setActiveTab('PENDING');
-          setDate(extra.hostessData || '');
-          setHostessInizio(extra.hostessInizio || '');
-          setHostessFine(extra.hostessFine || '');
-        } else if (hasHistory) {
-          setActiveTab('HISTORY');
-          const entry = historyEntries[0];
-          setHistoryIndex(entry.i);
-          const d = new Date(entry.data);
-          setDate(d.toISOString().split('T')[0]);
-          setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-          const noteStr = entry.note || '';
-          let extractedFine = '';
-          const matchFine = noteStr.match(/Fine turno: (\d{2}:\d{2})/);
-          const matchOld = noteStr.match(/dalle \d{2}:\d{2} alle (\d{2}:\d{2})/);
-          
-          if (matchFine) extractedFine = matchFine[1];
-          else if (matchOld) extractedFine = matchOld[1];
-          
-          setHostessFine(extractedFine);
-          
-          let cleanNote = noteStr
-            .replace(/\s*\(?Fine turno: \d{2}:\d{2}\)?\s*/g, '')
-            .replace(/\d{2}\/\d{2}\/\d{4}\s*-\s*dalle\s*\d{2}:\d{2}\s*alle\s*\d{2}:\d{2}\s*/g, '')
-            .trim();
-          setNote(cleanNote);
-        } else {
-          setHistoryIndex(null);
-        }
-      }
-    }
+  // FUNZIONE PARACADUTE
+  const handleCloseRequest = () => {
+    const hasChanges = 
+      data !== initialState.data || 
+      ora !== initialState.ora || 
+      note !== initialState.note || 
+      importo !== initialState.importo || 
+      isEvaso !== initialState.isEvaso;
 
-    if (editType === 'ORDINE') {
-      const hasPending = extra.richiestaOrdine && !extra.ordineEvaso;
-      const historyOrders = history.map((h: any, i: number) => ({...h, i})).filter((h: any) => h.tipo === 'ORDINE').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-      const hasHistory = historyOrders.length > 0;
-
-      if (hasPending && hasHistory) {
-        setActiveTab('PENDING');
-      } else if (hasPending) {
-        setActiveTab('PENDING');
-      } else if (hasHistory) {
-        setActiveTab('HISTORY');
-      }
-
-      // Pre-carica dati pending
-      if (hasPending) {
-        setDate(extra.dataOrdine || '');
-        setNote(extra.noteOrdine || '');
-        setImporto(extra.importoOrdine || 0);
-      }
-      
-      // Pre-carica dati history (se selezionato o come fallback)
-      if (hasHistory) {
-        const entry = historyOrders[0];
-        const d = new Date(entry.data);
-        if (!hasPending) {
-          setHistoryIndex(entry.i);
-          setNote(entry.note || '');
-          setImporto(entry.importo || 0);
-          setDate(d.toISOString().split('T')[0]);
-          setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-        }
-      }
-    }
-  }, [isOpen, editType, extra]);
-
-  const handleSwitchTab = (tab: 'PENDING' | 'HISTORY') => {
-    setActiveTab(tab);
-    const history = extra.history || [];
-    if (tab === 'HISTORY') {
-      const historyEntries = history.map((h: any, i: number) => ({...h, i})).filter((h: any) => h.tipo === editType).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-      if (historyEntries.length > 0) {
-        const entry = historyEntries[0];
-        setHistoryIndex(entry.i);
-        setNote(entry.note || '');
-        setImporto(entry.importo || 0);
-
-        if (editType === 'HOSTESS') {
-          const d = new Date(entry.data);
-          setDate(d.toISOString().split('T')[0]);
-          setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-          
-          // Estrai fine turno dalle note
-          const noteStr = entry.note || '';
-          let extractedFine = '';
-          const matchFine = noteStr.match(/Fine turno: (\d{2}:\d{2})/);
-          const matchOld = noteStr.match(/dalle \d{2}:\d{2} alle (\d{2}:\d{2})/);
-          
-          if (matchFine) extractedFine = matchFine[1];
-          else if (matchOld) extractedFine = matchOld[1];
-          
-          setHostessFine(extractedFine);
-          
-          let cleanNote = noteStr
-            .replace(/\s*\(?Fine turno: \d{2}:\d{2}\)?\s*/g, '')
-            .replace(/\d{2}\/\d{2}\/\d{4}\s*-\s*dalle\s*\d{2}:\d{2}\s*alle\s*\d{2}:\d{2}\s*/g, '')
-            .trim();
-          setNote(cleanNote);
-        } else {
-          const d = new Date(entry.data);
-          setDate(d.toISOString().split('T')[0]);
-          setTime(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-        }
-      }
+    if (hasChanges) {
+      openConfirm({
+        title: 'Modifiche non salvate',
+        message: 'Hai modificato i dati di questo evento. Sei sicuro di voler uscire perdendo tutte le modifiche?',
+        isDestructive: true,
+        onConfirm: () => onClose()
+      });
     } else {
-      if (editType === 'ORDINE') {
-        setDate(extra.dataOrdine || '');
-        setNote(extra.noteOrdine || '');
-        setImporto(extra.importoOrdine || 0);
-      } else if (editType === 'HOSTESS') {
-        setDate(extra.hostessData || '');
-        setHostessInizio(extra.hostessInizio || '');
-        setHostessFine(extra.hostessFine || '');
-      }
+      onClose(); // Nessuna modifica, esce in silenzio
     }
   };
 
   const handleSave = () => {
-    if (editType === 'VISITA' && historyIndex !== null) {
-      onEditHistory(rivenditaId, historyIndex, note, 0, date, time);
-    } else if (editType === 'HOSTESS') {
-      if (activeTab === 'PENDING') {
-        onUpdateRubrica(rivenditaId, 'hostessData', date);
-        onUpdateRubrica(rivenditaId, 'hostessInizio', hostessInizio);
-        onUpdateRubrica(rivenditaId, 'hostessFine', hostessFine);
-      } else if (historyIndex !== null) {
-        const finalNote = hostessFine && !note.includes('Fine turno') ? (note ? `${note} (Fine turno: ${hostessFine})` : `Fine turno: ${hostessFine}`) : note;
-        onEditHistory(rivenditaId, historyIndex, finalNote, 0, date, time);
-      }
-    } else if (editType === 'ORDINE') {
-      if (activeTab === 'PENDING') {
-        onUpdateRubrica(rivenditaId, 'dataOrdine', date);
-        onUpdateRubrica(rivenditaId, 'noteOrdine', note);
-        onUpdateRubrica(rivenditaId, 'importoOrdine', importo);
-      } else if (historyIndex !== null) {
-        onEditHistory(rivenditaId, historyIndex, note, importo, date, time);
+    let newStato = undefined;
+    if (editType === 'ORDINE') {
+      newStato = isEvaso ? 'EVASO' : 'DA_EVADERE';
+      if (isEvaso) {
+        onUpdateRubrica(rivenditaId, 'ordineEvaso', true);
+        onUpdateRubrica(rivenditaId, 'richiestaOrdine', false);
       }
     }
+    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato);
     onClose();
   };
 
-  if (!isOpen) return null;
+  const handleDelete = () => {
+    openConfirm({
+      title: 'Elimina Evento',
+      message: 'Sei sicuro di voler eliminare questo evento? L\'azione è irreversibile.',
+      isDestructive: true,
+      onConfirm: () => {
+        onDeleteHistory(rivenditaId, actualIndex);
+        onClose();
+      }
+    });
+  };
 
-  const renderContent = () => {
-    const hasPending = editType === 'ORDINE' ? (extra.richiestaOrdine && !extra.ordineEvaso) : (editType === 'HOSTESS' ? (extra.showHostessModule || extra.hostessData) : false);
-    const historyEntries = (extra.history || []).filter((h: any) => h.tipo === editType);
-    const hasHistory = historyEntries.length > 0;
+  const configs = {
+    VISITA: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', title: 'Modifica Visita' },
+    ORDINE: { icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', title: 'Modifica Ordine' },
+    HOSTESS: { icon: UserCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', title: 'Modifica Hostess' },
+  };
+  const config = configs[editType];
+  const Icon = config.icon;
 
-    if (editType === 'VISITA' && !hasHistory) {
-      return <p className="text-center text-slate-500 py-8 font-medium">Nessuna visita trovata nella cronologia.</p>;
-    }
-    if (editType === 'ORDINE' && !hasPending && !hasHistory) {
-      return <p className="text-center text-slate-500 py-8 font-medium">Nessun ordine (pendente o storico) trovato.</p>;
-    }
-    if (editType === 'HOSTESS' && !hasPending && !hasHistory) {
-      return <p className="text-center text-slate-500 py-8 font-medium">Nessuna hostess (programmata o storica) trovata.</p>;
-    }
-
-    return (
-      <div className="space-y-4">
-        {editType === 'ORDINE' && hasPending && hasHistory && (
-          <div className="flex p-1 bg-slate-100 rounded-xl">
-            <button 
-              onClick={() => handleSwitchTab('PENDING')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'PENDING' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Richiesta Pendente
-            </button>
-            <button 
-              onClick={() => handleSwitchTab('HISTORY')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'HISTORY' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Ordine Storico
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <div className="flex gap-3">
-            <div className="flex-1 min-w-0 space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
-                <Calendar className="w-3 h-3 shrink-0" /> Data
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full text-sm px-2.5 py-3 sm:p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none bg-white transition-all"
-              />
+  return (
+    <div 
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={handleCloseRequest}
+    >
+      <div 
+        className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Smart */}
+        <div className={`p-5 border-b flex items-center justify-between ${config.bg} ${config.border}`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-sm ${config.color}`}>
+              <Icon className="w-6 h-6" />
             </div>
-            
-            {(activeTab === 'HISTORY' || editType === 'VISITA') && editType !== 'HOSTESS' && (
-              <div className="flex-1 min-w-0 space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
-                  <Clock className="w-3 h-3 shrink-0" /> Ora
-                </label>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="w-full text-sm px-2.5 py-3 sm:p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none bg-white transition-all"
-                />
-              </div>
-            )}
+            <h3 className="text-lg font-black text-slate-800 tracking-tight">{config.title}</h3>
+          </div>
+          <button onClick={handleCloseRequest} className="p-2.5 bg-white/60 hover:bg-white rounded-full transition-colors text-slate-500 shadow-sm active:scale-95">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Data</label>
+              <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Ora</label>
+              <input type="time" value={ora} onChange={(e) => setOra(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+            </div>
           </div>
 
-          {editType === 'HOSTESS' ? (
-            <div className="flex gap-3">
-              <div className="flex-1 min-w-0 space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider truncate block">Inizio Turno</label>
-                <select
-                  value={activeTab === 'HISTORY' ? time : hostessInizio}
-                  onChange={(e) => {
-                    const inizio = e.target.value;
-                    const fine = calcolaFineTurno(inizio);
-                    if (activeTab === 'HISTORY') {
-                      setTime(inizio);
-                    } else {
-                      setHostessInizio(inizio);
-                    }
-                    setHostessFine(fine);
-                  }}
-                  className="w-full text-sm px-2.5 py-3 sm:p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none bg-white transition-all font-bold text-brand-700 appearance-none"
-                >
-                  <option value="">Seleziona</option>
-                  {ORARI_INIZIO.map(ora => (
-                    <option key={ora} value={ora}>{ora}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1 min-w-0 space-y-1 opacity-70">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider truncate block">Fine (Auto)</label>
-                <input
-                  type="time"
-                  value={hostessFine}
-                  readOnly
-                  className="w-full text-sm px-2.5 py-3 sm:p-3 rounded-xl border border-slate-200 bg-slate-50 outline-none font-bold text-slate-500 cursor-not-allowed"
-                />
+          {editType === 'ORDINE' && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valore Ordine (€)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">€</span>
+                <input type="number" inputMode="decimal" value={importo || ''} onChange={(e) => setImporto(Number(e.target.value))} className="w-full h-14 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-inner" placeholder="0.00" />
               </div>
             </div>
-          ) : null}
+          )}
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Edit3 className="w-3 h-3" /> Note
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full text-sm p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none bg-white transition-all min-h-[100px] resize-none"
-              placeholder="Inserisci note..."
-            />
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Note e Dettagli</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 resize-none transition-all" placeholder="Aggiungi dettagli o articoli..." />
           </div>
 
-          {(editType === 'ORDINE') && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                Valore (€)
+          {editType === 'ORDINE' && (
+            <div className="pt-2">
+              <label className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${isEvaso ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                <input type="checkbox" checked={isEvaso} onChange={(e) => setIsEvaso(e.target.checked)} className="hidden" />
+                <div className="flex items-center gap-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-colors ${isEvaso ? 'bg-emerald-500 border-emerald-600 shadow-inner' : 'bg-slate-100 border-slate-300'}`}>
+                    {isEvaso && <Check className="w-4 h-4 text-white" />}
+                  </div>
+                  <span className={`text-sm font-black ${isEvaso ? 'text-emerald-800' : 'text-slate-600'}`}>Segna come Evaso / Completato</span>
+                </div>
               </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={importo || ''}
-                onChange={(e) => setImporto(Number(e.target.value))}
-                className="w-full text-sm p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none bg-white transition-all font-bold text-brand-600"
-                placeholder="0.00"
-              />
             </div>
           )}
         </div>
-      </div>
-    );
-  };
 
-  const getTitle = () => {
-    switch (editType) {
-      case 'VISITA': return { label: 'Modifica Visita', icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" /> };
-      case 'ORDINE': return { label: 'Modifica Ordine', icon: <Package className="w-5 h-5 text-blue-500" /> };
-      case 'HOSTESS': return { label: 'Modifica Hostess', icon: <UserCheck className="w-5 h-5 text-purple-500" /> };
-      default: return { label: 'Modifica Rapida', icon: <Edit3 className="w-5 h-5 text-brand-500" /> };
-    }
-  };
-
-  const title = getTitle();
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-      <div 
-        className="bg-white w-[92%] sm:w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300 mx-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-          <div className="flex items-center gap-2">
-            {title.icon}
-            <h4 className="font-bold text-slate-800">{title.label}</h4>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-            <X className="w-5 h-5 text-slate-400" />
+        {/* Footer */}
+        <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
+          <button onClick={handleDelete} className="w-14 h-14 flex items-center justify-center bg-white border border-red-200 text-red-500 rounded-2xl hover:bg-red-50 active:scale-95 transition-all shadow-sm shrink-0" title="Elimina Evento">
+            <Trash2 className="w-6 h-6" />
           </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto">
-          {renderContent()}
-        </div>
-
-        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-          <button 
-            onClick={onClose}
-            className="flex-1 py-3 bg-white text-slate-600 font-bold rounded-xl border border-slate-200 hover:bg-slate-100 transition-all text-sm"
-          >
-            Annulla
-          </button>
-          <button 
-            onClick={handleSave}
-            className="flex-1 py-3 bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-100 hover:bg-brand-700 transition-all text-sm"
-          >
-            Salva Modifiche
+          <button onClick={handleSave} className={`flex-1 h-14 flex items-center justify-center gap-2 text-white font-bold rounded-2xl border-b-[4px] active:border-b active:translate-y-[3px] transition-all shadow-md ${editType === 'ORDINE' && isEvaso ? 'bg-emerald-600 border-emerald-700 hover:bg-emerald-700' : 'bg-brand-600 border-brand-700 hover:bg-brand-700'}`}>
+            {editType === 'ORDINE' && isEvaso ? 'Salva e Archivia' : 'Salva Modifiche'}
           </button>
         </div>
       </div>

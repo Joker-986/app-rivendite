@@ -53,6 +53,9 @@ L'interfaccia utente reattiva che orchestra l'esperienza dell'utente finale.
 - **Componenti Esternalizzati**:
   - **MapView.tsx**: Integrazione Leaflet per la visualizzazione geografica con clustering dei marker.
   - **AgendaTab.tsx**: Componente di layout per la gestione delle scadenze, servizi hostess e ordini da evadere.
+  - **KpiTab.tsx**: Componente per la visualizzazione e gestione degli obiettivi mensili (Fatturato, Attivazioni, Prodotti) e il monitoraggio delle rivendite targettizzate.
+  - **SettingsModal.tsx**: Pannello di controllo centrale per la gestione del cloud sync, backup fisici, riparazione dati, quote AI e target economici globali.
+  - **StatsTab.tsx**: Modulo dedicato alla visualizzazione delle statistiche, KPI, termometro del territorio e riepilogo attività.
   - **RivenditaCard.tsx**: Componente atomico complesso. Gestisce l'espansione, l'arricchimento AI locale e le azioni rapide (Call, Nav, Save).
   - **QuickEditModal.tsx**: Interfaccia di data-entry rapida per note, ordini e pianificazione visite.
   - **TargetModal.tsx**: Gestisce l'impostazione degli obiettivi economici mensili e dei Quorum operativi (Focus e Attivazioni) con persistenza in LocalStorage.
@@ -74,6 +77,6 @@ L'interfaccia utente reattiva che orchestra l'esperienza dell'utente finale.
 ---
 
 ## 5. PIANO DI EVOLUZIONE (Backlog Architetturale)
-- **Modularizzazione**: Spostare le logiche di calcolo KPI e statistiche da `App.tsx` a un nuovo servizio `statsService.ts`.
+- **Modularizzazione**: La migrazione delle logiche di calcolo KPI e statistiche da `App.tsx` a `statsService.ts` e `StatsTab.tsx` è conclusa. Prossimo step: estrazione del Tab CRM.
 - **Sincronizzazione**: Implementare un sistema di "Background Sync" nel Service Worker per inviare i dati salvati offline al DB SQLite non appena torna la connessione.
 - **Sicurezza**: Rafforzare la validazione dei dati in `server.ts` per prevenire injection nel database SQLite.

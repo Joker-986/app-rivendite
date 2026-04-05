@@ -4,16 +4,17 @@ import {
   Copy, Check, Trash2, BookOpen, ChevronDown, ChevronUp, 
   Calendar, CheckCircle2, X, ClipboardList, Database, 
   Target, Activity, CalendarClock, UserCheck, Edit3, 
-  TrendingDown, TrendingUp, Package, Share2, Loader2
+  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap
 } from 'lucide-react';
 import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData } from '../types';
+import { useModals } from '../contexts/ModalContext';
+import { useStrategy } from '../contexts/StrategyContext';
 import { 
   formatGoogleCalendarDate, getAvailableTimes, handleNavigation, 
   toTitleCase, loadFromStorage, getRivenditaId, 
   getGoogleResetDate, calcolaFineTurno, ORARI_INIZIO 
 } from '../utils/helpers';
 import { EnrichedDetails } from '../services/geminiService';
-import QuickEditModal from './QuickEditModal';
 
 export interface RivenditaCardProps {
   res: SearchResult;
@@ -36,13 +37,11 @@ export interface RivenditaCardProps {
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
   setExpandedCardId: (id: string | null) => void;
-  setShareModal: (modal: { isOpen: boolean; text: string }) => void;
   showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
   handleStoreUpdate?: (id: string, field: string, value: any) => void;
   setGiroVisite?: React.Dispatch<React.SetStateAction<SearchResult[]>>;
   moveCard?: (index: number, direction: 'up' | 'down') => void;
   jumpToPosition?: (fromIndex: number, toPosition: string) => void;
-  openRevisitModal: (id: string) => void;
   aiLockedUntil: number | null;
   cooldownSeconds: number;
   handleEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string) => void;
@@ -256,13 +255,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   handleEnrich,
   addToCrm,
   setExpandedCardId,
-  setShareModal,
   showToast,
   handleStoreUpdate,
   setGiroVisite,
   moveCard,
   jumpToPosition,
-  openRevisitModal,
   aiLockedUntil,
   cooldownSeconds,
   handleEditHistory,
@@ -270,6 +267,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   targetBassoRendente,
   targetMensile
 }) => {
+  const { openShare, openQuickEdit, openRevisitModal } = useModals();
+  const { missions } = useStrategy();
   const id = getRivenditaId(res);
 
   // Funzione per pulire l'indirizzo prima di inviarlo a Google Maps / Apple Maps
@@ -296,7 +295,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
-  const [quickEditType, setQuickEditType] = useState<'VISITA' | 'ORDINE' | 'HOSTESS' | null>(null);
+  const [showQuickTarget, setShowQuickTarget] = useState(false);
   
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
@@ -351,11 +350,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         text: shareText
       }).catch((err) => {
         if (err.name !== 'AbortError') {
-          setShareModal({ isOpen: true, text: shareText });
+          openShare(shareText);
         }
       });
     } else {
-      setShareModal({ isOpen: true, text: shareText });
+      openShare(shareText);
     }
   };
 
@@ -404,6 +403,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   {extra.stato || 'Da definire'}
                 </span>
               )}
+
               {extra.ordinante === 'alto' && (
                 <span className="flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
                   <TrendingUp className="w-3.5 h-3.5" />
@@ -414,81 +414,67 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   <TrendingDown className="w-3.5 h-3.5" />
                 </span>
               )}
-              {/* BADGES KPI MULTI-MODALI (Aggiornati) */}
-              {(extra.hasTarget || extra.kpiAttivazione || extra.kpiProdotto) &&
+              {/* BADGES MISSIONI IBRIDE (CALCOLO LOCALE MENSILE) */}
+              {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-1">
-                  {/* KPI FATTURATO */}
-                  {extra.hasTarget && (
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
-                      (() => {
-                        const ora = new Date();
-                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
-                          if (curr.tipo === 'ORDINE') {
-                            const d = new Date(curr.data);
-                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
-                          }
-                          return acc;
-                        }, 0);
-                        return (targetBassoRendente - fattoMese) <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-200';
-                      })()
-                    }`}>
-                      <Target className="w-2.5 h-2.5" />
-                      {(() => {
-                        const ora = new Date();
-                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
-                          if (curr.tipo === 'ORDINE') {
-                            const d = new Date(curr.data);
-                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
-                          }
-                          return acc;
-                        }, 0);
-                        const mancante = targetBassoRendente - fattoMese;
-                        return mancante <= 0 ? 'Fatturato OK' : `Manca €${mancante.toLocaleString('it-IT')}`;
-                      })()}
-                    </div>
-                  )}
+                  {extra.targetIdoneo.map(missionId => {
+                    const mission = missions.find(m => m.id === missionId);
+                    if (!mission) return null;
 
-                  {/* KPI ATTIVAZIONE */}
-                  {extra.kpiAttivazione && (
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
-                      (() => {
-                        const ora = new Date();
-                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
-                          if (curr.tipo === 'ORDINE') {
-                            const d = new Date(curr.data);
-                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
-                          }
-                          return acc;
-                        }, 0);
-                        return fattoMese > 0 ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200';
-                      })()
-                    }`}>
-                      <Activity className="w-2.5 h-2.5" />
-                      {(() => {
-                        const ora = new Date();
-                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
-                          if (curr.tipo === 'ORDINE') {
-                            const d = new Date(curr.data);
-                            if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) return acc + (Number(curr.importo) || 0);
-                          }
-                          return acc;
-                        }, 0);
-                        return fattoMese > 0 ? 'Attivata' : 'Da Attivare';
-                      })()}
-                    </div>
-                  )}
+                    // Calcolo Fatto Mese Locale per questa rivendita
+                    const ora = new Date();
+                    const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
+                      if (curr.tipo === 'ORDINE') {
+                        const d = new Date(curr.data);
+                        if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
+                          return acc + (Number(curr.importo) || 0);
+                        }
+                      }
+                      return acc;
+                    }, 0);
 
-                  {/* KPI PRODOTTO */}
-                  {extra.kpiProdotto && (
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${
-                      extra.kpiProdottoCompletato ? 'bg-purple-500 text-white border-purple-600' : 'bg-slate-100 text-slate-500 border-slate-200'
-                    }`}>
-                      <CheckCircle2 className="w-2.5 h-2.5" />
-                      {extra.kpiProdottoCompletato ? 'Piazzato' : (extra.kpiProdottoNome || 'Prodotto')}
-                    </div>
-                  )}
+                    if (mission.tipo === 'FATTURATO') {
+                      const targetValido = Number(targetBassoRendente) || 0;
+                      // REGOLA: Se non c'è un target impostato, nascondi il badge per evitare NaN e UI sporca
+                      if (targetValido <= 0) return null;
+
+                      const mancante = targetValido - fattoMese;
+                      if (isNaN(mancante)) return null; // Sicurezza extra
+
+                      const isCompleted = mancante <= 0;
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                          <Target className="w-2.5 h-2.5" />
+                          {isCompleted ? 'Fatturato OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
+                        </div>
+                      );
+                    }
+
+                    if (mission.tipo === 'ATTIVAZIONE') {
+                      const isCompleted = fattoMese > 0;
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                          <Zap className="w-2.5 h-2.5" />
+                          {isCompleted ? 'Attivata' : 'Da Attivare'}
+                        </div>
+                      );
+                    }
+
+                    if (mission.tipo === 'PRODOTTO') {
+                      // Placeholder visivo in attesa dell'implementazione del POS (Carrello)
+                      const isCompleted = extra.kpiProdottoCompletato;
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                          <Package className="w-2.5 h-2.5" />
+                          {isCompleted ? 'Piazzato ✓' : (extra.kpiProdottoNome || mission.nome)}
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })}
                 </div>
-              }
+              )}
             </div>
             
             <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
@@ -506,29 +492,98 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           </div>
         </div>
         
-        {/* Pulsanti laterali (Share, ClipboardList, Trash2) */}
-        <div className="flex gap-2 shrink-0">
+        {/* Pulsanti laterali (Segmented Control UI - Stile Pillola Colorata) */}
+        <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0" onClick={(e) => e.stopPropagation()}>
+          {/* INIZIO BLOCCO MENU FLUTTUANTE BLINDATO */}
+          <div className="relative h-full" onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowQuickTarget(!showQuickTarget); }}
+              className={`px-3 h-full transition-colors flex items-center justify-center ${showQuickTarget ? 'text-indigo-700 bg-indigo-50' : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50'}`}
+              title="Assegnazione Rapida Target"
+            >
+              <Target className="w-4 h-4" />
+            </button>
+            
+            {showQuickTarget && (
+              <div 
+                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-[200] p-2 animate-in fade-in zoom-in-95 cursor-default"
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              >
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 px-1">Missioni Attive</div>
+                {missions.filter(m => m.stato !== 'ARCHIVIATA').length === 0 ? (
+                  <div className="text-[10px] text-slate-500 italic px-1">Nessuna missione in Regia</div>
+                ) : (
+                  <div className="space-y-1">
+                    {missions.filter(m => m.stato !== 'ARCHIVIATA').map(m => {
+                      const isSelected = (extra.targetIdoneo || []).includes(m.id);
+                      return (
+                        <div 
+                          key={m.id} 
+                          className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            const current = extra.targetIdoneo || [];
+                            const next = !isSelected ? [...current, m.id] : current.filter((id: string) => id !== m.id);
+                            handleRubricaUpdate(id, 'targetIdoneo', next);
+                          }}
+                        >
+                          <span className="text-[11px] font-bold text-slate-700 truncate pr-2 pointer-events-none">{m.nome}</span>
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors pointer-events-none ${isSelected ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'}`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* FINE BLOCCO MENU FLUTTUANTE BLINDATO */}
+          
+          <div className="w-px h-5 bg-slate-200 shrink-0"></div>
+          
           <button
             onClick={(e) => handleShare(e)}
-            className={`p-2 rounded-xl transition-all shrink-0 flex items-center gap-1 ${
-              isCopied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600'
-            }`}
+            className={`px-3 h-full transition-colors flex items-center justify-center ${isCopied ? 'text-emerald-600 bg-emerald-50' : 'text-sky-500 hover:text-sky-700 hover:bg-sky-50'}`}
             title="Condividi informazioni"
           >
-            {isCopied ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
-            {isCopied && <span className="text-[10px] font-bold uppercase">Copiato!</span>}
+            {isCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
           </button>
+          
+          <div className="w-px h-5 bg-slate-200 shrink-0"></div>
+          
           <button
             onClick={() => toggleSave(res)}
-            className={`p-2 rounded-xl transition-all ${isInGiro ? 'bg-brand-100 text-brand-600' : 'bg-slate-50 text-slate-400'}`}
+            className={`px-3 h-full transition-colors flex items-center justify-center ${isInGiro ? 'text-brand-700 bg-brand-50' : 'text-brand-500 hover:text-brand-700 hover:bg-brand-50'}`}
+            title="Aggiungi/Rimuovi dal Giro"
           >
-            <ClipboardList className="w-5 h-5" />
+            <ClipboardList className="w-4 h-4" />
           </button>
+
+          {isCrmTab && (
+            <>
+              <div className="w-px h-5 bg-slate-200 shrink-0"></div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (res.isStore) removeStore(res);
+                  else removeFromCrm(res);
+                }}
+                className="px-3 h-full transition-colors flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50"
+                title="Elimina definitivamente"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
       </div>
       
-      <LastOrderTile data={extra} onClick={() => setQuickEditType('ORDINE')} />
-      <LastHostessTile data={extra} onClick={() => setQuickEditType('HOSTESS')} />
+      <LastOrderTile data={extra} onClick={() => openQuickEdit('ORDINE', id, extra)} />
+      <LastHostessTile data={extra} onClick={() => openQuickEdit('HOSTESS', id, extra)} />
       
       <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
         <div className="flex items-start gap-2">
@@ -543,7 +598,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
       {(extra.visitata === 'Si' || extra.lastDataVisita) && (
         <div 
-          onClick={() => setQuickEditType('VISITA')}
+          onClick={() => openQuickEdit('VISITA', id, extra)}
           className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 cursor-pointer hover:opacity-80 active:scale-[0.98] transition-all ${extra.visitata === 'Si' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-700'}`}
         >
           <div className="flex items-center justify-between">
@@ -1196,102 +1251,43 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   />
                 </div>
 
-                {/* SEZIONE KPI MULTIPLI (v3.0) */}
+                {/* MISSIONI MBO ASSEGNATE (v4.0) */}
                 <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl mt-4">
                   <div className="flex flex-col gap-1 mb-3">
-                    <span className="text-[10px] font-black text-indigo-800 uppercase tracking-wider flex items-center gap-1"><Target className="w-3.5 h-3.5"/> KPI Mensili Assegnati</span>
-                    <span className="text-[9px] text-indigo-500 font-medium">Seleziona uno o più obiettivi per questa rivendita</span>
+                    <span className="text-[10px] font-black text-indigo-800 uppercase tracking-wider flex items-center gap-1"><Target className="w-3.5 h-3.5"/> Missioni MBO Assegnate</span>
+                    <span className="text-[9px] text-indigo-500 font-medium">Seleziona gli obiettivi per questa rivendita</span>
                   </div>
 
-                  {/* Toggles */}
-                  <div className="grid grid-cols-1 gap-2 mb-3">
-                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
-                      <input type="checkbox" checked={extra.hasTarget || false} onChange={(e) => handleRubricaUpdate(id, 'hasTarget', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
-                      <span className="text-xs font-bold text-indigo-700">🎯 KPI Fatturato Minimo</span>
-                    </label>
-                    
-                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
-                      <input type="checkbox" checked={extra.kpiAttivazione || false} onChange={(e) => handleRubricaUpdate(id, 'kpiAttivazione', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
-                      <span className="text-xs font-bold text-indigo-700">🚀 KPI Attivazione (1° Ordine)</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-indigo-100 shadow-sm cursor-pointer active:scale-[0.98] transition-all">
-                      <input type="checkbox" checked={extra.kpiProdotto || false} onChange={(e) => handleRubricaUpdate(id, 'kpiProdotto', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500" />
-                      <span className="text-xs font-bold text-indigo-700">📦 KPI Prodotto Specifico</span>
-                    </label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {missions.map(mission => {
+                      const isSelected = (extra.targetIdoneo || []).includes(mission.id);
+                      return (
+                        <label key={mission.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-white border-brand-200 shadow-sm' : 'bg-transparent border-transparent opacity-60 hover:opacity-100'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded flex items-center justify-center ${mission.tipo === 'FATTURATO' ? 'bg-blue-50 text-blue-600' : mission.tipo === 'ATTIVAZIONE' ? 'bg-emerald-50 text-emerald-600' : 'bg-purple-50 text-purple-600'}`}>
+                              {mission.tipo === 'FATTURATO' ? <TrendingUp className="w-3.5 h-3.5" /> : mission.tipo === 'ATTIVAZIONE' ? <Zap className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-700">{mission.nome}</span>
+                          </div>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected} 
+                            onChange={(e) => {
+                              const current = extra.targetIdoneo || [];
+                              const next = e.target.checked 
+                                ? [...current, mission.id]
+                                : current.filter(id => id !== mission.id);
+                              handleRubricaUpdate(id, 'targetIdoneo', next);
+                            }}
+                            className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500" 
+                          />
+                        </label>
+                      );
+                    })}
+                    {missions.length === 0 && (
+                      <p className="text-[10px] text-slate-400 italic text-center py-2">Nessuna missione configurata nella Regia</p>
+                    )}
                   </div>
-
-                  {/* Dettagli KPI Attivi */}
-                  {(extra.hasTarget || extra.kpiAttivazione || extra.kpiProdotto) && (
-                    <div className="space-y-2 pt-2 border-t border-indigo-100/50">
-                      {/* Calcolo base mese corrente */}
-                      {(() => {
-                        const ora = new Date();
-                        const meseCorrente = ora.getMonth();
-                        const annoCorrente = ora.getFullYear();
-                        const fattoMese = (extra.history || []).reduce((acc, curr) => {
-                          if (curr.tipo === 'ORDINE') {
-                            const d = new Date(curr.data);
-                            if (d.getMonth() === meseCorrente && d.getFullYear() === annoCorrente) {
-                              return acc + (Number(curr.importo) || 0);
-                            }
-                          }
-                          return acc;
-                        }, 0);
-
-                        return (
-                          <>
-                            {extra.hasTarget && (
-                              <div className="flex flex-wrap items-center gap-2 animate-in slide-in-from-top-1 duration-200">
-                                <div className="flex-1 bg-white p-1.5 rounded-lg border border-indigo-200 flex justify-between items-center shadow-sm">
-                                  <span className="text-[9px] font-black text-indigo-500 uppercase">Fatto Mese</span>
-                                  <span className="text-xs font-black text-indigo-900">€{fattoMese.toFixed(2)}</span>
-                                </div>
-                                {(() => {
-                                  const mancante = targetBassoRendente - fattoMese;
-                                  return (
-                                    <div className={`px-2 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-tight flex-[1.5] text-center shadow-sm ${mancante <= 0 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
-                                      {mancante <= 0 ? '🎯 Fatturato OK' : `Mancano €${mancante.toLocaleString('it-IT')}`}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            )}
-
-                            {extra.kpiAttivazione && (
-                              <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-indigo-200 shadow-sm animate-in slide-in-from-top-1 duration-200">
-                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Stato Attivazione</span>
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${fattoMese > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                  {fattoMese > 0 ? '🚀 Attivata OK' : '⏳ In attesa'}
-                                </span>
-                              </div>
-                            )}
-
-                            {extra.kpiProdotto && (
-                              <div className="bg-white p-2 rounded-lg border border-indigo-200 shadow-sm space-y-2 animate-in slide-in-from-top-1 duration-200">
-                                <input 
-                                  type="text" 
-                                  placeholder="Nome prodotto (es. Bundle Waka)"
-                                  value={extra.kpiProdottoNome || ''}
-                                  onChange={(e) => handleRubricaUpdate(id, 'kpiProdottoNome', e.target.value)}
-                                  className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold outline-none focus:ring-1 focus:ring-indigo-500"
-                                />
-                                <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-1.5 rounded-md border border-slate-100">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={extra.kpiProdottoCompletato || false}
-                                    onChange={(e) => handleRubricaUpdate(id, 'kpiProdottoCompletato', e.target.checked)}
-                                    className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                                  />
-                                  <span className="text-[10px] font-bold text-slate-700">Piazzato / Completato</span>
-                                </label>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
                 </div>
 
                 <div className="pt-2 border-t border-slate-200">
@@ -1467,17 +1463,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
           </div>
         </div>
-      )}
-      {quickEditType && (
-        <QuickEditModal
-          isOpen={!!quickEditType}
-          onClose={() => setQuickEditType(null)}
-          editType={quickEditType}
-          rivenditaId={id}
-          extra={extra}
-          onUpdateRubrica={handleRubricaUpdate}
-          onEditHistory={handleEditHistory}
-        />
       )}
     </div>
   );

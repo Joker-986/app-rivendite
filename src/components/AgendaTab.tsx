@@ -1,7 +1,12 @@
-import React from 'react';
-import { CalendarClock, UserCheck, ShoppingBag, Plus, ChevronRight, Edit3 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  CalendarClock, UserCheck, ShoppingBag, ChevronRight, Edit3, 
+  History, ChevronDown, CheckCircle2, Navigation, Filter, MapPin,
+  AlertOctagon, Zap, CalendarDays, Rocket
+} from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
-import { getRivenditaId } from '../utils/helpers';
+import { getRivenditaId, handleNavigation } from '../utils/helpers';
+import { useModals } from '../contexts/ModalContext';
 
 interface AgendaTabProps {
   visitStats: any;
@@ -12,274 +17,318 @@ interface AgendaTabProps {
   setGiroVisite: React.Dispatch<React.SetStateAction<SearchResult[]>>;
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
-  setAgendaHostessEdit: (edit: { id: string; extra: any; targetIndex: number } | null) => void;
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  showToast: (message: string, type?: any) => void;
 }
 
 const AgendaTab: React.FC<AgendaTabProps> = ({
-  visitStats,
-  rubrica,
-  crmAnagrafiche,
-  stores,
-  giroVisite,
-  setGiroVisite,
-  setRivenditaFilter,
-  setActiveTab,
-  setAgendaHostessEdit,
-  showToast
+  rubrica, crmAnagrafiche, stores, giroVisite, 
+  setRivenditaFilter, setActiveTab
 }) => {
+  const { openQuickEdit, openRevisitModal } = useModals();
+  
+  const [activeFilters, setActiveFilters] = useState<string[]>(['ORDINI', 'HOSTESS', 'APPUNTAMENTI']);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const toggleFilter = (filter: string) => {
+    setActiveFilters(prev => prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]);
+  };
+
+  const processedData = useMemo(() => {
+    const allRiv = [...crmAnagrafiche, ...stores, ...giroVisite];
+    const todayObj = new Date(); 
+    todayObj.setHours(0,0,0,0);
+    const todayTime = todayObj.getTime();
+
+    const groups: any[] = [];
+
+    Object.entries(rubrica).forEach(([id, d]: [string, any]) => {
+      const riv = allRiv.find(r => getRivenditaId(r) === id);
+      if (!riv) return;
+
+      // FIX: Aggiunta dell'originalIndex per il corretto funzionamento del QuickEditModal
+      const history = (d.history || []).map((h: any, index: number) => ({ ...h, originalIndex: index }));
+      
+      const hasRevisit = !!d.dataRivisita;
+      const isRevisitOverdue = hasRevisit && new Date(d.dataRivisita).getTime() < todayTime;
+      const isRevisitToday = hasRevisit && new Date(d.dataRivisita).getTime() === todayTime;
+
+      // URGENZE
+      const pendingOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.stato === 'DA_EVADERE').sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      const futureHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() >= todayTime).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      
+      // STORICO
+      const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.stato === 'EVASO').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      const pastHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() < todayTime).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      const pastVisits = history.filter((h: any) => h.tipo === 'VISITA').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+
+      let lastHistoryTime = 0;
+      if (completedOrders.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(completedOrders[0].data).getTime());
+      if (pastHostess.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastHostess[0].data).getTime());
+      if (pastVisits.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastVisits[0].data).getTime());
+
+      groups.push({
+        id, riv, data: d,
+        pendingOrders, completedOrders,
+        futureHostess, pastHostess, pastVisits,
+        hasRevisit, isRevisitOverdue, isRevisitToday,
+        totalEvents: history.length,
+        lastHistoryTime
+      });
+    });
+
+    return groups;
+  }, [rubrica, crmAnagrafiche, stores, giroVisite]);
+
+  const bucketedGroups = useMemo(() => {
+    const todayObj = new Date(); 
+    todayObj.setHours(0,0,0,0);
+    const todayTime = todayObj.getTime();
+    const next7DaysTime = todayTime + (7 * 24 * 60 * 60 * 1000);
+
+    const withBuckets = processedData.map(g => {
+      const validDates: number[] = [];
+      
+      if (activeFilters.includes('APPUNTAMENTI') && g.hasRevisit) {
+        validDates.push(new Date(g.data.dataRivisita).setHours(0,0,0,0));
+      }
+      if (activeFilters.includes('ORDINI')) {
+        g.pendingOrders.forEach((o: any) => validDates.push(new Date(o.data).setHours(0,0,0,0)));
+      }
+      if (activeFilters.includes('HOSTESS')) {
+        g.futureHostess.forEach((h: any) => validDates.push(new Date(h.data).setHours(0,0,0,0)));
+      }
+
+      let bucket = 'ARCHIVIO';
+      let refDate = Infinity;
+
+      if (validDates.length > 0) {
+        refDate = Math.min(...validDates);
+        if (refDate < todayTime) bucket = 'SCADUTI';
+        else if (refDate === todayTime) bucket = 'OGGI';
+        else if (refDate <= next7DaysTime) bucket = 'SETTIMANA';
+        else bucket = 'FUTURO';
+      }
+
+      return { ...g, bucket, refDate };
+    });
+
+    return withBuckets.filter(g => {
+      if (g.bucket !== 'ARCHIVIO') return true;
+      if (!showArchived) return false;
+      const matchOrd = activeFilters.includes('ORDINI') && g.completedOrders.length > 0;
+      const matchHost = activeFilters.includes('HOSTESS') && g.pastHostess.length > 0;
+      const matchVis = activeFilters.includes('APPUNTAMENTI') && g.pastVisits.length > 0;
+      return matchOrd || matchHost || matchVis;
+    });
+
+  }, [processedData, activeFilters, showArchived]);
+
+  // FIX: ORDINAMENTO DEI MACRO-GRUPPI CORRETTO
+  // Scaduti: Decrescente (I ritardi di ieri in cima, quelli vecchi in fondo)
+  const scaduti = bucketedGroups.filter(g => g.bucket === 'SCADUTI').sort((a, b) => b.refDate - a.refDate);
+  // Oggi: Chi ha più eventi
+  const oggi = bucketedGroups.filter(g => g.bucket === 'OGGI').sort((a, b) => b.totalEvents - a.totalEvents);
+  // Settimana / Futuro: Crescente (Da domani verso il mese prossimo)
+  const settimana = bucketedGroups.filter(g => g.bucket === 'SETTIMANA').sort((a, b) => a.refDate - b.refDate);
+  const futuro = bucketedGroups.filter(g => g.bucket === 'FUTURO').sort((a, b) => a.refDate - b.refDate);
+  // Archivio: Decrescente (Le cose completate poco fa in cima)
+  const archivio = bucketedGroups.filter(g => g.bucket === 'ARCHIVIO').sort((a, b) => b.lastHistoryTime - a.lastHistoryTime);
+
+  const renderCard = (group: any) => {
+    // FIX: Stili dinamici in base al Macro-Gruppo per evidenziare le sezioni
+    const isScaduto = group.bucket === 'SCADUTI';
+    const isOggi = group.bucket === 'OGGI';
+    
+    const cardBgClass = isScaduto 
+      ? 'bg-red-50/50 border-red-200' 
+      : isOggi 
+        ? 'bg-amber-50/30 border-amber-200' 
+        : 'bg-white border-slate-200';
+
+    return (
+      <div key={group.id} className={`${cardBgClass} rounded-2xl border shadow-sm overflow-hidden p-2.5 mb-3 transition-colors`}>
+        <div className="flex justify-between items-center mb-2 gap-2">
+          <div className="min-w-0 flex-1 flex items-center gap-1.5">
+            <h3 className="font-black text-slate-800 text-[13px] truncate">{group.riv.isStore ? group.riv.storeName : `Riv. ${group.riv['Num. Rivendita']}`}</h3>
+            <span className="text-[9px] font-bold text-slate-400 uppercase truncate">• {group.riv['Comune']}</span>
+          </div>
+          <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200/60 shadow-sm shrink-0 h-fit" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => handleNavigation(group.riv['Indirizzo'] + ', ' + group.riv['Comune'])} className="p-1.5 rounded-lg text-brand-600 hover:bg-slate-50 transition-colors active:scale-95" title="Naviga">
+              <Navigation className="w-3.5 h-3.5" />
+            </button>
+            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+            <button onClick={() => { setRivenditaFilter(group.riv.isStore ? group.riv.storeNumber : group.riv['Num. Rivendita']); setActiveTab('crm'); }} className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-50 transition-colors" title="Apri nel CRM">
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          {activeFilters.includes('APPUNTAMENTI') && group.hasRevisit && (
+            <div onClick={() => openRevisitModal(group.id)} className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer ${group.isRevisitOverdue ? 'bg-red-50 border-red-200' : group.isRevisitToday ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+               <div className="flex items-center gap-1.5 min-w-0">
+                  <CalendarClock className={`w-3.5 h-3.5 shrink-0 ${group.isRevisitOverdue ? 'text-red-500' : group.isRevisitToday ? 'text-amber-500' : 'text-slate-500'}`} />
+                  <span className={`text-[10px] font-bold truncate ${group.isRevisitOverdue ? 'text-red-800' : group.isRevisitToday ? 'text-amber-800' : 'text-slate-700'}`}>Appt: {new Date(group.data.dataRivisita).toLocaleDateString('it-IT')} {group.data.oraRivisita}</span>
+               </div>
+               {group.isRevisitOverdue && <span className="text-[9px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded shrink-0">SCADUTO</span>}
+               {group.isRevisitToday && <span className="text-[9px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">OGGI</span>}
+            </div>
+          )}
+
+          {/* FIX: La data non sparisce più se l'ordine è scaduto */}
+          {activeFilters.includes('ORDINI') && group.pendingOrders.map((ord: any) => {
+            const isOverdue = new Date(ord.data).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+            return (
+            <div key={ord.originalIndex} onClick={() => openQuickEdit('ORDINE', group.id, group.data, ord.originalIndex)} className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200 hover:bg-blue-100'}`}>
+               <div className="flex items-center gap-1.5 min-w-0">
+                  <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`} />
+                  <span className={`text-[11px] font-black ${isOverdue ? 'text-red-900' : 'text-blue-900'}`}>€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
+                  <span className={`text-[9px] truncate ml-1 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>{ord.note || 'Senza note'}</span>
+               </div>
+               <div className="flex items-center gap-1.5 shrink-0">
+                  {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? 'text-red-800 bg-red-100' : 'text-white bg-blue-600'}`}>
+                    {new Date(ord.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'2-digit'})}
+                  </span>
+               </div>
+            </div>
+          )})}
+
+          {activeFilters.includes('HOSTESS') && group.futureHostess.map((h: any) => (
+            <div key={h.originalIndex} onClick={() => openQuickEdit('HOSTESS', group.id, group.data, h.originalIndex)} className="flex items-center justify-between p-1.5 rounded-lg bg-purple-50 border border-purple-200 cursor-pointer hover:bg-purple-100">
+               <div className="flex items-center gap-1.5 min-w-0">
+                  <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                  <span className="text-[10px] font-bold text-purple-900 truncate">Hostess: {new Date(h.data).toLocaleDateString('it-IT')} {new Date(h.data).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</span>
+               </div>
+               <Edit3 className="w-3 h-3 text-purple-400 shrink-0" />
+            </div>
+          ))}
+        </div>
+
+        {showArchived && (group.completedOrders.length > 0 || group.pastHostess.length > 0 || group.pastVisits.length > 0) && (
+          <details className="mt-2 group border-t border-slate-200/60 pt-1">
+            <summary className="flex items-center justify-between p-1.5 cursor-pointer list-none hover:bg-white/50 rounded-lg transition-colors">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><History className="w-3 h-3"/> Storico Evasi</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-300 group-open:rotate-180 transition-transform" />
+            </summary>
+            <div className="space-y-1 mt-1">
+               {activeFilters.includes('ORDINI') && group.completedOrders.map((ord: any) => (
+                  <div key={ord.originalIndex} onClick={() => openQuickEdit('ORDINE', group.id, group.data, ord.originalIndex)} className="flex items-center justify-between p-1.5 rounded-md bg-white/80 border border-slate-100 cursor-pointer hover:bg-white">
+                     <div className="flex items-center gap-1.5 min-w-0">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-600">€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
+                        <span className="text-[9px] text-slate-400 truncate ml-1">{ord.note}</span>
+                     </div>
+                     <span className="text-[9px] font-bold text-slate-400">{new Date(ord.data).toLocaleDateString('it-IT')}</span>
+                  </div>
+               ))}
+               {activeFilters.includes('HOSTESS') && group.pastHostess.map((h: any) => (
+                  <div key={h.originalIndex} onClick={() => openQuickEdit('HOSTESS', group.id, group.data, h.originalIndex)} className="flex items-center justify-between p-1.5 rounded-md bg-white/80 border border-slate-100 cursor-pointer hover:bg-white">
+                     <div className="flex items-center gap-1.5 min-w-0">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-600 truncate">Hostess {new Date(h.data).toLocaleDateString('it-IT')}</span>
+                     </div>
+                  </div>
+               ))}
+               {activeFilters.includes('APPUNTAMENTI') && group.pastVisits.map((v: any, idx: number) => (
+                  <div key={`vis-${idx}`} className="flex items-center justify-between p-1.5 rounded-md bg-white/80 border border-slate-100">
+                     <div className="flex items-center gap-1.5 min-w-0">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-600 truncate">Visita {new Date(v.data).toLocaleDateString('it-IT')}</span>
+                     </div>
+                  </div>
+               ))}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between px-1 mb-2">
-        <h2 className="text-xl font-bold text-slate-800 tracking-tight">Agenda Operativa</h2>
-      </div>
-
-      {/* 1. APPUNTAMENTI / DA RIVISITARE */}
-      <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-              <CalendarClock className="w-4 h-4 text-orange-600" />
-            </div>
-            <h3 className="font-bold text-slate-800">Appuntamenti / Da Rivisitare</h3>
-          </div>
-          {visitStats.prossimi.length > 0 && (
-            <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-lg text-[10px] font-black border border-orange-200">{visitStats.prossimi.length}</span>
-          )}
-        </div>
-        <div className="space-y-3">
-          {visitStats.prossimi.length > 0 ? (
-            visitStats.prossimi.map((p: any) => {
-              const [year, month, day] = p.dataRivisita.split('-').map(Number);
-              const dObj = new Date(year, month - 1, day);
-              const dataIT = dObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-              const oggiIT = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-              const isToday = dataIT === oggiIT;
-              const isOverdue = p.isOverdue;
-
-              return (
-                <div key={p.id} className={`p-1.5 rounded-xl border transition-all ${
-                  isToday ? 'bg-orange-100 border-orange-400 shadow-sm ring-1 ring-orange-200' : 
-                  isOverdue ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-orange-100'
-                }`}>
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="min-w-0">
-                      <p className={`text-[11px] font-bold truncate ${isToday ? 'text-orange-900' : isOverdue ? 'text-red-900' : 'text-slate-800'}`}>
-                        {p.nome} - {p.comune}
-                      </p>
-                      <p className={`text-[10px] font-medium flex items-center gap-1 mt-0.5 ${isToday ? 'text-orange-700' : isOverdue ? 'text-red-600' : 'text-slate-600'}`}>
-                        {dataIT} {p.ora} 
-                        {isToday && ' • OGGI'}
-                        {isOverdue && ' • DA RECUPERARE'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex gap-2 mt-2">
-                    <button 
-                      onClick={() => {
-                        const riv = [...crmAnagrafiche, ...stores].find(r => getRivenditaId(r) === p.id);
-                        if (riv && !giroVisite.some(g => getRivenditaId(g) === p.id)) {
-                          setGiroVisite(prev => [...prev, riv]);
-                          showToast('Aggiunta al giro');
-                        }
-                      }}
-                      className="flex-1 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Giro
-                    </button>
-                    <button 
-                      onClick={() => { setRivenditaFilter(p.soloNumero); setActiveTab('crm'); }} 
-                      className="px-3 py-1 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-                    >
-                      <ChevronRight className="w-3 h-3 text-slate-400" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-[10px] text-slate-400 italic text-center py-4">Nessuna rivisita programmata.</p>
-          )}
+    <div className="space-y-4 animate-in fade-in duration-500 pb-20">
+      <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm py-2 px-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1">
+          <button onClick={() => toggleFilter('ORDINI')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('ORDINI') ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-500 border-slate-200'}`}>
+            <ShoppingBag className="w-3.5 h-3.5" /> Ordini
+          </button>
+          <button onClick={() => toggleFilter('HOSTESS')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('HOSTESS') ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-slate-500 border-slate-200'}`}>
+            <UserCheck className="w-3.5 h-3.5" /> Hostess
+          </button>
+          <button onClick={() => toggleFilter('APPUNTAMENTI')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('APPUNTAMENTI') ? 'bg-orange-600 text-white border-orange-700' : 'bg-white text-slate-500 border-slate-200'}`}>
+            <CalendarClock className="w-3.5 h-3.5" /> Appuntamenti
+          </button>
+          <div className="w-px h-5 bg-slate-300 mx-0.5 shrink-0"></div>
+          <button onClick={() => setShowArchived(!showArchived)} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${showArchived ? 'bg-slate-800 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
+            <History className="w-3.5 h-3.5" /> + Archivio
+          </button>
         </div>
       </div>
 
-      {/* 2. SERVIZI HOSTESS (Raggruppati v3.04) */}
-      <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-              <UserCheck className="w-4 h-4 text-purple-600" />
-            </div>
-            <h3 className="font-bold text-slate-800">Servizi Hostess</h3>
+      <div className="px-1">
+        {bucketedGroups.length === 0 ? (
+          <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center space-y-3 mt-4">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto"><Filter className="w-8 h-8 text-slate-200" /></div>
+            <p className="text-slate-500 font-medium text-sm">Nessuna attività per i filtri selezionati.</p>
           </div>
-        </div>
-        <div className="space-y-3">
-          {(() => {
-            const allRivendite = [...crmAnagrafiche, ...stores, ...giroVisite];
-            const today = new Date(); today.setHours(0,0,0,0);
-            const groupedEvents: any[] = [];
-
-            Object.entries(rubrica).forEach(([id, d]) => {
-              const riv = allRivendite.find(r => getRivenditaId(r) === id);
-              if (!riv) return;
-
-              const history = (d as any).history || [];
-              const hostessEntries = history
-                .map((h: any, index: number) => ({ ...h, originalIndex: index }))
-                .filter((h: any) => h.tipo === 'HOSTESS');
-
-              if (hostessEntries.length > 0) {
-                const parsedEvents = hostessEntries.map((h: any) => {
-                  const eventDate = new Date(h.data);
-                  const isFuture = eventDate >= today;
-                  const startTime = eventDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                  const matchFine = (h.note || '').match(/Fine turno: (\d{2}:\d{2})/);
-                  const endTime = matchFine ? matchFine[1] : '';
-                  const dateStr = eventDate.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                  
-                  return {
-                    originalIndex: h.originalIndex,
-                    info: startTime !== '00:00' ? `${dateStr} dalle ${startTime}${endTime ? ' alle ' + endTime : ''}` : dateStr,
-                    dateObj: eventDate,
-                    isFuture
-                  };
-                }).sort((a: any, b: any) => b.dateObj.getTime() - a.dateObj.getTime()); // Decrescente dentro la card
-
-                groupedEvents.push({
-                  id, extra: d,
-                  nome: riv.isStore ? (riv.storeName || 'Store') : `Riv. ${riv['Num. Rivendita']}`,
-                  soloNumero: riv.isStore ? (riv.storeNumber || '') : (riv['Num. Rivendita'] || ''),
-                  comune: riv['Comune'] || '',
-                  events: parsedEvents,
-                  latestDate: parsedEvents[0].dateObj.getTime()
-                });
-              }
-            });
-
-            if (groupedEvents.length === 0) {
-              return <p className="text-[10px] text-slate-400 italic text-center py-4">Nessun servizio Hostess in cronologia.</p>;
-            }
-
-            groupedEvents.sort((a, b) => b.latestDate - a.latestDate); // Ordine dei contenitori
-
-            return groupedEvents.map((group, i) => {
-              const hasFuture = group.events.some((e:any) => e.isFuture);
-              
-              return (
-              <div key={`${group.id}-${i}`} className={`p-2.5 border rounded-2xl transition-all ${hasFuture ? 'bg-fuchsia-50/40 border-fuchsia-100 shadow-sm' : 'bg-purple-50/30 border-purple-100'}`}>
-                <div className="flex justify-between items-start mb-2.5 px-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{group.nome}</p>
-                    <span className="text-[10px] font-medium text-slate-500 truncate">• {group.comune}</span>
-                  </div>
-                  <button 
-                    onClick={() => { setRivenditaFilter(group.soloNumero); setActiveTab('crm'); }} 
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors shrink-0"
-                  >
-                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                  </button>
+        ) : (
+          <div className="space-y-6">
+            {scaduti.length > 0 && (
+              <div className="relative pt-4">
+                <div className="absolute top-0 left-4 right-4 h-px bg-red-200"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shadow-sm"><AlertOctagon className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-red-600">Da Recuperare</h3>
                 </div>
-                
-                <div className="space-y-1.5">
-                  {group.events.map((ev: any, idx: number) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => setAgendaHostessEdit({ id: group.id, extra: group.extra, targetIndex: ev.originalIndex })}
-                      className={`p-2.5 rounded-xl border cursor-pointer hover:opacity-80 active:scale-[0.98] transition-all flex justify-between items-center ${ev.isFuture ? 'bg-white border-fuchsia-200 shadow-sm' : 'bg-white/60 border-purple-100'}`}
-                    >
-                      <p className={`text-[11px] font-bold flex items-center gap-1.5 ${ev.isFuture ? 'text-fuchsia-700' : 'text-purple-700'}`}>
-                        <CalendarClock className="w-3.5 h-3.5" /> {ev.info}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {ev.isFuture && <span className="text-[9px] font-black bg-fuchsia-100 text-fuchsia-600 px-1.5 py-0.5 rounded uppercase">In arrivo</span>}
-                        <Edit3 className={`w-3.5 h-3.5 ${ev.isFuture ? 'text-fuchsia-400' : 'text-purple-300'}`} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <div className="mt-2">{scaduti.map(renderCard)}</div>
               </div>
-            )});
-          })()}
-        </div>
-      </div>
-
-      {/* 3. ORDINI DA EVADERE (Raggruppati v3.05) */}
-      <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4 text-blue-600" />
-            </div>
-            <h3 className="font-bold text-slate-800">Ordini da Evadere</h3>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {(() => {
-            const allRivendite = [...crmAnagrafiche, ...stores, ...giroVisite];
-            const groupedOrders: any[] = [];
-
-            Object.entries(rubrica).forEach(([id, d]) => {
-              const riv = allRivendite.find(r => getRivenditaId(r) === id);
-              if (!riv) return;
-
-              const history = (d as any).history || [];
-              const pendingOrders = history
-                .map((h: any, index: number) => ({ ...h, originalIndex: index }))
-                .filter((h: any) => h.tipo === 'ORDINE' && h.stato === 'DA_EVADERE');
-
-              if (pendingOrders.length > 0) {
-                groupedOrders.push({
-                  id, extra: d,
-                  nome: riv.isStore ? (riv.storeName || 'Store') : `Riv. ${riv['Num. Rivendita']}`,
-                  soloNumero: riv.isStore ? (riv.storeNumber || '') : (riv['Num. Rivendita'] || ''),
-                  comune: riv['Comune'] || '',
-                  orders: pendingOrders.sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime())
-                });
-              }
-            });
-
-            if (groupedOrders.length === 0) {
-              return <p className="text-[10px] text-slate-400 italic text-center py-4">Nessun ordine in attesa.</p>;
-            }
-
-            return groupedOrders.map((group, i) => (
-              <div key={`${group.id}-${i}`} className="p-2.5 border border-blue-100 bg-blue-50/30 rounded-2xl transition-all">
-                <div className="flex justify-between items-start mb-2 px-1">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{group.nome}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{group.comune}</p>
-                  </div>
-                  <button 
-                    onClick={() => { setRivenditaFilter(group.soloNumero); setActiveTab('crm'); }} 
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors shrink-0"
-                  >
-                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                  </button>
+            )}
+            
+            {oggi.length > 0 && (
+              <div className="relative pt-4 mt-8">
+                <div className="absolute top-0 left-4 right-4 h-px bg-amber-200"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shadow-sm"><Zap className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-amber-600">Oggi</h3>
                 </div>
-                
-                <div className="space-y-1.5">
-                  {group.orders.map((ord: any, idx: number) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => setAgendaHostessEdit({ id: group.id, extra: group.extra, targetIndex: ord.originalIndex })}
-                      className="p-2.5 rounded-xl border border-blue-100 bg-white cursor-pointer hover:border-blue-300 active:scale-[0.98] transition-all flex justify-between items-center"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-black text-blue-700">€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
-                          <span className="text-[9px] text-slate-400 font-medium">{new Date(ord.data).toLocaleDateString('it-IT')}</span>
-                        </div>
-                        {ord.note && <p className="text-[10px] text-slate-500 truncate italic">"{ord.note}"</p>}
-                      </div>
-                      <Edit3 className="w-3.5 h-3.5 text-blue-300 ml-2 shrink-0" />
-                    </div>
-                  ))}
-                </div>
+                <div className="mt-2">{oggi.map(renderCard)}</div>
               </div>
-            ));
-          })()}
-        </div>
+            )}
+
+            {settimana.length > 0 && (
+              <div className="relative pt-4 mt-8">
+                <div className="absolute top-0 left-4 right-4 h-px bg-blue-200"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shadow-sm"><CalendarDays className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-blue-600">Prossimi 7 Giorni</h3>
+                </div>
+                <div className="mt-2">{settimana.map(renderCard)}</div>
+              </div>
+            )}
+
+            {futuro.length > 0 && (
+              <div className="relative pt-4 mt-8">
+                <div className="absolute top-0 left-4 right-4 h-px bg-purple-200"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shadow-sm"><Rocket className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-purple-600">Futuro</h3>
+                </div>
+                <div className="mt-2">{futuro.map(renderCard)}</div>
+              </div>
+            )}
+
+            {archivio.length > 0 && (
+              <div className="relative pt-4 mt-8 opacity-75">
+                <div className="absolute top-0 left-4 right-4 h-px bg-slate-300"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center shadow-sm"><History className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-slate-500">Solo Archivio</h3>
+                </div>
+                <div className="mt-2">{archivio.map(renderCard)}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

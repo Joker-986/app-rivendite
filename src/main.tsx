@@ -2,6 +2,10 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ModalProvider } from './contexts/ModalContext';
+import { StrategyProvider } from './contexts/StrategyContext';
+import { ProductProvider } from './contexts/ProductContext';
+import { BudgetProvider } from './contexts/BudgetContext';
 
 // Suppress benign Vite WebSocket errors in this environment
 if (typeof window !== 'undefined') {
@@ -37,6 +41,14 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <StrategyProvider>
+      <ProductProvider>
+        <BudgetProvider>
+          <ModalProvider>
+            <App />
+          </ModalProvider>
+        </BudgetProvider>
+      </ProductProvider>
+    </StrategyProvider>
   </StrictMode>,
 );

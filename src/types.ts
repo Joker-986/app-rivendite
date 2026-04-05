@@ -19,8 +19,29 @@ export interface SearchResult {
   chainCount?: number;
   rivenditaUfficiale?: string;
   pec?: string;
-  _giroLength?: number; // Usato temporaneamente nel giro
+  _giroLength?: number;
   [key: string]: any;
+}
+
+export interface Product {
+  id: string;
+  codice: string;
+  descrizione: string;
+  categoria: string;
+  unitaDefault: string;
+  prezzoUnitaDefault: number;
+  valoreBonus?: number;
+}
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  codice: string;
+  descrizione: string;
+  quantita: number;
+  unita: string;
+  prezzoApplicato: number;
+  isOmaggio: boolean;
 }
 
 export interface RivenditaHistoryEntry {
@@ -28,6 +49,54 @@ export interface RivenditaHistoryEntry {
   tipo: 'VISITA' | 'ORDINE' | 'HOSTESS';
   note: string;
   importo: number;
+  items?: OrderItem[];
+  stato?: string;
+}
+
+export interface Mission {
+  id: string;
+  nome: string;
+  tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'PRODOTTO';
+  target: number;
+  pesoPercentuale: number;
+  progressoAttuale: number;
+  stato?: "ATTIVA" | "ARCHIVIATA";
+}
+
+export interface CampaignPeriod {
+  id: string;
+  dataInizio: string;
+  dataFine?: string;
+}
+
+export interface Campaign {
+  id: string;
+  nome: string;
+  sku: string;
+  valoreBonus: number;
+  periodi: CampaignPeriod[];
+  stato?: "ATTIVA" | "ARCHIVIATA";
+}
+
+export interface SalaryConfig {
+  ralAnnua: number;
+  percentualeBonus: number;
+}
+
+export interface BudgetTransaction {
+  id: string;
+  data: string;
+  descrizione: string;
+  importo: number;
+  tipo: 'RICARICA' | 'SPESA';
+}
+
+export interface AMBudget {
+  id: string;
+  nome: string;
+  dataInizio: string;
+  dataFine: string;
+  transazioni: BudgetTransaction[];
 }
 
 export interface RivenditaExtra {
@@ -53,10 +122,7 @@ export interface RivenditaExtra {
   note?: string;
   manualCap?: string;
   ordinante?: 'alto' | 'basso' | '';
-  kpiAttivazione?: boolean;
-  kpiProdotto?: boolean;
-  kpiProdottoNome?: string;
-  kpiProdottoCompletato?: boolean;
+  targetIdoneo: string[]; // Array di ID missioni
   history?: RivenditaHistoryEntry[];
   importoOrdine?: number;
   hostessData?: string;
@@ -67,8 +133,6 @@ export interface RivenditaExtra {
   ultimaHostessInfo?: string;
   zona?: string;
   targetMese?: number;
-  hasTarget?: boolean;
-  targetSpecifico?: number;
 }
 
 export interface ArchiveEntry {
