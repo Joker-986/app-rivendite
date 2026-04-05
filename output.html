@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head id="j_idt2">
+    		<meta http-equiv="X-UA-Compatible" content="IE=9; IE=8; IE=7; IE=EDGE" /><link type="text/css" rel="stylesheet" href="/ConsultazioneOnLineTabacchi/javax.faces.resource/theme.css.xhtml?ln=primefaces-aristo" /><script type="text/javascript" src="/ConsultazioneOnLineTabacchi/javax.faces.resource/jsf.js.xhtml?ln=javax.faces&amp;stage=Development"></script><script type="text/javascript">if(window.PrimeFaces){PrimeFaces.settings.locale='en_US';PrimeFaces.settings.projectStage='Development';}</script>
+
+
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Agenzia delle dogane e dei Monopoli -  Elenco concessioni</title>
+<link href="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/images/favicon.ico" rel="Shortcut Icon" />
+<link href="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/css/dogane.css?themeId=TemaPortaleUnico_WAR_TemaPortaleUnicotheme" rel="stylesheet" type="text/css" />
+<link href="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/css/aui.css?themeId=TemaPortaleUnico_WAR_TemaPortaleUnicotheme" rel="stylesheet" type="text/css" />
+<link href="/ConsultazioneOnLineTabacchi/css/overrides.css" rel="stylesheet" type="text/css" />
+<script src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/js/jquery.js" type="text/javascript"></script>
+<script type="text/javascript">var jqueryNoConflict=$;</script>
+<script src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/js/NEW.js" type="text/javascript"></script></head>
+<body>
+		<div id="contenitore" class="container-fluid">
+			<div id="header_home">
+				<div id="logo">
+					<a class="logo" href="https://www.agenziadoganemonopoli.gov.it/" title="Torna alla Home Page"> 
+						<img width="265" alt="Agenzia delle Dogane e dei Monopoli" src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/images/pu/logo2018.png" />
+					</a>
+				</div>
+				<div id="istituzionale_home"> 
+					<ul> 
+						<li> <a class="home" title="Torna alla Home Page" href="https://www.agenziadoganemonopoli.gov.it/portale/web/guest/home"> Home</a> </li> 
+						 
+						<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/web/guest/contatti">Contatti</a></li> 
+						<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/web/guest/faq">FAQ</a></li> 
+						<li><a class="RSS" href="https://www.agenziadoganemonopoli.gov.it/portale/web/guest/rss-really-simple-syndication"><img src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/images/pu/rss.jpg" alt="RSS" width="15" height="16" /> RSS</a></li> 
+						<li class="dropdown">
+							<a class="dropdown-act" title="English" href="#english"><img src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/images/pu/english.jpg" alt="English" width="25" height="15" /></a> 
+							<ul class="dropdown-menu1 dropdown-menu-dx" id="english"> 
+								<li><a title="English version" href="https://www.agenziadoganemonopoli.gov.it/portale/en/web/guest/home-english">Dogane</a></li> 
+							</ul> 
+						</li> 
+						<li class="blank azzera"> <img class="chiave" alt="Accedi all'area riservata" src="https://serviziadm.adm.gov.it/TemaPortaleUnico-theme/images/pu/chiave_area_riservata_off.png" /> </li> 
+						<li class="dropdown blank">
+							<a class="dropdown-act" title="Area Riservata" href="#Area_Riservata">Area Riservata</a> 
+							<ul class="dropdown-menu1 ag dropdown-menu-sx" id="Area_Riservata"> 
+								<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/login">Dogane</a></li> 
+								<li><a href="https://www.aams.gov.it/">Monopoli</a></li> 
+							</ul> 
+						</li> 
+					</ul> 
+					<div id="form_cerca"> 
+						<form onsubmit="ctem_column1_1_3_search(); return false;" name="ctem_column1_1_3_fm" method="get" action="https://www.agenziadoganemonopoli.gov.it/portale/web/guest/ricerca" id="formricerca"> 
+							<input value="3" name="p_p_id" type="hidden" />
+					        <input value="0" name="p_p_lifecycle" type="hidden" />
+					        <input value="normal" name="p_p_state" type="hidden" />
+					        <input value="view" name="p_p_mode" type="hidden" />                    
+					        <input value="/search/search" name="_3_struts_action" type="hidden" /> 
+					        <input name="_3_groupId" value="0" type="hidden" />                   
+					        <label for="search">Cerca:</label>
+					        <input class="inpt" id="search" maxlength="31" size="31" value="" name="_3_keywords" type="text" />
+							<input value="Vai" class="btn" type="submit" />
+						</form>
+					</div>	
+				</div>
+			</div>
+			<div class="clearer"></div>
+			<div id="menu_princ">
+				<h1 class="skipheader">Menu principale</h1>
+				<div class="hack-lastchild">
+					<div class="menu_princ_sez false">
+						<div id="menu_princ_ag" style="min-height: 101px; height: auto !important; height: 101px;">
+					    	<h2><a href="https://www.agenziadoganemonopoli.gov.it/portale/lagenzia">L'Agenzia</a></h2>							
+					   	</div>
+					</div>
+					<div class="menu_princ_sez false">
+						<div id="menu_princ_dog" style="min-height: 101px; height: auto !important; height: 101px;">
+							<h2><a href="https://www.agenziadoganemonopoli.gov.it/portale/dogane">Dogane</a></h2>	
+						</div>
+					</div>
+					<div class="menu_princ_sez current">
+						<div id="menu_princ_mon" style="min-height: 101px; height: auto !important; height: 101px;">
+					    	<h2><a href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli">Monopoli</a></h2>
+					       	
+					      	<ul class="sinottico">
+					      		<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli/giochi">Giochi</a></li>
+					           	<li class="current"><a href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli/tabacchi">Tabacchi</a></li>
+					        </ul>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div id="content">
+				<div id="contenuti_due_colonne" class="deco-mon">
+					<div class="distancer"></div>
+					<div id="ti_trovi">
+						Ti trovi in: <a class="first breadcrumb-truncate" href="https://www.agenziadoganemonopoli.gov.it/portale/home">Home</a> - <a href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli">Monopoli</a> - <a href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli/tabacchi">Tabacchi</a> - <a class="current-parent breadcrumb-truncate" href="https://www.agenziadoganemonopoli.gov.it/portale/monopoli/tabacchi/distribuzione_vendita">Distribuzione e vendita</a> -  Elenco concessioni
+					</div>
+					<div id="action-messages">
+					</div>
+    	<h1>Elenco concessioni</h1>
+		<div class="colonna1-sx">
+<form id="j_idt16" name="j_idt16" method="post" action="/ConsultazioneOnLineTabacchi/ricercaConcessioni/cerca-concessioni.xhtml" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="j_idt16" value="j_idt16" />
+
+		<ul>
+			<li>Elenco rivendite
+			</li>
+			<li><a href="#" onclick="mojarra.jsfcljs(document.getElementById('j_idt16'),{'j_idt16:j_idt23':'j_idt16:j_idt23','mode':'search','tipo':'P'},'');return false">Elenco patentini</a>
+			</li>
+		</ul>
+		<div class="tableCaption">Elenco  rivendite</div>
+		<div class="form_d pseudo-fieldset">
+			<p><label for="j_idt16:regione">Regione: *</label><select id="j_idt16:regione" name="j_idt16:regione" class="fix-width" size="1" onchange="mojarra.ab(this,event,'change','j_idt16:regione','j_idt16:regione j_idt16:provincia j_idt16:comune')">	<option value="" selected="selected">Seleziona</option>
+	<option value="ABRUZZO">ABRUZZO</option>
+	<option value="BASILICATA">BASILICATA</option>
+	<option value="CALABRIA">CALABRIA</option>
+	<option value="CAMPANIA">CAMPANIA</option>
+	<option value="EMILIA ROMAGNA">EMILIA ROMAGNA</option>
+	<option value="FRIULI-VENEZIA GIULIA">FRIULI-VENEZIA GIULIA</option>
+	<option value="LAZIO">LAZIO</option>
+	<option value="LIGURIA">LIGURIA</option>
+	<option value="LOMBARDIA">LOMBARDIA</option>
+	<option value="MARCHE">MARCHE</option>
+	<option value="MOLISE">MOLISE</option>
+	<option value="PIEMONTE">PIEMONTE</option>
+	<option value="PUGLIA">PUGLIA</option>
+	<option value="SARDEGNA">SARDEGNA</option>
+	<option value="SICILIA">SICILIA</option>
+	<option value="TOSCANA">TOSCANA</option>
+	<option value="TRENTINO-ALTO ADIGE">TRENTINO-ALTO ADIGE</option>
+	<option value="UMBRIA">UMBRIA</option>
+	<option value="VALLE D'AOSTA">VALLE D'AOSTA</option>
+	<option value="VENETO">VENETO</option>
+</select>
+			</p>
+			<p><label for="j_idt16:provincia">Provincia: *</label><select id="j_idt16:provincia" name="j_idt16:provincia" class="fix-width" size="1" onchange="mojarra.ab(this,event,'change','j_idt16:provincia','j_idt16:provincia j_idt16:comune')">	<option value="" selected="selected">Seleziona</option>
+</select>
+			</p> 
+			<p><label for="j_idt16:comune">Comune:</label><select id="j_idt16:comune" name="j_idt16:comune" class="fix-width" size="1">	<option value="" selected="selected">Seleziona</option>
+</select>
+			</p>
+		
+			<p><label for="j_idt16:numRivendita">Numero rivendita:</label><input id="j_idt16:numRivendita" type="text" name="j_idt16:numRivendita" value="" size="10" />
+			</p>
+			
+			<p>
+			</p>
+			<div class="clearer"></div>	
+			
+			<p><label for="j_idt16:tipoRiv">Tipo rivendita:</label><select id="j_idt16:tipoRiv" name="j_idt16:tipoRiv" class="fix-width" size="1">	<option value="" selected="selected">Seleziona</option>
+	<option value="1">ORDINARIA</option>
+	<option value="2">SPECIALE</option>
+</select>
+			</p>
+			<p><label for="j_idt16:statoRiv">Stato rivendita:</label><select id="j_idt16:statoRiv" name="j_idt16:statoRiv" class="fix-width" size="1">	<option value="" selected="selected">Seleziona</option>
+	<option value="1">ATTIVA</option>
+	<option value="2">SOSPESA DAL SERVIZIO</option>
+	<option value="3">CHIUSA</option>
+	<option value="5">VACANTE</option>
+	<option value="6">IN SOSPENSIONE DEI GENERI</option>
+</select>
+			</p>
+			 
+			<div class="clearer" hidden="false"></div>
+			<div class="clearer" hidden="false"></div><table>
+<tbody>
+<tr>
+<td><input type="checkbox" name="j_idt16:j_idt62" /></td>
+<td>Con distributore automatico (entro i 10 metri):</td>
+</tr>
+</tbody>
+</table>
+
+			
+			<div class="clearer" hidden="false"></div>
+			<div class="clearer"></div>			
+			
+			 <p><input type="submit" name="j_idt16:j_idt65" value="Cerca" onclick="mojarra.jsfcljs(document.getElementById('j_idt16'),{'j_idt16:j_idt65':'j_idt16:j_idt65','mode':'list'},'');return false" />
+			</p>
+			<p><input type="submit" name="j_idt16:j_idt68" value="Azzera filtri" onclick="mojarra.jsfcljs(document.getElementById('j_idt16'),{'j_idt16:j_idt68':'j_idt16:j_idt68','mode':'search','tipo':'R'},'');return false" />
+			</p>
+			
+			<div class="clearer" rendered="true"></div>	
+			
+			<p>I campi contrassegnati con l'asterisco (*) sono obbligatori.
+			</p>
+			<p>Nota: con la dizione "In sospensione dei generi" si intende la temporanea sospensione della commercializzazione di alcune tipologie e prodotti del tabacco.
+			</p>
+		</div><input type="hidden" name="javax.faces.ViewState" value="H4sIAAAAAAAAAL1VUWhURxSdbFw1iV3SpEaDpsZ0KxXqW/JlMIqmGpvFTRTXhmo+6uTtdXeSee+NM7O7b5Mo9UMFS2mhiggtCvrhR/THf6X4UZAabCgIiqAiiB/BUpRS+uPMvOxustlQQXDYHYaZc++ce+698yZnUJgJjj4cwTlsZSWhVh8WmX7Mwsse/Hq75fAftSi0G9VTD6d2Y1t6PI7qZIaDyHg05bPtO5AeK/LL1dyo/iGJwiPfkFRnlqPmoYRxS7GbtvYOj4Atu3+c+vpio9hIQwj5TOOzR9FxVKtWYaZMPhqqYrP61n/JZ6MP7xRtako2oRxHUY33rSPYBmFBDlxp7eOwH9wU8EEC+V699fqziZV9v1/7U7vgaMNCk52ewzxXrZIFIcExRjfTXa8GpwYjgVHbQqM52E9Hz98mj1qnAuzKspzmNAgk8X3dwGrn2FUThxK9uYzq4RwXEkRI/8R024Xf8C+1qCaOlggyBoFM+SV6FhXc7SJrKymxhD6VE+BJnAN+8M6NbT/9fLc/hEIJVGdTLMQAdkCiJqNvTOsbS0pO3HR3AtULZZMyPiRqCRDEiyWBE0zJGB6m0O0zltO6R4SeGyXqrc7kq3hJy2g1VXWU4ALvSWEmgaukr5rNOfGseTdev1c3mbw/E19YK6GAgxbxC3WzJbLuLA89U5DCkjhtjYgjihgHaxcoBTiWJAdVmExEv4WX5xJbjVYfuF4PTxePJFpjuPkxoLF+kBkv1eszVf6CeK4SLqKimwPXrNaa3G5ahBZQ6wBOV3pCwahZYaqnNRBWQStxRxOrGg798OSvoMqaS7gy4vLJM8m/D01vLdZYh8fTFmbYzkA1h3GH0fi/+CHtnFivL9cBrMtvQRs+GbeB23in59oBkqil5B6lwC3iEqlb6xhqrGzWyrafLbFr04PPX7SNf1lMJWLMzwOyY5xU3hMzG0q/0o7lZ6RD23ds/ryrq53OSr2t4+0odvimVj42c8c7haY9RHWa5Nu+IO8xSvUSti/WkBqy3/MkKg/VzepXaqja46pk/888uo97TPVEYQ8URNFRkynFSFmsXjfrzD1kEi1Vz4+Mp0rfGYOLuxLSwJueXrryz4nTXSH94IVzmGZB+Zsj/kDWGQZ+avJcW8PZx9+V3gKm/K6d32S7Ci52iN1jSyWTMAmPaBbm7US+/waMCFpy7QYAAA==" />
+</form>
+		</div>
+				</div>
+			</div>
+			<div class="clearer"></div>
+			<div class="distancer"></div>
+			<div id="footer"> 
+				<h1 class="skipheader">Piè di pagina</h1> 
+				<ul> 
+					<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/elenco-siti-tematici">Elenco siti telematici</a></li> 
+					<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/privacy">Privacy</a></li> 
+					<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/note-legali">Note legali</a></li> 
+					<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/accessibilita">Accessibilità</a></li> 
+					<li><a href="https://www.agenziadoganemonopoli.gov.it/portale/mappa-del-sito">Mappa del sito</a></li> 
+				</ul> 
+				<p class="indirizzo">Agenzia delle Dogane e dei Monopoli - Via Mario Carucci, 71 - 00143 Roma</p> 
+			</div>
+		</div>
+</body>
+</html>
