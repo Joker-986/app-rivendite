@@ -28,7 +28,8 @@ export default function App() {
     openShare, closeShare, shareModal,
     openQuickEdit,
     revisitModalId, openRevisitModal, closeRevisitModal,
-    openKpiAssign
+    openKpiAssign,
+    selectedRivenditaId
   } = useModals();
   const [session, setSession] = useState<{ viewState: string; cookies: string; submitName: string } | null>(null);
   
@@ -141,11 +142,16 @@ export default function App() {
   const [rubrica, setRubrica] = useState<RubricaData>(() => loadFromStorage('rubrica', {}));
   const [archive, setArchive] = useState<any[]>(() => loadFromStorage('tgest_archive', []));
 
-  const { syncProgress } = useStrategy();
+  const { syncProgress, missions } = useStrategy();
 
+  // DEBOUNCE: Evita il ricalcolo globale ad ogni singolo tasto premuto negli input
   useEffect(() => {
-    syncProgress(rubrica);
-  }, [rubrica, syncProgress]);
+    const timeoutId = setTimeout(() => {
+      syncProgress(rubrica, meseSelezionato);
+    }, 800); // Ritardo di 800ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [rubrica, meseSelezionato, syncProgress]);
 
 
   useEffect(() => {
@@ -2235,6 +2241,8 @@ export default function App() {
         onEditHistory={handleEditHistory} 
         onDeleteHistory={handleDeleteHistory}
         showToast={showToast} 
+        missions={missions}
+        selectedRivenditaId={selectedRivenditaId}
       />
     </div>
   );

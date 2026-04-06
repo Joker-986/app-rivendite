@@ -48,6 +48,8 @@ interface ModalContextType {
   isKpiAssignOpen: boolean;
   openKpiAssign: () => void;
   closeKpiAssign: () => void;
+  selectedRivenditaId: string | null;
+  setSelectedRivenditaId: (id: string | null) => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -68,6 +70,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const [revisitModalId, setRevisitModalId] = useState<string | null>(null);
   const [isKpiAssignOpen, setIsKpiAssignOpen] = useState(false);
+  const [selectedRivenditaId, setSelectedRivenditaId] = useState<string | null>(null);
 
   // Funzioni Confirm
   const openConfirm = (options: Omit<ConfirmModalState, 'isOpen'>) => setConfirmModal({ ...options, isOpen: true });
@@ -97,7 +100,8 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       shareModal, openShare, closeShare,
       quickEditModal, openQuickEdit, closeQuickEdit,
       revisitModalId, openRevisitModal, closeRevisitModal,
-      isKpiAssignOpen, openKpiAssign, closeKpiAssign
+      isKpiAssignOpen, openKpiAssign, closeKpiAssign,
+      selectedRivenditaId, setSelectedRivenditaId
     }}>
       {children}
     </ModalContext.Provider>

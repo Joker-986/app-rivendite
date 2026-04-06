@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useModals } from '../contexts/ModalContext';
 import QuickEditModal from './QuickEditModal';
 import { X, Trash2, AlertCircle, Share2, Copy, MessageCircle, Calendar, Wand2, Search, MapPin, Check } from 'lucide-react';
@@ -13,7 +13,9 @@ const ModalContainer: React.FC<{
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string) => void;
   onDeleteHistory: (id: string, index: number) => void;
   showToast: (msg: string, type?: any) => void;
-}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast }) => {
+  missions?: any[];
+  selectedRivenditaId?: string | null;
+}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast, missions: propMissions, selectedRivenditaId }) => {
   const { 
     confirmModal, closeConfirm, 
     shareModal, closeShare, 
@@ -23,6 +25,16 @@ const ModalContainer: React.FC<{
   } = useModals();
 
   const { missions } = useStrategy();
+  
+  // Sincronizza le missioni se apriamo da una singola card
+  useEffect(() => {
+    if (isKpiAssignOpen && selectedRivenditaId) {
+      const currentTargets = rubrica[selectedRivenditaId]?.targetIdoneo || [];
+      setSelectedMissions(currentTargets);
+    } else if (isKpiAssignOpen && !selectedRivenditaId) {
+      setSelectedMissions([]);
+    }
+  }, [isKpiAssignOpen, selectedRivenditaId, rubrica]);
   
   const [selectedMissions, setSelectedMissions] = useState<string[]>([]);
   const [numFilter, setNumFilter] = useState('');
@@ -157,18 +169,22 @@ const ModalContainer: React.FC<{
         </div>
       )}
 
-      {/* 5. MODALE ASSEGNAZIONE MASSIVA (BACCHETTA MAGICA) */}
+      {/* 5. MODALE ASSEGNAZIONE (SINGOLA O MASSIVA) */}
       {isKpiAssignOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
                   <Wand2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Bacchetta Magica</h3>
-                  <p className="text-xs font-bold text-slate-500 uppercase">Gestione Target Dinamica</p>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                    {selectedRivenditaId ? 'Assegnazione Target' : 'Bacchetta Magica'}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase">
+                    {selectedRivenditaId ? `Riv. ${selectedRivenditaId.split('-').pop()}` : 'Gestione Target Dinamica'}
+                  </p>
                 </div>
               </div>
               <button onClick={closeKpiAssign} className="p-2.5 bg-white hover:bg-slate-100 rounded-full text-slate-400 shadow-sm transition-all"><X className="w-5 h-5" /></button>
@@ -190,70 +206,81 @@ const ModalContainer: React.FC<{
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2. Filtra Anagrafica</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="text" placeholder="Numero..." value={numFilter} onChange={e => setNumFilter(e.target.value)} className="w-full h-11 pl-9 pr-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+              {!selectedRivenditaId && (
+                <>
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2. Filtra Anagrafica</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input type="text" placeholder="Numero..." value={numFilter} onChange={e => setNumFilter(e.target.value)} className="w-full h-11 pl-9 pr-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <select value={comuneFilter} onChange={e => setComuneFilter(e.target.value)} className="w-full h-11 pl-9 pr-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+                          <option value="">Tutti i Comuni</option>
+                          {comuniDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select value={comuneFilter} onChange={e => setComuneFilter(e.target.value)} className="w-full h-11 pl-9 pr-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
-                      <option value="">Tutti i Comuni</option>
-                      {comuniDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Seleziona ({filteredList.length})</h4>
-                  <button onClick={() => {
-                    if (selectedRivendite.size === filteredList.length) setSelectedRivendite(new Set());
-                    else setSelectedRivendite(new Set(filteredList.map(r => getRivenditaId(r))));
-                  }} className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">
-                    {selectedRivendite.size === filteredList.length ? 'Deseleziona' : 'Seleziona Tutti'}
-                  </button>
-                </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                  {filteredList.map(r => {
-                    const id = getRivenditaId(r);
-                    const isChecked = selectedRivendite.has(id);
-                    return (
-                      <label key={id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isChecked ? 'bg-white border-indigo-500 shadow-md' : 'bg-transparent border-slate-100 hover:border-slate-200'}`}>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">{r.isStore ? r.storeName : `Riv. ${r['Num. Rivendita']}`}</p>
-                          <p className="text-[10px] text-slate-500">{r['Comune']}</p>
-                        </div>
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
-                          {isChecked && <Check className="w-3.5 h-3.5 text-white" />}
-                        </div>
-                        <input type="checkbox" className="hidden" checked={isChecked} onChange={e => {
-                          const next = new Set(selectedRivendite);
-                          if (e.target.checked) next.add(id); else next.delete(id);
-                          setSelectedRivendite(next);
-                        }} />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Seleziona ({filteredList.length})</h4>
+                      <button onClick={() => {
+                        if (selectedRivendite.size === filteredList.length) setSelectedRivendite(new Set());
+                        else setSelectedRivendite(new Set(filteredList.map(r => getRivenditaId(r))));
+                      }} className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase">
+                        {selectedRivendite.size === filteredList.length ? 'Deseleziona' : 'Seleziona Tutti'}
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                      {filteredList.map(r => {
+                        const id = getRivenditaId(r);
+                        const isChecked = selectedRivendite.has(id);
+                        return (
+                          <label key={id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isChecked ? 'bg-white border-indigo-500 shadow-md' : 'bg-transparent border-slate-100 hover:border-slate-200'}`}>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">{r.isStore ? r.storeName : `Riv. ${r['Num. Rivendita']}`}</p>
+                              <p className="text-[10px] text-slate-500">{r['Comune']}</p>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
+                              {isChecked && <Check className="w-3.5 h-3.5 text-white" />}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={isChecked} onChange={e => {
+                              const next = new Set(selectedRivendite);
+                              if (e.target.checked) next.add(id); else next.delete(id);
+                              setSelectedRivendite(next);
+                            }} />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
               <button 
                 onClick={() => {
-                  if (selectedRivendite.size === 0 || selectedMissions.length === 0) {
-                    showToast('Seleziona missioni e rivendite', 'info');
+                  if (selectedMissions.length === 0 && !selectedRivenditaId) {
+                    showToast('Seleziona almeno una missione', 'info');
                     return;
                   }
-                  selectedRivendite.forEach(id => {
-                    const current = rubrica[id]?.targetIdoneo || [];
-                    onUpdateRubrica(id, 'targetIdoneo', Array.from(new Set([...current, ...selectedMissions])));
-                  });
-                  showToast('Target assegnati con successo!');
+                  
+                  if (selectedRivenditaId) {
+                    // Caso CRM: Singola Rivendita
+                    onUpdateRubrica(selectedRivenditaId, 'targetIdoneo', selectedMissions);
+                  } else {
+                    // Caso Regia: Massiva
+                    selectedRivendite.forEach(id => {
+                      const current = rubrica[id]?.targetIdoneo || [];
+                      onUpdateRubrica(id, 'targetIdoneo', Array.from(new Set([...current, ...selectedMissions])));
+                    });
+                  }
+                  showToast('Target aggiornati!');
                   closeKpiAssign();
                 }}
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all active:scale-[0.98]"

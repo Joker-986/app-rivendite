@@ -3,7 +3,7 @@ import {
   Sparkles, Calendar, BarChart3, Target, TrendingUp, Zap, Rocket, 
   ShoppingBag, History, ChevronRight, Plus, Trash2, AlertCircle, 
   Save, X, Settings2, Info, ArrowRight, Archive, ChevronDown, ChevronUp,
-  DollarSign, RefreshCw, Layers, Check
+  DollarSign, RefreshCw, Layers, Check, Activity, Clock
 } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
@@ -34,9 +34,9 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     calculateMboBonus, calculateExtraBonus 
   } = useStrategy();
   
-  const { budget, calculateBalance, initializeBudget, addTransaction } = useBudget();
+  const { budget, calculateBalance, initializeBudget, addTransaction, reconcileBudget } = useBudget();
   const { openConfirm } = useModals();
-  const balance = calculateBalance();
+  const balance = calculateBalance(meseSelezionato);
   
   const [showEditor, setShowEditor] = useState(false);
   const [showArchivedMissions, setShowArchivedMissions] = useState(false);
@@ -44,7 +44,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
   const [massAssignMission, setMassAssignMission] = useState<Mission | null>(null);
   const [assignSearchTerm, setAssignSearchTerm] = useState('');
-  const [budgetAction, setBudgetAction] = useState<'INIT' | 'TOPUP' | null>(null);
+  const [budgetAction, setBudgetAction] = useState<'INIT' | 'TOPUP' | 'RECONCILE' | null>(null);
   const [budgetAmount, setBudgetAmount] = useState<string>('');
 
   const handleGlobalCleanup = () => {
@@ -64,8 +64,42 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   };
 
   const mboBonus = calculateMboBonus();
-  const extraBonus = calculateExtraBonus(rubrica);
+  const extraBonus = calculateExtraBonus(rubrica, meseSelezionato);
   const totalBonus = mboBonus + extraBonus;
+
+  // RADAR SCADENZE ATTIVAZIONI (Logica Delta >= 5)
+  const radarScadenze = React.useMemo(() => {
+    const scadute: any[] = [];
+    const inScadenza: any[] = [];
+    const aRischio: any[] = [];
+    const [annoSel, meseSel] = meseSelezionato.split('-').map(Number);
+
+    combinedRivendite.forEach(r => {
+      const id = getRivenditaId(r);
+      const extra = rubrica[id];
+      if (extra?.stato === 'Attivata') {
+        const orders = extra.history?.filter(h => h.tipo === 'ORDINE') || [];
+        if (orders.length > 0) {
+          const lastOrder = new Date(orders[0].data);
+          const delta = (annoSel - lastOrder.getFullYear()) * 12 + (meseSel - (lastOrder.getMonth() + 1));
+          
+          const item = { 
+            res: r, 
+            nome: r.isStore ? `Store ${r.storeNumber}` : `Riv. ${r['Num. Rivendita']}`,
+            comune: r['Comune'],
+            dataUltimo: orders[0].data 
+          };
+          
+          if (delta >= 5) scadute.push(item);
+          else if (delta === 4) inScadenza.push(item);
+          else if (delta === 3) aRischio.push(item);
+        }
+      }
+    });
+    return { scadute, inScadenza, aRischio };
+  }, [rubrica, combinedRivendite, meseSelezionato]);
+  
+  const [showRadar, setShowRadar] = useState(false);
   
   const monthlyBase = salaryConfig.ralAnnua / 12;
   const maxMboBonus = monthlyBase * (salaryConfig.percentualeBonus / 100);
@@ -117,25 +151,23 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
   const handleInitializeBudget = () => {
     const amount = parseFloat(budgetAmount);
-    if (!isNaN(amount)) {
-      initializeBudget(amount);
-      setBudgetAction(null);
-      setBudgetAmount('');
-    }
-  };
+    if (isNaN(amount)) return;
 
-  const handleTopUpBudget = () => {
-    const amount = parseFloat(budgetAmount);
-    if (!isNaN(amount)) {
+    if (budgetAction === 'INIT') {
+      initializeBudget(amount, meseSelezionato);
+    } else if (budgetAction === 'TOPUP') {
       addTransaction({
         data: new Date().toISOString(),
         descrizione: "Ricarica Intramese",
         importo: amount,
         tipo: 'RICARICA'
       });
-      setBudgetAction(null);
-      setBudgetAmount('');
+    } else if (budgetAction === 'RECONCILE') {
+      reconcileBudget(amount, meseSelezionato);
     }
+    
+    setBudgetAction(null);
+    setBudgetAmount('');
   };
 
   return (
@@ -147,7 +179,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0">
             <button 
               onClick={handleGlobalCleanup}
-              className="px-3 h-full transition-colors flex items-center justify-center text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+              className="px-3 h-full transition-colors flex items-center justify-center text-amber-500 hover:text-amber-600 hover:bg-amber-50 cursor-pointer"
               title="Reset Assegnazioni Mensili"
             >
               <Sparkles className="w-4 h-4" />
@@ -157,24 +189,57 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             
             <button 
               onClick={() => setShowEditor(!showEditor)}
-              className={`px-3 h-full transition-colors flex items-center justify-center ${showEditor ? 'bg-brand-50 text-brand-600' : 'text-slate-400 hover:text-brand-600 hover:bg-slate-50'}`}
+              className={`px-3 h-full transition-colors flex items-center justify-center cursor-pointer ${showEditor ? 'bg-brand-50 text-brand-600' : 'text-slate-400 hover:text-brand-600 hover:bg-slate-50'}`}
               title="Impostazioni Regia"
             >
               <Settings2 className="w-4 h-4" />
             </button>
           </div>
-          <div className="relative inline-flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+          
+          <label className="relative flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 px-4 cursor-pointer hover:bg-brand-50 transition-colors group">
+            <span className="text-xs font-bold text-brand-600 group-hover:text-brand-700 capitalize mr-1.5 pointer-events-none">
+              {new Date(meseSelezionato + '-01').toLocaleDateString('it-IT', { month: 'short', year: 'numeric' }).replace('.', '')}
+            </span>
+            <Calendar className="w-4 h-4 text-brand-600 group-hover:text-brand-700 pointer-events-none" />
             <input 
               type="month" 
               value={meseSelezionato} 
               onChange={(e) => setMeseSelezionato(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-50"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
             />
-            <div className="flex items-center gap-1.5 px-3 py-1.5 text-brand-600">
-              <span className="text-xs font-black capitalize">
-                {new Date(meseSelezionato + '-01').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
-              </span>
-              <Calendar className="w-4 h-4" />
+          </label>
+        </div>
+      </div>
+
+      {/* SIMULATORE STIPENDIO */}
+      <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl -ml-12 -mb-12"></div>
+        
+        <div className="relative z-10 space-y-6">
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Stipendio Stimato (Lordo)</p>
+              <h3 className="text-4xl font-black tracking-tighter">€{(monthlyBase + totalBonus).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</h3>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Bonus Totale</p>
+              <p className="text-xl font-black text-brand-400">+€{totalBonus.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10">
+            <div className="text-center">
+              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Base RAL</p>
+              <p className="text-sm font-black">€{monthlyBase.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="text-center border-x border-white/10">
+              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">MBO Maturato</p>
+              <p className="text-sm font-black text-brand-400">€{mboBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Extra Bonus</p>
+              <p className="text-sm font-black text-purple-400">€{extraBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
         </div>
@@ -208,6 +273,12 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           >
             <Plus className="w-3.5 h-3.5" /> RICARICA INTRAMESE
           </button>
+          <button 
+            onClick={() => { setBudgetAction('RECONCILE'); setBudgetAmount(balance.toFixed(2)); }}
+            className="col-span-2 flex items-center justify-center gap-2 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black hover:bg-slate-200 transition-all border border-slate-200"
+          >
+            <Settings2 className="w-3 h-3" /> RETTIFICA SALDO ATTUALE
+          </button>
         </div>
 
         {budgetAction && (
@@ -231,7 +302,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">€</span>
               </div>
               <button 
-                onClick={budgetAction === 'INIT' ? handleInitializeBudget : handleTopUpBudget}
+                onClick={handleInitializeBudget}
                 className="px-6 bg-brand-600 text-white rounded-xl font-black text-[10px] shadow-lg shadow-brand-100 hover:bg-brand-700 transition-all"
               >
                 CONFERMA
@@ -265,8 +336,28 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
       {/* EDITOR STRATEGIA (MISSIONI & CAMPAGNE) */}
       {showEditor && (
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl space-y-8 animate-in slide-in-from-top-4 duration-300">
-          {/* EDITOR MISSIONI */}
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowEditor(false)}>
+          <div className="bg-slate-50 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            
+            {/* Header Finestra */}
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-white rounded-t-3xl shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center">
+                  <Settings2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 tracking-tight">Impostazioni Regia</h3>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Configura Missioni e Campagne</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditor(false)} className="p-2 bg-slate-50 hover:bg-slate-200 rounded-full transition-colors text-slate-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Corpo Scrollabile */}
+            <div className="p-6 overflow-y-auto space-y-8">
+              {/* EDITOR MISSIONI */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
@@ -429,14 +520,24 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative">
+                  <div className="grid grid-cols-2 gap-3">
                     <input 
                       type="number" 
-                      placeholder="Target Numerico (es. 1000)" 
+                      placeholder={editingMission.tipo === 'FATTURATO' ? "Num. Negozi Obiettivo" : "Target Globale"}
                       value={editingMission.target || ''} 
                       onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
                       className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all"
                     />
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        placeholder="Soglia Minima € (Opzionale)" 
+                        value={editingMission.targetSingolo || ''} 
+                        onChange={e => setEditingMission({...editingMission, targetSingolo: Number(e.target.value)})}
+                        className="w-full bg-white/10 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">€</span>
+                    </div>
                   </div>
 
                   <button 
@@ -498,6 +599,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               </div>
             </div>
           )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -625,40 +728,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         </div>
       )}
 
-      {/* SIMULATORE STIPENDIO */}
-      <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl -ml-12 -mb-12"></div>
-        
-        <div className="relative z-10 space-y-6">
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Stipendio Stimato (Lordo)</p>
-              <h3 className="text-4xl font-black tracking-tighter">€{(monthlyBase + totalBonus).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</h3>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Bonus Totale</p>
-              <p className="text-xl font-black text-brand-400">+€{totalBonus.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10">
-            <div className="text-center">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Base RAL</p>
-              <p className="text-sm font-black">€{monthlyBase.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="text-center border-x border-white/10">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">MBO Maturato</p>
-              <p className="text-sm font-black text-brand-400">€{mboBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Extra Bonus</p>
-              <p className="text-sm font-black text-purple-400">€{extraBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* MISSIONI MBO (SOLO ATTIVE) */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-1">
@@ -700,8 +769,13 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 </div>
 
                 <div className="flex justify-between items-center mt-2">
-                  <p className="text-[9px] font-bold text-slate-400">
-                    {mission.progressoAttuale.toLocaleString('it-IT')} / {mission.target.toLocaleString('it-IT')}
+                  <p className="text-[9px] font-bold text-slate-400 flex items-center gap-2">
+                    <span>{mission.progressoAttuale.toLocaleString('it-IT')} / {mission.target.toLocaleString('it-IT')}</span>
+                    {mission.valoreGenerato !== undefined && mission.valoreGenerato > 0 && (
+                      <span className="text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded font-black">
+                        €{mission.valoreGenerato.toLocaleString('it-IT', { maximumFractionDigits: 0 })}
+                      </span>
+                    )}
                   </p>
                   {percentage === 100 && (
                     <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1">
@@ -729,7 +803,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             let campaignEarned = 0;
             Object.values(rubrica as RubricaData).forEach((riv: RivenditaExtra) => {
               riv.history?.forEach(entry => {
-                if (entry.tipo === 'ORDINE' && entry.items) {
+                // Filtro temporale iniettato per il rendering visivo
+                if (entry.tipo === 'ORDINE' && entry.items && entry.data.startsWith(meseSelezionato)) {
                   entry.items.forEach(item => {
                     if (item.codice === campaign.sku || item.descrizione.toLowerCase().includes(campaign.sku.toLowerCase())) {
                       const orderDate = entry.data;
@@ -767,6 +842,88 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             );
           })}
         </div>
+      </div>
+
+      {/* RADAR SCADENZE */}
+      <div className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+        <div 
+          className="flex items-center justify-between cursor-pointer group"
+          onClick={() => setShowRadar(!showRadar)}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 group-hover:bg-slate-100 transition-colors">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-black text-slate-800 text-sm">Radar Scadenze</h4>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                {radarScadenze.scadute.length} Scadute • {radarScadenze.inScadenza.length} In Scadenza
+              </p>
+            </div>
+          </div>
+          <div className="p-2 text-slate-400 group-hover:text-slate-600">
+            {showRadar ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
+        </div>
+
+        {showRadar && (
+          <div className="pt-3 border-t border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2">
+            {/* SCADUTE */}
+            {radarScadenze.scadute.length > 0 && (
+              <div className="space-y-2">
+                <h5 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Da Declassare (≥ 5 Mesi)</h5>
+                <div className="grid grid-cols-1 gap-2">
+                  {radarScadenze.scadute.map((item, i) => (
+                    <div key={`scad-${i}`} className="flex justify-between items-center p-2.5 bg-red-50 border border-red-100 rounded-xl">
+                      <div>
+                        <p className="text-xs font-bold text-red-900">{item.nome} • {item.comune}</p>
+                        <p className="text-[9px] text-red-700 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* IN SCADENZA */}
+            {radarScadenze.inScadenza.length > 0 && (
+              <div className="space-y-2">
+                <h5 className="text-[10px] font-black text-amber-600 uppercase tracking-widest flex items-center gap-1"><Clock className="w-3 h-3"/> In Scadenza (Mese 4)</h5>
+                <div className="grid grid-cols-1 gap-2">
+                  {radarScadenze.inScadenza.map((item, i) => (
+                    <div key={`inscad-${i}`} className="flex justify-between items-center p-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+                      <div>
+                        <p className="text-xs font-bold text-amber-900">{item.nome} • {item.comune}</p>
+                        <p className="text-[9px] text-amber-700 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* A RISCHIO */}
+            {radarScadenze.aRischio.length > 0 && (
+              <div className="space-y-2">
+                <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><Info className="w-3 h-3"/> A Rischio (Mese 3)</h5>
+                <div className="grid grid-cols-1 gap-2">
+                  {radarScadenze.aRischio.map((item, i) => (
+                    <div key={`risch-${i}`} className="flex justify-between items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{item.nome} • {item.comune}</p>
+                        <p className="text-[9px] text-slate-500 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {radarScadenze.scadute.length === 0 && radarScadenze.inScadenza.length === 0 && radarScadenze.aRischio.length === 0 && (
+              <p className="text-xs text-slate-500 italic text-center py-4">Nessuna anomalia rilevata nel radar.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* STORICO & ARCHIVIO */}

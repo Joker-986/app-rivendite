@@ -58,8 +58,10 @@ export interface Mission {
   nome: string;
   tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'PRODOTTO';
   target: number;
+  targetSingolo?: number;
   pesoPercentuale: number;
   progressoAttuale: number;
+  valoreGenerato?: number;
   stato?: "ATTIVA" | "ARCHIVIATA";
 }
 

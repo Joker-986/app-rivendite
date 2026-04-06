@@ -50,9 +50,11 @@ const StatsTab: React.FC<StatsTabProps> = ({
   const [statsOrdiniOpen, setStatsOrdiniOpen] = useState(false);
   const [statsBudgetOpen, setStatsBudgetOpen] = useState(true);
 
-  const { budget, calculateBalance, getRollover } = useBudget();
-  const balance = calculateBalance();
-  const rollover = getRollover();
+  const { budget, calculateBalance } = useBudget();
+  
+  // Ottiene il mese corrente per il calcolo del budget in tempo reale nelle statistiche
+  const currentMonth = new Date().toISOString().substring(0, 7);
+  const balance = calculateBalance(currentMonth);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -86,8 +88,10 @@ const StatsTab: React.FC<StatsTabProps> = ({
                 <p className="text-2xl font-black">€{balance.toLocaleString('it-IT')}</p>
               </div>
               <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100">
-                <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest mb-1">Rollover Stimato</p>
-                <p className="text-2xl font-black text-brand-700">€{rollover.toLocaleString('it-IT')}</p>
+                <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest mb-1">Mese Corrente</p>
+                <p className="text-2xl font-black text-brand-700 capitalize">
+                  {new Date().toLocaleDateString('it-IT', { month: 'long' })}
+                </p>
               </div>
             </div>
 

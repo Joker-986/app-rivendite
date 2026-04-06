@@ -17,8 +17,8 @@ interface StrategyContextType {
   addCampaignPeriod: (campaignId: string, period: CampaignPeriod) => void;
   closeCampaignPeriod: (campaignId: string, periodId: string) => void;
   calculateMboBonus: () => number;
-  calculateExtraBonus: (rubrica: RubricaData) => number;
-  syncProgress: (rubrica: RubricaData) => void;
+  calculateExtraBonus: (rubrica: RubricaData, meseSelezionato: string) => number;
+  syncProgress: (rubrica: RubricaData, meseSelezionato: string) => void;
 }
 
 const StrategyContext = createContext<StrategyContextType | undefined>(undefined);
@@ -65,24 +65,18 @@ const DEFAULT_CAMPAIGNS: Campaign[] = [
 ];
 
 export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [salaryConfig, setSalaryConfigState] = useState<SalaryConfig>(DEFAULT_SALARY);
-  const [missions, setMissions] = useState<Mission[]>(DEFAULT_MISSIONS);
-  const [campaigns, setCampaigns] = useState<Campaign[]>(DEFAULT_CAMPAIGNS);
-
-  // Load from localStorage
-  useEffect(() => {
+  const [salaryConfig, setSalaryConfigState] = useState<SalaryConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.salaryConfig) setSalaryConfigState(parsed.salaryConfig);
-        if (parsed.missions) setMissions(parsed.missions);
-        if (parsed.campaigns) setCampaigns(parsed.campaigns);
-      } catch (e) {
-        console.error('Error parsing strategy strategy', e);
-      }
-    }
-  }, []);
+    return saved ? (JSON.parse(saved).salaryConfig || DEFAULT_SALARY) : DEFAULT_SALARY;
+  });
+  const [missions, setMissions] = useState<Mission[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? (JSON.parse(saved).missions || DEFAULT_MISSIONS) : DEFAULT_MISSIONS;
+  });
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? (JSON.parse(saved).campaigns || DEFAULT_CAMPAIGNS) : DEFAULT_CAMPAIGNS;
+  });
 
   // Save to localStorage
   useEffect(() => {
@@ -152,25 +146,23 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, 0);
   }, [salaryConfig, missions]);
 
-  const calculateExtraBonus = useCallback((rubrica: RubricaData) => {
+  const calculateExtraBonus = useCallback((rubrica: RubricaData, meseSelezionato: string) => {
     let totalExtra = 0;
+    if (!meseSelezionato) return 0;
 
     Object.values(rubrica).forEach(riv => {
       if (riv.history) {
         riv.history.forEach(entry => {
-          if (entry.tipo === 'ORDINE' && entry.items) {
+          if (entry.tipo === 'ORDINE' && entry.items && entry.data.startsWith(meseSelezionato)) {
             entry.items.forEach(item => {
-              // Controlla se l'item corrisponde a una campagna attiva
               campaigns.filter(c => c.stato !== 'ARCHIVIATA').forEach(campaign => {
                 if (item.codice === campaign.sku || item.descrizione.toLowerCase().includes(campaign.sku.toLowerCase())) {
-                  // Verifica se la data dell'ordine è in un periodo di validità
                   const orderDate = entry.data;
                   const isValid = campaign.periodi.some(p => {
                     const start = p.dataInizio;
                     const end = p.dataFine;
                     return orderDate >= start && (!end || orderDate <= end);
                   });
-
                   if (isValid) {
                     totalExtra += (item.quantita * campaign.valoreBonus);
                   }
@@ -185,28 +177,51 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return totalExtra;
   }, [campaigns]);
 
-  const syncProgress = useCallback((rubrica: RubricaData) => {
+  const syncProgress = useCallback((rubrica: RubricaData, meseSelezionato: string) => {
+    if (!meseSelezionato) return;
+
     setMissions(prevMissions => {
       return prevMissions.map(mission => {
         if (mission.stato === 'ARCHIVIATA') return mission;
         let progress = 0;
+        let generatedValue = 0;
 
         Object.values(rubrica).forEach(riv => {
           if (mission.tipo === 'FATTURATO') {
-            riv.history?.forEach(h => {
-              if (h.tipo === 'ORDINE') {
-                progress += (h.importo || 0);
+            if (mission.targetSingolo && mission.targetSingolo > 0) {
+              // Logica Sbarramento: se ha la missione assegnata, calcola se ha raggiunto la soglia in €
+              if (riv.targetIdoneo?.includes(mission.id)) {
+                let storeTotal = 0;
+                riv.history?.forEach(h => {
+                  if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
+                    storeTotal += (h.importo || 0);
+                  }
+                });
+                generatedValue += storeTotal;
+                if (storeTotal >= mission.targetSingolo) progress += 1;
               }
-            });
+            } else {
+              // Logica standard: somma globale del fatturato
+              riv.history?.forEach(h => {
+                if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
+                  progress += (h.importo || 0);
+                  generatedValue += (h.importo || 0);
+                }
+              });
+            }
           } else if (mission.tipo === 'ATTIVAZIONE') {
-            if (riv.stato === 'Attivata' && riv.targetIdoneo?.includes(mission.id)) {
-              progress += 1;
+            // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
+            if (riv.targetIdoneo?.includes(mission.id)) {
+              const hasOrderThisMonth = riv.history?.some(h => h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato));
+              if (hasOrderThisMonth) {
+                progress += 1;
+              }
             }
           } else if (mission.tipo === 'PRODOTTO') {
+            // Filtra per mese corrente e per match del prodotto
             riv.history?.forEach(h => {
-              if (h.tipo === 'ORDINE' && h.items) {
+              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato)) {
                 h.items.forEach(item => {
-                  // Se il nome della missione contiene il codice prodotto o viceversa
                   if (item.codice.toLowerCase() === mission.nome.toLowerCase() || 
                       mission.nome.toLowerCase().includes(item.codice.toLowerCase())) {
                     progress += item.quantita;
@@ -217,7 +232,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         });
 
-        return { ...mission, progressoAttuale: progress };
+        return { ...mission, progressoAttuale: progress, valoreGenerato: generatedValue };
       });
     });
   }, []);

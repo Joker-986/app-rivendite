@@ -46,8 +46,6 @@ export interface RivenditaCardProps {
   cooldownSeconds: number;
   handleEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string) => void;
   handleDeleteHistory: (id: string, index: number) => void;
-  targetBassoRendente: number;
-  targetMensile: number;
 }
 
 const LastOrderTile = ({ data, onClick }: { data: any; onClick?: () => void }) => {
@@ -263,11 +261,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   aiLockedUntil,
   cooldownSeconds,
   handleEditHistory,
-  handleDeleteHistory,
-  targetBassoRendente,
-  targetMensile
+  handleDeleteHistory
 }) => {
-  const { openShare, openQuickEdit, openRevisitModal } = useModals();
+  const { openShare, openQuickEdit, openRevisitModal, openKpiAssign, setSelectedRivenditaId } = useModals();
   const { missions } = useStrategy();
   const id = getRivenditaId(res);
 
@@ -295,7 +291,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
-  const [showQuickTarget, setShowQuickTarget] = useState(false);
   
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
@@ -416,31 +411,34 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               )}
               {/* BADGES MISSIONI IBRIDE (CALCOLO LOCALE MENSILE) */}
               {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-1">
+                <div 
+                  className="flex flex-wrap gap-1.5 mt-1 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRivenditaId(id);
+                    openKpiAssign();
+                  }}
+                >
                   {extra.targetIdoneo.map(missionId => {
                     const mission = missions.find(m => m.id === missionId);
                     if (!mission) return null;
 
-                    // Calcolo Fatto Mese Locale per questa rivendita
-                    const ora = new Date();
+                    // Calcolo Fatturato per il mese corrente (allineato a Strategy)
+                    const currentMonthStr = new Date().toISOString().substring(0, 7);
                     const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
-                      if (curr.tipo === 'ORDINE') {
-                        const d = new Date(curr.data);
-                        if (d.getMonth() === ora.getMonth() && d.getFullYear() === ora.getFullYear()) {
-                          return acc + (Number(curr.importo) || 0);
-                        }
+                      if (curr.tipo === 'ORDINE' && curr.data.startsWith(currentMonthStr)) {
+                        return acc + (Number(curr.importo) || 0);
                       }
                       return acc;
                     }, 0);
 
                     if (mission.tipo === 'FATTURATO') {
-                      const targetValido = Number(targetBassoRendente) || 0;
-                      // REGOLA: Se non c'è un target impostato, nascondi il badge per evitare NaN e UI sporca
+                      // Legge la "Soglia Minima" se esiste, altrimenti ricade sul target globale
+                      const targetValido = Number(mission.targetSingolo) || Number(mission.target) || 0;
+                      
                       if (targetValido <= 0) return null;
 
-                      const mancante = targetValido - fattoMese;
-                      if (isNaN(mancante)) return null; // Sicurezza extra
-
+                      const mancante = Math.max(0, targetValido - fattoMese);
                       const isCompleted = mancante <= 0;
                       return (
                         <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
@@ -498,48 +496,17 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="relative h-full" onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowQuickTarget(!showQuickTarget); }}
-              className={`px-3 h-full transition-colors flex items-center justify-center ${showQuickTarget ? 'text-indigo-700 bg-indigo-50' : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50'}`}
-              title="Assegnazione Rapida Target"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                e.preventDefault(); 
+                setSelectedRivenditaId(id);
+                openKpiAssign(); 
+              }}
+              className="px-3 h-full transition-colors flex items-center justify-center text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+              title="Assegna Target"
             >
               <Target className="w-4 h-4" />
             </button>
-            
-            {showQuickTarget && (
-              <div 
-                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-[200] p-2 animate-in fade-in zoom-in-95 cursor-default"
-                onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              >
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 px-1">Missioni Attive</div>
-                {missions.filter(m => m.stato !== 'ARCHIVIATA').length === 0 ? (
-                  <div className="text-[10px] text-slate-500 italic px-1">Nessuna missione in Regia</div>
-                ) : (
-                  <div className="space-y-1">
-                    {missions.filter(m => m.stato !== 'ARCHIVIATA').map(m => {
-                      const isSelected = (extra.targetIdoneo || []).includes(m.id);
-                      return (
-                        <div 
-                          key={m.id} 
-                          className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            const current = extra.targetIdoneo || [];
-                            const next = !isSelected ? [...current, m.id] : current.filter((id: string) => id !== m.id);
-                            handleRubricaUpdate(id, 'targetIdoneo', next);
-                          }}
-                        >
-                          <span className="text-[11px] font-bold text-slate-700 truncate pr-2 pointer-events-none">{m.nome}</span>
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors pointer-events-none ${isSelected ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'}`}>
-                            {isSelected && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           {/* FINE BLOCCO MENU FLUTTUANTE BLINDATO */}
           
