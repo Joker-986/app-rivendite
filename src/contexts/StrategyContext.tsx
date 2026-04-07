@@ -218,17 +218,19 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             }
           } else if (mission.tipo === 'PRODOTTO') {
-            // Filtra per mese corrente e per match del prodotto
-            riv.history?.forEach(h => {
-              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato)) {
-                h.items.forEach(item => {
-                  if (item.codice.toLowerCase() === mission.nome.toLowerCase() || 
-                      mission.nome.toLowerCase().includes(item.codice.toLowerCase())) {
-                    progress += item.quantita;
-                  }
-                });
+            const hasBoughtProduct = riv.history?.some(h => {
+              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
+                return h.items.some(item => 
+                  item.codice.toLowerCase() === mission.nome.toLowerCase() || 
+                  mission.nome.toLowerCase().includes(item.codice.toLowerCase())
+                );
               }
+              return false;
             });
+
+            if (hasBoughtProduct) {
+              progress += 1;
+            }
           }
         });
 

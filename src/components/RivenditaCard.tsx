@@ -4,9 +4,10 @@ import {
   Copy, Check, Trash2, BookOpen, ChevronDown, ChevronUp, 
   Calendar, CheckCircle2, X, ClipboardList, Database, 
   Target, Activity, CalendarClock, UserCheck, Edit3, 
-  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap
+  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag
 } from 'lucide-react';
-import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData } from '../types';
+import OrderModule from './OrderModule';
+import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData, OrderItem } from '../types';
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
 import { 
@@ -32,7 +33,7 @@ export interface RivenditaCardProps {
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
-  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number) => void;
+  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
@@ -48,15 +49,19 @@ export interface RivenditaCardProps {
   handleDeleteHistory: (id: string, index: number) => void;
 }
 
-const LastOrderTile = ({ data, onClick }: { data: any; onClick?: () => void }) => {
-  const lastOrder = React.useMemo(() => {
+const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivenditaId: string; openQuickEdit: any }) => {
+  const lastOrderInfo = React.useMemo(() => {
     if (!data?.history || data.history.length === 0) return null;
-    return [...data.history].filter(h => h.tipo === 'ORDINE').sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
+    const orders = data.history
+      .map((h: any, idx: number) => ({ ...h, realIdx: idx }))
+      .filter((h: any) => h.tipo === 'ORDINE')
+      .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    return orders[0];
   }, [data?.history]);
 
-  if (!lastOrder) return null;
+  if (!lastOrderInfo) return null;
 
-  const eventDate = new Date(lastOrder.data);
+  const eventDate = new Date(lastOrderInfo.data);
   const today = new Date();
   eventDate.setHours(0,0,0,0); today.setHours(0,0,0,0);
 
@@ -65,35 +70,45 @@ const LastOrderTile = ({ data, onClick }: { data: any; onClick?: () => void }) =
   else if (eventDate.getTime() === today.getTime()) label = "Ordine Odierno";
 
   return (
-    <div onClick={onClick} className="mt-1 p-3 bg-white border border-slate-100 rounded-xl flex items-start gap-2 shadow-inner cursor-pointer hover:bg-slate-50 transition-colors active:scale-[0.98]">
+    <div 
+      onClick={() => {
+        const idx = data.history.findIndex((h: any) => h.tipo === 'ORDINE');
+        openQuickEdit('ORDINE', rivenditaId, data, idx);
+      }} 
+      className="mt-1 p-3 bg-white border border-slate-100 rounded-xl flex items-start gap-2 shadow-inner cursor-pointer hover:bg-slate-50 transition-colors active:scale-[0.98]"
+    >
       <div className="flex-shrink-0 mt-0.5"><Package className="w-3.5 h-3.5 text-brand-500" /></div>
       <div className="flex-grow flex items-center justify-between min-w-0">
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label}:</span>
             <span className="text-[9px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
-              {new Date(lastOrder.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+              {new Date(lastOrderInfo.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
             </span>
           </div>
-          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">{lastOrder.note || "Nessuna nota"}</p>
+          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">{lastOrderInfo.note || "Nessuna nota"}</p>
         </div>
         <div className="text-right flex-shrink-0">
-          <span className="text-[10px] font-black text-brand-700">€{Number(lastOrder.importo || 0).toLocaleString('it-IT')}</span>
+          <span className="text-[10px] font-black text-brand-700">€{Number(lastOrderInfo.importo || 0).toLocaleString('it-IT')}</span>
         </div>
       </div>
     </div>
   );
 };
 
-const LastHostessTile = ({ data, onClick }: { data: any; onClick?: () => void }) => {
-  const hostessEvent = React.useMemo(() => {
+const LastHostessTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivenditaId: string; openQuickEdit: any }) => {
+  const hostessEventInfo = React.useMemo(() => {
     if (!data?.history || data.history.length === 0) return null;
-    return [...data.history].filter(h => h.tipo === 'HOSTESS').sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
+    const events = data.history
+      .map((h: any, idx: number) => ({ ...h, realIdx: idx }))
+      .filter((h: any) => h.tipo === 'HOSTESS')
+      .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    return events[0];
   }, [data?.history]);
 
-  if (!hostessEvent) return null;
+  if (!hostessEventInfo) return null;
 
-  const eventDate = new Date(hostessEvent.data);
+  const eventDate = new Date(hostessEventInfo.data);
   const today = new Date();
   eventDate.setHours(0,0,0,0); today.setHours(0,0,0,0);
 
@@ -106,15 +121,21 @@ const LastHostessTile = ({ data, onClick }: { data: any; onClick?: () => void })
     label = "Hostess Oggi"; colorClass = "text-violet-600"; bgClass = "bg-violet-100 border-violet-300"; iconColor = "text-violet-600"; valueColor = "text-violet-900";
   }
 
-  const d = new Date(hostessEvent.data);
-  const timeStr = d.toLocaleTimeString('it-IT', {hour: '2-digit', minute:'2-digit'});
-  const noteMatch = (hostessEvent.note || '').match(/Fine turno: (\d{2}:\d{2})/);
+  const d = new Date(hostessEventInfo.data);
+  const timeStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const noteMatch = (hostessEventInfo.note || '').match(/Fine turno: (\d{2}:\d{2})/);
   const endTime = noteMatch ? noteMatch[1] : '';
   const dateString = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const displayString = timeStr !== '00:00' ? `${dateString} dalle ${timeStr}${endTime ? ' alle ' + endTime : ''}` : dateString;
 
   return (
-    <div onClick={onClick} className={`mt-1 p-2 ${bgClass} border rounded-xl flex items-center gap-2 shadow-sm cursor-pointer hover:opacity-80 transition-colors active:scale-[0.98]`}>
+    <div 
+      onClick={() => {
+        const idx = data.history.findIndex((h: any) => h.tipo === 'HOSTESS');
+        openQuickEdit('HOSTESS', rivenditaId, data, idx);
+      }} 
+      className={`mt-1 p-2 ${bgClass} border rounded-xl flex items-center gap-2 shadow-sm cursor-pointer hover:opacity-80 transition-colors active:scale-[0.98]`}
+    >
       <CalendarClock className={`w-3.5 h-3.5 ${iconColor}`} />
       <div className="flex flex-col">
         <span className={`text-[9px] font-black ${colorClass} uppercase tracking-wider`}>{label}:</span>
@@ -123,13 +144,15 @@ const LastHostessTile = ({ data, onClick }: { data: any; onClick?: () => void })
     </div>
   );
 };
+;
 
 const TimelineItem: React.FC<{ 
   entry: RivenditaHistoryEntry; 
   index: number; 
-  onEdit: (index: number, note: string, importo: number, data: string, ora: string) => void; 
-  onDelete: (index: number) => void; 
-}> = ({ entry, index, onEdit, onDelete }) => {
+  onEdit: (index: number, note: string, importo: number, data: string, ora: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void; 
+  onDelete: (index: number) => void;
+  showToast: (msg: string, type?: any) => void;
+}> = ({ entry, index, onEdit, onDelete, showToast }) => {
   const [isEditing, setIsEditing] = React.useState(false);
   const [editNote, setEditNote] = React.useState(entry.note);
   const [editImporto, setEditImporto] = React.useState(entry.importo || 0);
@@ -157,7 +180,16 @@ const TimelineItem: React.FC<{
       
       <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm relative">
         <div className="flex justify-between items-center mb-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
+            {entry.tipo === 'ORDINE' && (
+              entry.isEseguito ? (
+                <span className="bg-emerald-50 text-emerald-600 text-[9px] font-bold px-2 py-0.5 rounded">ESEGUITO</span>
+              ) : (
+                <span className="bg-amber-50 text-amber-600 text-[9px] font-bold px-2 py-0.5 rounded">BOZZA</span>
+              )
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100">
               {dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • {dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
@@ -212,7 +244,7 @@ const TimelineItem: React.FC<{
                 setEditData(d.toISOString().split('T')[0]);
                 setEditOra(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
               }} className="flex-1 py-2 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl hover:bg-slate-300 transition-colors">Annulla</button>
-              <button onClick={() => { onEdit(index, editNote, editImporto, editData, editOra); setIsEditing(false); }} className="flex-1 py-2 bg-brand-600 text-white text-[11px] font-bold rounded-xl shadow-md shadow-brand-100 hover:bg-brand-700 transition-colors">Salva</button>
+              <button onClick={() => { onEdit(index, editNote, editImporto, editData, editOra, undefined, entry.isEseguito, entry.dataEsecuzione, entry.items); setIsEditing(false); }} className="flex-1 py-2 bg-brand-600 text-white text-[11px] font-bold rounded-xl shadow-md shadow-brand-100 hover:bg-brand-700 transition-colors">Salva</button>
             </div>
           </div>
         ) : (
@@ -220,7 +252,40 @@ const TimelineItem: React.FC<{
             <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
               {entry.note}
             </p>
-            {entry.importo > 0 && (
+            {entry.tipo === 'ORDINE' && (
+              <div className="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
+                <div className="flex flex-col">
+                  {entry.importo > 0 && (
+                    <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
+                  )}
+                  {entry.dataEvasione && (
+                    <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {new Date(entry.dataEvasione).toLocaleDateString('it-IT')}</span>
+                  )}
+                  {entry.items && entry.items.length > 0 && (
+                    <p className="text-[10px] text-slate-500 italic mt-0.5 leading-tight">
+                      {entry.items.map((it: any) => `${it.quantita}x ${it.codice}`).join(', ')}
+                    </p>
+                  )}
+                </div>
+                
+                {!entry.isEseguito ? (
+                  <button 
+                    onClick={() => {
+                      onEdit(index, entry.note, entry.importo || 0, editData, editOra, undefined, true, new Date().toISOString(), entry.items);
+                      showToast("Ordine inviato ai sistemi!", "success");
+                    }}
+                    className="text-blue-600 font-black text-[10px] uppercase hover:underline ml-auto"
+                  >
+                    ESEGUI
+                  </button>
+                ) : (
+                  <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                    ESEGUITO IL {new Date(entry.dataEsecuzione || '').toLocaleDateString('it-IT')}
+                  </span>
+                )}
+              </div>
+            )}
+            {entry.tipo !== 'ORDINE' && entry.importo > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-200/50">
                 <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
               </div>
@@ -432,28 +497,25 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       return acc;
                     }, 0);
 
-                    if (mission.tipo === 'FATTURATO') {
-                      // Legge la "Soglia Minima" se esiste, altrimenti ricade sul target globale
-                      const targetValido = Number(mission.targetSingolo) || Number(mission.target) || 0;
-                      
-                      if (targetValido <= 0) return null;
-
-                      const mancante = Math.max(0, targetValido - fattoMese);
+                    if (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) > 0) {
+                      const sbarramento = Number(mission.targetSingolo);
+                      const mancante = Math.max(0, sbarramento - fattoMese);
                       const isCompleted = mancante <= 0;
                       return (
                         <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
                           <Target className="w-2.5 h-2.5" />
-                          {isCompleted ? 'Fatturato OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
+                          {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
                         </div>
                       );
                     }
 
-                    if (mission.tipo === 'ATTIVAZIONE') {
+                    if (mission.tipo === 'ATTIVAZIONE' || (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) <= 0)) {
                       const isCompleted = fattoMese > 0;
+                      const icon = mission.tipo === 'FATTURATO' ? <Target className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />;
                       return (
                         <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                          <Zap className="w-2.5 h-2.5" />
-                          {isCompleted ? 'Attivata' : 'Da Attivare'}
+                          {icon}
+                          {isCompleted ? 'Attivata ✓' : 'Da Attivare'}
                         </div>
                       );
                     }
@@ -549,8 +611,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         </div>
       </div>
       
-      <LastOrderTile data={extra} onClick={() => openQuickEdit('ORDINE', id, extra)} />
-      <LastHostessTile data={extra} onClick={() => openQuickEdit('HOSTESS', id, extra)} />
+      <LastOrderTile data={extra} rivenditaId={id} openQuickEdit={openQuickEdit} />
+      <LastHostessTile data={extra} rivenditaId={id} openQuickEdit={openQuickEdit} />
       
       <div className="flex items-start justify-between gap-2 text-sm text-slate-600">
         <div className="flex items-start gap-2">
@@ -565,7 +627,10 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
       {(extra.visitata === 'Si' || extra.lastDataVisita) && (
         <div 
-          onClick={() => openQuickEdit('VISITA', id, extra)}
+          onClick={() => {
+            const idx = extra.history?.findIndex((h: any) => h.tipo === 'VISITA');
+            openQuickEdit('VISITA', id, extra, idx);
+          }}
           className={`text-xs p-2.5 rounded-xl shadow-sm border-l-4 mt-2 cursor-pointer hover:opacity-80 active:scale-[0.98] transition-all ${extra.visitata === 'Si' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' : 'bg-slate-50 border-slate-300 text-slate-700'}`}
         >
           <div className="flex items-center justify-between">
@@ -824,8 +889,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   key={`${id}-history-${i}`} 
                   entry={h} 
                   index={i}
-                  onEdit={(idx, note, imp, data, ora) => handleEditHistory(id, idx, note, imp, data, ora)}
+                  onEdit={(idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione) => handleEditHistory(id, idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione)}
                   onDelete={(idx) => handleDeleteHistory(id, idx)}
+                  showToast={showToast}
                 />
               ))}
             </div>
@@ -1258,64 +1324,33 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 </div>
 
                 <div className="pt-2 border-t border-slate-200">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={extra.richiestaOrdine || false}
-                      onChange={(e) => handleRubricaUpdate(id, 'richiestaOrdine', e.target.checked)}
-                      className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-                    />
-                    <span className="text-sm font-medium text-slate-700">Richiesta d'ordine</span>
-                  </label>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRubricaUpdate(id, 'richiestaOrdine', !extra.richiestaOrdine);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                      extra.richiestaOrdine 
+                        ? 'bg-brand-100 text-brand-700' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-brand-50 hover:text-brand-600'
+                    }`}
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    {extra.richiestaOrdine ? 'Annulla Ordine' : 'Compila Ordine'}
+                  </button>
                 </div>
 
                 {extra.richiestaOrdine && (
-                  <div className="space-y-4 bg-brand-50/50 p-3 rounded-xl border border-brand-100">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-slate-600">Data inserimento ordine</label>
-                      <input
-                        type="date"
-                        value={extra.dataOrdine || ''}
-                        onChange={(e) => handleRubricaUpdate(id, 'dataOrdine', e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-slate-600">Note ordine (articoli da ordinare)</label>
-                      <textarea
-                        value={extra.noteOrdine || ''}
-                        onChange={(e) => handleRubricaUpdate(id, 'noteOrdine', e.target.value)}
-                        placeholder="Inserisci qui gli articoli da ordinare..."
-                        rows={3}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm resize-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-slate-600">Importo Ordine (€)</label>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={extra.importoOrdine || ''}
-                        onChange={(e) => handleRubricaUpdate(id, 'importoOrdine', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold"
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={extra.ordineEvaso || false}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            handleActivitySave(id, 'ORDINE', extra.noteOrdine || '', extra.importoOrdine || 0);
-                          } else {
-                            handleRubricaUpdate(id, 'ordineEvaso', false);
-                          }
-                        }}
-                        className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                      />
-                      <span className="text-sm font-medium text-slate-700">Ordine evaso</span>
-                    </label>
+                  <div className="mt-4 animate-in fade-in zoom-in-95 duration-300">
+                    <OrderModule 
+                      onConfirmOrder={(cart, totaleEuro, note, dataEvasione) => {
+                        handleActivitySave(id, 'ORDINE', note, totaleEuro, cart, dataEvasione);
+                        handleRubricaUpdate(id, 'richiestaOrdine', false); // Chiude il modulo dopo il salvataggio
+                      }}
+                      onCancel={() => {
+                        handleRubricaUpdate(id, 'richiestaOrdine', false);
+                      }}
+                    />
                   </div>
                 )}
 

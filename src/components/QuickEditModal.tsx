@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, ShoppingBag, UserCheck, CheckCircle2, Trash2, Calendar, Clock, Edit3, Check } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
+import OrderModule from './OrderModule';
 
 interface QuickEditModalProps {
   isOpen: boolean;
@@ -9,7 +10,7 @@ interface QuickEditModalProps {
   rivenditaId: string;
   extra: any;
   onUpdateRubrica: (id: string, field: string, value: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void;
   onDeleteHistory: (id: string, index: number) => void;
   targetHistoryIndex?: number;
 }
@@ -24,9 +25,11 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
   const [note, setNote] = useState('');
   const [importo, setImporto] = useState<number>(0);
   const [isEvaso, setIsEvaso] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
+  const [dataEvasione, setDataEvasione] = useState('');
   
   // Stato per salvare la "Fotografia" iniziale dei dati
-  const [initialState, setInitialState] = useState({ data: '', ora: '', note: '', importo: 0, isEvaso: false });
+  const [initialState, setInitialState] = useState({ data: '', ora: '', note: '', importo: 0, isEvaso: false, items: [] as any[], dataEvasione: '' });
 
   const actualIndex = useMemo(() => {
     if (targetHistoryIndex !== undefined) return targetHistoryIndex;
@@ -45,7 +48,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         const initOra = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         const initNote = entry.note || '';
         const initImporto = entry.importo || 0;
-        const initEvaso = entry.stato === 'EVASO';
+        const initEvaso = entry.isEseguito === true;
+        const initItems = entry.items || [];
+        const initDataEvasione = entry.dataEvasione || '';
 
         // Impostiamo i dati visibili
         setData(initData);
@@ -53,6 +58,8 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         setNote(initNote);
         setImporto(initImporto);
         setIsEvaso(initEvaso);
+        setItems(initItems);
+        setDataEvasione(initDataEvasione);
 
         // Salviamo la fotografia per il confronto
         setInitialState({
@@ -60,7 +67,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
           ora: initOra,
           note: initNote,
           importo: initImporto,
-          isEvaso: initEvaso
+          isEvaso: initEvaso,
+          items: initItems,
+          dataEvasione: initDataEvasione
         });
       }
     }
@@ -75,7 +84,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
       ora !== initialState.ora || 
       note !== initialState.note || 
       importo !== initialState.importo || 
-      isEvaso !== initialState.isEvaso;
+      isEvaso !== initialState.isEvaso ||
+      JSON.stringify(items) !== JSON.stringify(initialState.items) ||
+      dataEvasione !== initialState.dataEvasione;
 
     if (hasChanges) {
       openConfirm({
@@ -98,7 +109,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         onUpdateRubrica(rivenditaId, 'richiestaOrdine', false);
       }
     }
-    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato);
+    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato, isEvaso, isEvaso ? new Date().toISOString() : undefined, items);
     onClose();
   };
 
@@ -113,6 +124,36 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
       }
     });
   };
+
+  if (editType === 'ORDINE') {
+    const entry = extra.history[actualIndex];
+    return (
+      <OrderModule 
+        isEditMode={true}
+        initialCart={entry.items || []}
+        initialNote={entry.note || ''}
+        initialDataEvasione={entry.dataEvasione || entry.data?.split('T')[0]}
+        onConfirmOrder={(cart, totaleEuro, note, dataEvasione) => {
+          onEditHistory(
+            rivenditaId, 
+            actualIndex, 
+            note, 
+            totaleEuro, 
+            entry.data?.split('T')[0], 
+            entry.data?.split('T')[1]?.substring(0, 5), 
+            entry.stato, 
+            true, 
+            entry.dataEsecuzione || new Date().toISOString(), 
+            cart,
+            dataEvasione
+          );
+          onClose();
+        }}
+        onCancel={handleCloseRequest}
+        onDelete={handleDelete}
+      />
+    );
+  }
 
   const configs = {
     VISITA: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', title: 'Modifica Visita' },

@@ -1,82 +1,99 @@
-# PROJECT MAP - TgesT Full-Stack Ecosystem
+src/
+├── App.tsx
+├── index.css
+├── main.tsx
+├── types.ts
+├── version.json
+├── components/
+│   ├── AgendaTab.tsx
+│   ├── ChangelogModal.tsx
+│   ├── GuideModal.tsx
+│   ├── MapView.tsx
+│   ├── ModalContainer.tsx
+│   ├── QuickEditModal.tsx
+│   ├── RivenditaCard.tsx
+│   ├── SettingsModal.tsx
+│   ├── StatsTab.tsx
+│   ├── StoreModal.tsx
+│   └── StrategyDashboard.tsx
+├── contexts/
+│   ├── BudgetContext.tsx
+│   ├── ModalContext.tsx
+│   ├── ProductContext.tsx
+│   └── StrategyContext.tsx
+├── hooks/
+│   └── usePersistence.ts
+├── services/
+│   ├── geminiService.ts
+│   └── statsService.ts
+└── utils/
+    └── helpers.ts
 
-## 0. LIVELLO 0: ROOT & INFRASTRUTTURA (L'Ossatura)
-L'infrastruttura di base che abilita lo sviluppo, il build e la distribuzione dell'applicazione come Progressive Web App (PWA).
-
-- **vite.config.ts**: Il cuore del build engine. Configura i plugin React e Tailwind CSS, gestisce gli alias di percorso (`@`) e implementa misure di sicurezza rimuovendo le chiavi API dal blocco `define` per evitare esposizioni accidentali nel bundle frontend.
-- **tsconfig.json**: Definisce le regole di compilazione TypeScript, garantendo la coerenza dei tipi tra il frontend React e il backend Node.js (ESM).
-- **package.json**: Manifest del progetto. 
-  - **Scripts**: `dev` e `start` utilizzano `tsx` per eseguire `server.ts` direttamente, abilitando un ambiente di sviluppo full-stack fluido.
-  - **Dependencies**: Un mix critico di librerie frontend (React, Leaflet, Motion) e backend (Express, better-sqlite3, Cheerio).
-- **PWA Implementation**:
-  - **public/sw.js (Service Worker)**: Implementa una strategia di **Cache-First** per gli asset statici e una logica di **Offline Fallback** (ritorna una pagina HTML minimale in caso di assenza di rete). Gestisce l'invalidazione della cache tramite iniezione dinamica della versione dal server.
-  - **public/manifest.json**: Definisce l'identità visiva e il comportamento dell'app una volta installata (icone, colori, modalità standalone).
-
----
-
-## 1. LIVELLO 1: BACKEND & MOTORE DI SCRAPING (I Lavoratori)
-Il motore "headless" che estrae i dati dai portali governativi e gestisce la persistenza centralizzata.
-
-- **server.ts**: L'orchestratore full-stack.
-  - **Scraping Proxy**: Gestisce la sessione complessa JSF (JavaServer Faces) del portale ADM, manipolando ViewState e Cookies per eseguire ricerche multi-pagina.
-  - **Persistence Layer**: Interfaccia `better-sqlite3` per gestire `tgest.db`. Sincronizza Rubrica, CRM e Giro Visite, permettendo la persistenza oltre il `localStorage`.
-  - **AI & Geo Proxy**: Protegge la `GEMINI_API_KEY` ed esegue l'arricchimento dei dati (con Web Search) e il geocoding (Nominatim) lato server.
-- **fetch.ts**: Script di diagnostica a basso livello per verificare la raggiungibilità HTTPS dei server ADM.
-- **analyze_rubrica.ts**: Strumento di audit del database. Analizza l'integrità dei dati salvati, focalizzandosi sulla migrazione dei campi storici e sullo stato degli ordini.
-- **Suite 'test-jsf' (1-7) & 'output.html' (1-6)**: 
-  - **Ruolo**: Laboratorio di Reverse Engineering. Questi script isolati sono fondamentali per mappare i selettori CSS dinamici e i parametri POST necessari per navigare nel portale ADM. I file HTML sono snapshot usati per validare le regex e i selettori di Cheerio.
-
----
-
-## 2. LIVELLO 2: SERVIZI, UTILITY & DATA TYPES (Il Sistema Nervoso)
-Moduli trasversali che collegano la logica di business all'interfaccia utente.
-
-- **src/services/geminiService.ts**: Bridge frontend per l'arricchimento. Astrae la chiamata all'endpoint `/api/enrich`, gestendo i fallback in caso di errore del server o timeout dell'AI.
-- **src/services/statsService.ts**: Coprocessore matematico. Centralizza i calcoli complessi per fatturato, KPI, statistiche BR, ordini e visite. La migrazione completa della logica matematica (Fase 1 e Fase 2) è conclusa.
-- **src/hooks/usePersistence.ts**: Custom Hook per la gestione della persistenza, backup, export Excel/Maps e sincronizzazione cloud. Isola la logica di I/O dal componente UI principale.
-- **src/utils/helpers.ts**: Libreria di funzioni pure e utility. Gestisce:
-  - Deep-linking per navigazione GPS (Android/iOS/Web).
-  - Formattazione date per Google Calendar.
-  - Astrazione tipizzata del `localStorage`.
-  - Calcolo orari e turni (es. Hostess).
-- **src/types/index.ts**: La "Sorgente di Verità" per i dati. Definisce le interfacce `SearchResult`, `RivenditaExtra` e `RubricaData`, garantendo la coerenza dei tipi in tutta l'applicazione.
-
----
-
-## 3. LIVELLO 3: CORE REACT (Il Cervello & L'Interfaccia)
-L'interfaccia utente reattiva che orchestra l'esperienza dell'utente finale.
-
-- **App.tsx**: Il "Grande Orchestratore".
-  - **Gestione Stato**: Coordina ~60 variabili di stato, gestendo la sincronizzazione tra DB SQLite e UI.
-  - **Rate Limiting (`aiUsage`)**: Implementa un sistema di "gettoni" (timestamp) per limitare le chiamate AI (max 2/min), prevenendo blocchi delle quote API.
-  - **Logiche di Navigazione**: Gestisce il routing interno tramite Tab e intercetta il tasto "Back" di Android per chiudere i modali prima di navigare.
-- **Componenti Esternalizzati**:
-  - **MapView.tsx**: Integrazione Leaflet per la visualizzazione geografica con clustering dei marker.
-  - **AgendaTab.tsx**: Componente di layout per la gestione delle scadenze, servizi hostess e ordini da evadere.
-  - **KpiTab.tsx**: Componente per la visualizzazione e gestione degli obiettivi mensili (Fatturato, Attivazioni, Prodotti) e il monitoraggio delle rivendite targettizzate.
-  - **SettingsModal.tsx**: Pannello di controllo centrale per la gestione del cloud sync, backup fisici, riparazione dati, quote AI e target economici globali.
-  - **StatsTab.tsx**: Modulo dedicato alla visualizzazione delle statistiche, KPI, termometro del territorio e riepilogo attività.
-  - **RivenditaCard.tsx**: Componente atomico complesso. Gestisce l'espansione, l'arricchimento AI locale e le azioni rapide (Call, Nav, Save).
-  - **QuickEditModal.tsx**: Interfaccia di data-entry rapida per note, ordini e pianificazione visite.
-  - **TargetModal.tsx**: Gestisce l'impostazione degli obiettivi economici mensili e dei Quorum operativi (Focus e Attivazioni) con persistenza in LocalStorage.
-  - **StoreModal.tsx**: Modulo autonomo per l'inserimento di nuovi Store. Gestisce localmente lo stato del form per non sovraccaricare il render cycle globale.
-  - **ChangelogModal.tsx & GuideModal.tsx**: Componenti informativi per l'onboarding e il tracking delle versioni.
-
----
-
-## 4. MATRICE DEI FLUSSI CROSS-LAYER (Ciclo di Vita del Dato)
-
-| Fase | Flusso Architetturale | Tecnologie Coinvolte |
-| :--- | :--- | :--- |
-| **Estrazione** | `App.tsx` (Search) -> `server.ts` (Proxy) -> `ADM Portal` | Cheerio, Fetch API, JSF ViewState |
-| **Arricchimento** | `RivenditaCard` -> `geminiService.ts` -> `server.ts` -> `Gemini API` | Google GenAI, Web Search Tool |
-| **Persistenza** | `App.tsx` (State Change) -> `server.ts` -> `SQLite (tgest.db)` | better-sqlite3, JSON.stringify |
-| **Offline** | `Browser` -> `sw.js` (Cache Check) -> `LocalStorage` | Service Worker, Cache API, Web Storage |
-| **Navigazione** | `RivenditaCard` -> `helpers.ts` -> `Deep Link (geo: / maps:)` | Navigator UserAgent, URL Encoding |
-
----
-
-## 5. PIANO DI EVOLUZIONE (Backlog Architetturale)
-- **Modularizzazione**: La migrazione delle logiche di calcolo KPI e statistiche da `App.tsx` a `statsService.ts` e `StatsTab.tsx` è conclusa. Prossimo step: estrazione del Tab CRM.
-- **Sincronizzazione**: Implementare un sistema di "Background Sync" nel Service Worker per inviare i dati salvati offline al DB SQLite non appena torna la connessione.
-- **Sicurezza**: Rafforzare la validazione dei dati in `server.ts` per prevenire injection nel database SQLite.
+2. MANIFESTO DEI FILE E RESPONSABILITÀ
+Root Files
+App.tsx
+Scopo principale: Entry point principale dell'interfaccia utente. Gestisce lo stato globale (sessione, filtri, risultati di ricerca, rubrica, archivi) e l'orchestrazione dei componenti e dei modali.
+Dipendenze: React, Lucide React, Componenti interni, Contexts (ModalContext, StrategyContext), Hooks (usePersistence), Services (geminiService, statsService), Utils (helpers.ts), types.ts, version.json.
+main.tsx
+Scopo principale: Punto di montaggio dell'applicazione React nel DOM. Avvolge l'app con i vari Provider (Contexts).
+Dipendenze: React, ReactDOM, App.tsx, Context Providers, index.css.
+types.ts
+Scopo principale: Definizione centralizzata di tutte le interfacce e i tipi TypeScript utilizzati nell'applicazione.
+Dipendenze: Nessuna (file di sole definizioni).
+index.css
+Scopo principale: Foglio di stile globale che include le direttive di Tailwind CSS.
+Components (src/components/)
+AgendaTab.tsx: Gestisce la visualizzazione e l'interazione con l'agenda delle visite e degli appuntamenti.
+ChangelogModal.tsx: Modale per mostrare le novità e gli aggiornamenti dell'applicazione in base alla versione.
+GuideModal.tsx: Modale informativo che fornisce istruzioni e guide all'utente.
+MapView.tsx: Componente per la visualizzazione geografica (mappa) delle rivendite e degli store.
+ModalContainer.tsx: Contenitore globale per la renderizzazione centralizzata dei vari modali dell'app.
+QuickEditModal.tsx: Modale per la modifica rapida delle attività (Visita, Ordine, Hostess) associate a una rivendita.
+RivenditaCard.tsx: Componente UI che rappresenta la singola scheda di una rivendita o store, mostrando dettagli e azioni rapide.
+SettingsModal.tsx: Modale per la gestione delle impostazioni dell'app, backup/ripristino dati e pulizia cache.
+StatsTab.tsx: Tab dedicato alla visualizzazione delle statistiche di vendita, visite e performance.
+StoreModal.tsx: Modale per la creazione o modifica dei dettagli di uno specifico Store.
+StrategyDashboard.tsx: Dashboard per il monitoraggio degli obiettivi, missioni, campagne e budget.
+Contexts (src/contexts/)
+BudgetContext.tsx: Fornisce lo stato globale relativo al budget e alle transazioni finanziarie.
+ModalContext.tsx: Gestisce lo stato di apertura/chiusura e i dati passati ai vari modali dell'applicazione.
+ProductContext.tsx: Fornisce il catalogo dei prodotti e le funzioni per gestirlo.
+StrategyContext.tsx: Fornisce lo stato e le logiche di calcolo per missioni (MBO), campagne e configurazioni salariali.
+Hooks (src/hooks/)
+usePersistence.ts
+Scopo principale: Hook custom per la gestione del salvataggio, esportazione, importazione e sincronizzazione dei dati (Giro Visite, CRM, Rubrica) tramite localStorage e API esterne.
+Dipendenze: React, types.ts, helpers.ts, version.json, ModalContext.
+Services (src/services/)
+geminiService.ts
+Scopo principale: Servizio per l'arricchimento dei dati delle rivendite interrogando un endpoint API locale (es. orari, telefono, zona).
+Dipendenze: Fetch API.
+statsService.ts
+Scopo principale: Contiene la logica di business per il calcolo delle statistiche (fatturato, visite, ordini).
+Utils (src/utils/)
+helpers.ts
+Scopo principale: Funzioni di utilità generiche (formattazione date, gestione orari, navigazione, parsing).
+3. GESTIONE DELLO STATO E CONTEXTS (IL CERVELLO)
+Il flusso dei dati è gestito principalmente tramite Context API per gli stati condivisi e App.tsx per lo stato core dell'interfaccia e del database locale.
+BudgetContext
+Dati esposti: budget (oggetto contenente le transazioni), funzioni di manipolazione (addTransaction, deleteTransaction, calculateBalance, initializeBudget, reconcileBudget, consolidateBudget).
+Consumatori: StrategyDashboard.tsx e componenti legati alla visualizzazione finanziaria.
+ModalContext
+Dati esposti: Stati dei modali (confirmModal, shareModal, quickEditModal, revisitModalId, isKpiAssignOpen, selectedRivenditaId) e le relative funzioni di apertura/chiusura.
+Consumatori: App.tsx, ModalContainer.tsx, RivenditaCard.tsx, AgendaTab.tsx e qualsiasi componente che necessiti di triggerare un modale.
+ProductContext
+Dati esposti: products (array di prodotti), funzioni CRUD (addProduct, updateProduct, deleteProduct), e funzioni di utilità (getCategories, getProductsByCategory).
+Consumatori: Componenti legati alla creazione di ordini, StrategyDashboard.tsx, e modali di gestione catalogo.
+StrategyContext
+Dati esposti: salaryConfig, missions, campaigns, funzioni CRUD per missioni e campagne, e logiche di calcolo (calculateMboBonus, calculateExtraBonus, syncProgress).
+Consumatori: App.tsx (per la sincronizzazione in background dei progressi), StrategyDashboard.tsx, StatsTab.tsx.
+Stato Locale Core (App.tsx)
+App.tsx detiene lo stato vitale del database locale (sincronizzato con localStorage tramite l'hook usePersistence): giroVisite, crmAnagrafiche, stores, e rubrica (dati extra e storico delle rivendite). Questi dati vengono passati a cascata come props ai vari Tab (AgendaTab, StatsTab) e componenti (RivenditaCard).
+4. CORE TYPES (IL CONTRATTO DATI)
+Le interfacce definite in types.ts modellano il database locale (salvato in localStorage):
+SearchResult: Modella i dati anagrafici base di una rivendita o store (Provincia, Comune, Num. Rivendita, Indirizzo, flag isStore, ecc.).
+RivenditaExtra: Modella i dati arricchiti e operativi di una rivendita (stato, visita, giorno di levata, contatti, target idonei, storico attività).
+RivenditaHistoryEntry: Rappresenta una singola attività passata (Visita, Ordine, Hostess), includendo data, note, importo e gli articoli dell'ordine (OrderItem[]).
+RubricaData: Un dizionario (Record<string, RivenditaExtra>) che mappa l'ID univoco di una rivendita ai suoi dati extra e allo storico. È il cuore del CRM locale.
+Product & OrderItem: Product definisce il catalogo (codice, descrizione, categoria, prezzo base), mentre OrderItem rappresenta la riga d'ordine (quantità, prezzo applicato, omaggio).
+Mission & Campaign: Definiscono gli obiettivi di business. Mission traccia target di fatturato, attivazioni o prodotti specifici. Campaign definisce periodi promozionali con bonus associati.
+AMBudget & BudgetTransaction: Modellano il portafoglio/budget a disposizione, tracciando ricariche e spese.

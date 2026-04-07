@@ -8,6 +8,7 @@ import StoreModal from './components/StoreModal';
 import AgendaTab from './components/AgendaTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
+import WarehouseTab from './components/WarehouseTab';
 import SettingsModal from './components/SettingsModal';
 import ModalContainer from './components/ModalContainer';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
@@ -16,7 +17,7 @@ import packageVersion from './version.json';
 import { usePersistence } from './hooks/usePersistence';
 import { useModals } from './contexts/ModalContext';
 import { useStrategy } from './contexts/StrategyContext';
-import { Option, SearchResult, RivenditaHistoryEntry, RivenditaExtra, ArchiveEntry, RubricaData } from './types';
+import { Option, SearchResult, RivenditaHistoryEntry, RivenditaExtra, ArchiveEntry, RubricaData, OrderItem } from './types';
 import { formatGoogleCalendarDate, getAvailableTimes, handleNavigation, toTitleCase, loadFromStorage, getRivenditaId, getGoogleResetDate, calcolaFineTurno, ORARI_INIZIO } from './utils/helpers';
 
 // TgesT Enterprise - v3.01
@@ -652,7 +653,7 @@ export default function App() {
     });
   }, []);
 
-  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0) => {
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string) => {
     setRubrica(prev => {
       const current = prev[id] || {};
       const history = [...(current.history || [])];
@@ -682,10 +683,21 @@ export default function App() {
 
       // Anti-Duplicazione: sovrascrive se esiste già un evento dello stesso tipo in quel giorno
       const existingIndex = history.findIndex(h => h.tipo === type && h.data.startsWith(dateOnlyStr));
+      
+      const newEntry: RivenditaHistoryEntry = { 
+        data: isoDateStr, 
+        tipo: type, 
+        note: finalNotes, 
+        importo: amount, 
+        items: items,
+        dataEvasione: dataEvasione,
+        isEseguito: type === 'ORDINE' ? false : undefined
+      };
+
       if (existingIndex !== -1) {
-        history[existingIndex] = { data: isoDateStr, tipo: type, note: finalNotes, importo: amount };
+        history[existingIndex] = newEntry;
       } else {
-        history.push({ data: isoDateStr, tipo: type, note: finalNotes, importo: amount });
+        history.push(newEntry);
       }
 
       history.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
@@ -760,7 +772,7 @@ export default function App() {
     });
   }, []);
 
-  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string) => {
+  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string) => {
     setRubrica(prev => {
       const current = prev[id];
       if (!current || !current.history) return prev;
@@ -776,7 +788,11 @@ export default function App() {
         note: newNote, 
         importo: newImporto,
         data: finalData,
-        ...(newStato ? { stato: newStato } : {})
+        ...(newStato ? { stato: newStato } : {}),
+        ...(isEseguito !== undefined ? { isEseguito } : {}),
+        ...(dataEsecuzione ? { dataEsecuzione } : {}),
+        ...(newItems ? { items: newItems } : {}),
+        ...(newDataEvasione ? { dataEvasione: newDataEvasione } : {})
       };
       
       setTimeout(() => reconcileHistoryData(id, newHistory), 0);
@@ -1069,7 +1085,7 @@ export default function App() {
   ])).sort(), [crmList, storeList]);
 
   const getOrderedTabs = useCallback(() => {
-    const tabs = ['search', 'giro', 'agenda', 'crm', 'store'];
+    const tabs = ['search', 'giro', 'agenda', 'crm', 'store', 'magazzino'];
     provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
     tabs.push('rip');
     tabs.push('regia');
@@ -1582,6 +1598,7 @@ export default function App() {
             <button id="tab-agenda" onClick={() => handleTabChange('agenda')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'agenda' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Agenda</button>
             <button id="tab-crm" onClick={() => handleTabChange('crm')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>CRM ({crmList.length})</button>
             <button id="tab-store" onClick={() => handleTabChange('store')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Store ({storeList.length})</button>
+            <button id="tab-magazzino" onClick={() => { handleTabChange('magazzino'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'magazzino' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Magazzino</button>
             
             {provincesInCrm.map(prov => (
               <button key={prov} id={`tab-prov_${prov}`} onClick={() => handleTabChange(`prov_${prov}`)} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{prov}</button>
@@ -2040,6 +2057,7 @@ export default function App() {
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
                 showToast={showToast}
+                onEditHistory={handleEditHistory}
               />
             ) : activeTab === 'statistiche' ? (
               <StatsTab 
@@ -2055,17 +2073,9 @@ export default function App() {
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
               />
-
-
-
-                
-
-
-
-
-
-
-        ) : activeTab === 'giro' ? (
+            ) : activeTab === 'magazzino' ? (
+              <WarehouseTab />
+            ) : activeTab === 'giro' ? (
               viewMode === 'map' ? (
                 <MapView results={getSortedList} />
               ) : getSortedList.length === 0 ? (
@@ -2247,3 +2257,4 @@ export default function App() {
     </div>
   );
 }
+

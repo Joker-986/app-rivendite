@@ -1,6 +1,6 @@
 import { useState, useCallback, Dispatch, SetStateAction, ChangeEvent } from 'react';
 import { SearchResult, RivenditaExtra, RubricaData } from '../types';
-import { getRivenditaId } from '../utils/helpers';
+import { getRivenditaId, riparaDatiStorici as riparaDatiStoriciHelper } from '../utils/helpers';
 import packageVersion from '../version.json';
 import { useModals } from '../contexts/ModalContext';
 
@@ -257,146 +257,16 @@ export function usePersistence({
   };
 
   const riparaDatiStorici = useCallback(() => {
-    setRubrica(prev => {
-      const newRubrica = { ...prev };
-      let count = 0;
-
-      Object.keys(newRubrica).forEach(id => {
-        const oldData = newRubrica[id] as any;
-        // Check if exists in lists
-        const exists = [...crmAnagrafiche, ...stores, ...giroVisite].some(r => {
-          return (r.uid && r.uid === id) || (`${r['Prov.']}_${r['Comune']}_${r['Num. Rivendita']}` === id);
-        });
-        const hasPendingData = oldData.richiestaOrdine || oldData.hasTarget || oldData.kpiAttivazione || oldData.kpiProdotto;
-        
-        if (!exists && !hasPendingData) {
-          delete newRubrica[id];
-          count++;
-          return;
-        }
-
-        const data = { ...oldData, history: [...(oldData.history || [])] };
-
-        // A. GESTIONE ORDINI (Data Prevista futura e Stato)
-        if (data.richiestaOrdine === true || data.dataOrdine) {
-          const isEvaso = data.ordineEvaso === true;
-          const existingOrder = data.history.find((h: any) => h.tipo === 'ORDINE' && (h.data.startsWith(data.dataOrdine) || (!isEvaso && h.stato === 'DA_EVADERE')));
-          
-          if (!existingOrder) {
-            let orderDate = new Date();
-            if (data.dataOrdine) {
-               const parsed = new Date(data.dataOrdine);
-               if (!isNaN(parsed.getTime())) orderDate = parsed;
-            }
-            orderDate.setHours(12,0,0,0);
-
-            data.history.push({
-              tipo: 'ORDINE',
-              stato: isEvaso ? 'EVASO' : 'DA_EVADERE',
-              data: orderDate.toISOString(),
-              importo: Number(data.importoOrdine) || 0,
-              note: data.noteOrdine || ''
-            });
-            count++;
-          }
-        }
-
-        // Forza stato per ordini legacy
-        data.history = data.history.map((h: any) => {
-          if (h.tipo === 'ORDINE') {
-            if (!h.stato) return { ...h, stato: data.richiestaOrdine && !data.ordineEvaso ? 'DA_EVADERE' : 'EVASO' };
-            if (h.stato === 'EVASO' && data.richiestaOrdine === true && data.ordineEvaso === false) return { ...h, stato: 'DA_EVADERE' };
-          }
-          return h;
-        });
-
-        // B. GESTIONE HOSTESS E QUARANTENA DATI SPORCHI
-        const hasLegacyHostess = data.ultimaHostessData || data.ultimaHostessInfo || data.hostessData;
-        
-        if (hasLegacyHostess) {
-          let eventDate = new Date();
-          let note = data.ultimaHostessInfo || 'Storico Hostess';
-          let isDateValid = false;
-          let hh = 12, mm = 0;
-          
-          const rawLegacyDate = data.hostessData || data.ultimaHostessData || 'Sconosciuta';
-          const rawLegacyTime = data.hostessInizio || 'Sconosciuta';
-
-          try {
-            if (data.hostessData) {
-              const parts = data.hostessData.split('-');
-              if (parts.length === 3) {
-                 const [y, m, d] = parts;
-                 if (data.hostessInizio && data.hostessInizio.includes(':')) [hh, mm] = data.hostessInizio.split(':').map(Number);
-                 const testDate = new Date(Number(y), Number(m) - 1, Number(d), hh, mm, 0);
-                 if (!isNaN(testDate.getTime())) { eventDate = testDate; isDateValid = true; }
-              }
-            } 
-            else if (data.ultimaHostessInfo) {
-              const match = data.ultimaHostessInfo.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-              if (match) {
-                const [_, d, m, y] = match;
-                const timeMatch = data.ultimaHostessInfo.match(/dalle (\d{2}):(\d{2})/);
-                if (timeMatch) { hh = Number(timeMatch[1]); mm = Number(timeMatch[2]); }
-                const testDate = new Date(Number(y), Number(m) - 1, Number(d), hh, mm, 0);
-                if (!isNaN(testDate.getTime())) { eventDate = testDate; isDateValid = true; }
-              }
-            }
-            else if (data.ultimaHostessData) {
-               if (data.ultimaHostessData.includes('/')) {
-                  const [d, m, y] = data.ultimaHostessData.split('/');
-                  const testDate = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0);
-                  if (!isNaN(testDate.getTime())) { eventDate = testDate; isDateValid = true; }
-               } else {
-                  const testDate = new Date(data.ultimaHostessData);
-                  if (!isNaN(testDate.getTime())) { eventDate = testDate; isDateValid = true; }
-               }
-            }
-          } catch (e) { isDateValid = false; }
-
-          if (!isDateValid) {
-             note = `[⚠️ DATA ORIGINALE: "${rawLegacyDate}" - ORA: "${rawLegacyTime}"] ${note}`;
-             eventDate = new Date();
-          }
-
-          let calculatedFine = `${(hh + 4).toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
-          if (data.hostessFine) note = `${note} (Fine turno: ${data.hostessFine})`.trim();
-          else if (!note.includes('Fine turno') && isDateValid) note = `${note} (Fine turno: ${calculatedFine})`.trim();
-
-          const isoDateStr = eventDate.toISOString();
-          const dateOnlyStr = isoDateStr.split('T')[0];
-          const existingHostess = data.history.find((h: any) => h.tipo === 'HOSTESS' && h.data.startsWith(dateOnlyStr));
-
-          if (!existingHostess) {
-             data.history.push({ tipo: 'HOSTESS', data: isoDateStr, note: note, importo: 0 });
-             count++;
-          } else if (isDateValid && existingHostess.data.endsWith('Z') && new Date(existingHostess.data).getHours() === new Date().getHours()) {
-             existingHostess.data = isoDateStr;
-             if (!existingHostess.note.includes('Fine turno')) existingHostess.note = `${existingHostess.note} (Fine turno: ${calculatedFine})`.trim();
-             count++;
-          }
-
-          delete data.ultimaHostessData;
-          delete data.ultimaHostessInfo;
-          delete data.hostessData;
-          delete data.hostessInizio;
-          delete data.hostessFine;
-        }
-
-        if (data.history && data.history.length > 0) {
-          data.history = data.history.filter((h:any) => !isNaN(new Date(h.data).getTime()));
-          data.history.sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-        }
-        newRubrica[id] = data;
-      });
-
-      if (count > 0) {
-        showToast(`Riparati ${count} eventi storici. Controlla l'Agenda per eventuali [⚠️ DATA ORIGINALE].`);
-        localStorage.setItem('rubrica', JSON.stringify(newRubrica));
-      }
-      return newRubrica;
-    });
-  }, [crmAnagrafiche, stores, giroVisite, setRubrica, showToast]);
+    const { updatedRubrica, promotedCount, repairCount } = riparaDatiStoriciHelper(rubrica, crmAnagrafiche, stores, giroVisite);
+    
+    if (promotedCount > 0 || repairCount > 0) {
+      setRubrica(updatedRubrica);
+      showToast(`Migrazione completata: ${promotedCount} ordini strutturati, ${repairCount} riparazioni effettuate.`);
+      localStorage.setItem('rubrica', JSON.stringify(updatedRubrica));
+    } else {
+      showToast("Nessun dato da riparare.", "info");
+    }
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, setRubrica, showToast]);
 
   return {
     handleExportData,

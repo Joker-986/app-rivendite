@@ -8,6 +8,7 @@ import {
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
 import { useBudget } from '../contexts/BudgetContext';
+import { useProducts } from '../contexts/ProductContext';
 import { RubricaData, Mission, Campaign, CampaignPeriod, RivenditaExtra, SearchResult } from '../types';
 import { getRivenditaId } from '../utils/helpers';
 
@@ -34,9 +35,36 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     calculateMboBonus, calculateExtraBonus 
   } = useStrategy();
   
+  const { 
+    products, updateProduct 
+  } = useProducts();
+  
   const { budget, calculateBalance, initializeBudget, addTransaction, reconcileBudget } = useBudget();
   const { openConfirm } = useModals();
   const balance = calculateBalance(meseSelezionato);
+  
+  // LOGICA TESORETTO: (Totale Ricariche) - (Totale Omaggi Programmati/Evasi)
+  const tesorettoVal = React.useMemo(() => {
+    const totalRecharges = budget.transazioni
+      .filter(t => t.tipo === 'RICARICA')
+      .reduce((acc, t) => acc + t.importo, 0);
+    
+    let totalSpent = 0;
+    (Object.values(rubrica) as RivenditaExtra[]).forEach(riv => {
+      // Sottrae Omaggi dalla history (Evasi)
+      riv.history?.forEach(h => {
+        if (h.budgetAmScalato) totalSpent += h.budgetAmScalato;
+      });
+      // Sottrae Omaggi dal Carrello Bozza (Impegnato/Promessa)
+      riv.carrelloBozza?.forEach(item => {
+        if (item.isOmaggio) {
+          totalSpent += (item.quantita * item.prezzoApplicato);
+        }
+      });
+    });
+
+    return totalRecharges - totalSpent;
+  }, [budget, rubrica]);
   
   const [showEditor, setShowEditor] = useState(false);
   const [showArchivedMissions, setShowArchivedMissions] = useState(false);
@@ -104,7 +132,9 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const monthlyBase = salaryConfig.ralAnnua / 12;
   const maxMboBonus = monthlyBase * (salaryConfig.percentualeBonus / 100);
   
-  const activeMissions = missions.filter(m => m.stato !== 'ARCHIVIATA');
+  const activeMissions = missions
+    .filter(m => m.stato !== 'ARCHIVIATA')
+    .sort((a, b) => a.id === 'm1' ? -1 : b.id === 'm1' ? 1 : 0);
   const archivedMissions = missions.filter(m => m.stato === 'ARCHIVIATA');
   
   const totalWeight = activeMissions.reduce((acc, m) => acc + m.pesoPercentuale, 0);
@@ -377,13 +407,17 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-800">{m.nome}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase">{m.pesoPercentuale}% • Target: {m.target}</p>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">
+                        {m.pesoPercentuale}% • Target: {m.target} {m.sku && `• SKU: ${m.sku}`}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setMassAssignMission(m)} title="Assegnazione Massiva" className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Layers className="w-4 h-4" /></button>
                     <button onClick={() => setEditingMission(m)} className="p-2 text-slate-400 hover:text-brand-600 transition-colors"><Settings2 className="w-4 h-4" /></button>
-                    <button onClick={() => deleteMission(m.id)} title="Archivia" className="p-2 text-slate-400 hover:text-amber-600 transition-colors"><Archive className="w-4 h-4" /></button>
+                    {m.id !== 'm1' && (
+                      <button onClick={() => deleteMission(m.id)} title="Archivia" className="p-2 text-slate-400 hover:text-amber-600 transition-colors"><Archive className="w-4 h-4" /></button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -490,24 +524,36 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 </div>
                 
                 <div className="space-y-3">
-                  <input 
-                    type="text" 
-                    placeholder="Nome Missione" 
-                    value={editingMission.nome} 
-                    onChange={e => setEditingMission({...editingMission, nome: e.target.value})}
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all"
-                  />
+                  {editingMission.id === 'm1' || editingMission.tipo === 'PRODOTTO' ? (
+                    <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm text-slate-400 font-bold">
+                      {editingMission.nome || (editingMission.tipo === 'PRODOTTO' ? 'Nuova Missione Prodotto' : '')}
+                    </div>
+                  ) : (
+                    <input 
+                      type="text" 
+                      placeholder="Nome Missione" 
+                      value={editingMission.nome} 
+                      onChange={e => setEditingMission({...editingMission, nome: e.target.value})}
+                      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all"
+                    />
+                  )}
                   
                   <div className="grid grid-cols-2 gap-3">
-                    <select 
-                      value={editingMission.tipo} 
-                      onChange={e => setEditingMission({...editingMission, tipo: e.target.value as any})}
-                      className="bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white"
-                    >
-                      <option value="FATTURATO">Fatturato</option>
-                      <option value="ATTIVAZIONE">Attivazione</option>
-                      <option value="PRODOTTO">Prodotto</option>
-                    </select>
+                    {editingMission.id === 'm1' ? (
+                      <div className="bg-slate-800/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-slate-400 flex items-center">
+                        Fatturato Globale
+                      </div>
+                    ) : (
+                      <select 
+                        value={editingMission.tipo} 
+                        onChange={e => setEditingMission({...editingMission, tipo: e.target.value as any})}
+                        className="bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white"
+                      >
+                        <option value="FATTURATO">Minimo Fatturato</option>
+                        <option value="ATTIVAZIONE">Attivazione</option>
+                        <option value="PRODOTTO">Prodotto</option>
+                      </select>
+                    )}
                     <div className="relative">
                       <input 
                         type="number" 
@@ -520,24 +566,107 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <input 
-                      type="number" 
-                      placeholder={editingMission.tipo === 'FATTURATO' ? "Num. Negozi Obiettivo" : "Target Globale"}
-                      value={editingMission.target || ''} 
-                      onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
-                      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all"
-                    />
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        placeholder="Soglia Minima € (Opzionale)" 
-                        value={editingMission.targetSingolo || ''} 
-                        onChange={e => setEditingMission({...editingMission, targetSingolo: Number(e.target.value)})}
-                        className="w-full bg-white/10 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">€</span>
-                    </div>
+                  <div className="flex flex-col gap-4 mt-2">
+                    {editingMission.id === 'm1' ? (
+                      <div>
+                        <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                          Obiettivo € Totale
+                        </label>
+                        <input 
+                          type="number" 
+                          placeholder="Inserisci valore numerico"
+                          value={editingMission.target || ''} 
+                          onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                        />
+                      </div>
+                    ) : editingMission.tipo === 'PRODOTTO' ? (
+                      <>
+                        <div>
+                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                            Seleziona Prodotto (SKU)
+                          </label>
+                          <select 
+                            value={editingMission.sku || ''} 
+                            onChange={e => {
+                              const sku = e.target.value;
+                              const prod = products.find(p => p.codice === sku);
+                              setEditingMission({
+                                ...editingMission, 
+                                sku,
+                                nome: prod ? `Focus ${prod.descrizione}` : editingMission.nome
+                              });
+                            }}
+                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white"
+                          >
+                            <option value="">Seleziona SKU...</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.codice}>{p.codice} - {p.descrizione}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                            Payout per Negozio (€)
+                          </label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              placeholder="Es: 50" 
+                              value={editingMission.targetSingolo || ''} 
+                              onChange={e => setEditingMission({...editingMission, targetSingolo: Number(e.target.value)})}
+                              className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 text-xs font-bold">€</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                            Num. Negozi
+                          </label>
+                          <input 
+                            type="number" 
+                            placeholder="Inserisci valore numerico"
+                            value={editingMission.target || ''} 
+                            onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                            Num. Negozi
+                          </label>
+                          <input 
+                            type="number" 
+                            placeholder="Inserisci valore numerico"
+                            value={editingMission.target || ''} 
+                            onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                          />
+                        </div>
+                        
+                        {editingMission.tipo === 'FATTURATO' && (
+                          <div>
+                            <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                              Soglia Minima €
+                            </label>
+                            <div className="relative">
+                              <input 
+                                type="number" 
+                                placeholder="Soglia minima in €" 
+                                value={editingMission.targetSingolo || ''} 
+                                onChange={e => setEditingMission({...editingMission, targetSingolo: Number(e.target.value)})}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                              />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 text-xs font-bold">€</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   <button 
@@ -926,20 +1055,14 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         )}
       </div>
 
-      {/* STORICO & ARCHIVIO */}
-      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
-            <History className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="font-bold text-slate-800 text-sm">Archivio Performance</h4>
-            <p className="text-[10px] text-slate-500">Consulta i mesi precedenti</p>
+      {/* STORICO */}
+      <div className="mt-12 space-y-8 border-t border-white/10 pt-8 pb-20">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold">Camera di Regia</h2>
+          <div className={`px-4 py-2 rounded-xl font-black text-white ${tesorettoVal < 0 ? 'bg-red-500 animate-pulse' : 'bg-brand-600'}`}>
+            TESORETTO AM: €{tesorettoVal.toLocaleString('it-IT')}
           </div>
         </div>
-        <button className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-100 transition-all">
-          <ChevronRight className="w-5 h-5" />
-        </button>
       </div>
     </div>
   );

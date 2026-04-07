@@ -23,25 +23,25 @@ export interface SearchResult {
   [key: string]: any;
 }
 
+// 1. ANAGRAFICA PRODOTTI (IL MAGAZZINO)
 export interface Product {
   id: string;
   codice: string;
   descrizione: string;
-  categoria: string;
-  unitaDefault: string;
-  prezzoUnitaDefault: number;
-  valoreBonus?: number;
+  prezzoUnita: number;
+  unita: 'Pezzi' | 'Stecche';
 }
 
+// 2. IL CARRELLO (ORDER ITEM)
 export interface OrderItem {
-  id: string;
+  id: string;               // ID unico per riga (permette righe doppie dello stesso SKU)
   productId: string;
   codice: string;
   descrizione: string;
-  quantita: number;
-  unita: string;
-  prezzoApplicato: number;
-  isOmaggio: boolean;
+  quantita: number;         // Numero di unità (es. 1 stecca)
+  unita: number;            // Moltiplicatore usato (es. 10 o 1)
+  prezzoApplicato: number;  // Prezzo cristallizzato al momento dell'ordine
+  isOmaggio: boolean;       // Se true, costo 0 per cliente, scala budget AM
 }
 
 export interface RivenditaHistoryEntry {
@@ -49,14 +49,19 @@ export interface RivenditaHistoryEntry {
   tipo: 'VISITA' | 'ORDINE' | 'HOSTESS';
   note: string;
   importo: number;
-  items?: OrderItem[];
   stato?: string;
+  items?: OrderItem[];      // Il carrello prodotti strutturato
+  budgetAmScalato?: number; // Quota totale scalata dal budget AM per questo ordine
+  dataEvasione?: string;    // La data scelta per la consegna (YYYY-MM-DD)
+  isEseguito?: boolean;     // Il flag magico per la Regia
+  dataEsecuzione?: string;  // Quando hai cliccato "Eseguito"
 }
 
 export interface Mission {
   id: string;
   nome: string;
   tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'PRODOTTO';
+  sku?: string;
   target: number;
   targetSingolo?: number;
   pesoPercentuale: number;
@@ -85,20 +90,21 @@ export interface SalaryConfig {
   percentualeBonus: number;
 }
 
+// 3. BUDGET AM & TESORETTO (ROLLOVER)
 export interface BudgetTransaction {
   id: string;
   data: string;
-  descrizione: string;
   importo: number;
-  tipo: 'RICARICA' | 'SPESA';
+  tipo?: 'RICARICA' | 'SPESA';
+  nota?: string;           // es: "Ricarica AM", "Azzeramento Tesoretto"
 }
 
 export interface AMBudget {
-  id: string;
-  nome: string;
+  id: string;              
+  nome: string;            // es: "Gestione 2026"
   dataInizio: string;
   dataFine: string;
-  transazioni: BudgetTransaction[];
+  transazioni: BudgetTransaction[]; 
 }
 
 export interface RivenditaExtra {
@@ -135,6 +141,9 @@ export interface RivenditaExtra {
   ultimaHostessInfo?: string;
   zona?: string;
   targetMese?: number;
+  targetSpecifico?: number;
+  carrelloBozza?: OrderItem[]; // Supporto per non perdere dati se si chiude la scheda
+  [key: string]: any;
 }
 
 export interface ArchiveEntry {

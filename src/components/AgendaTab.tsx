@@ -18,11 +18,12 @@ interface AgendaTabProps {
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
   showToast: (message: string, type?: any) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void;
 }
 
 const AgendaTab: React.FC<AgendaTabProps> = ({
   rubrica, crmAnagrafiche, stores, giroVisite, 
-  setRivenditaFilter, setActiveTab
+  setRivenditaFilter, setActiveTab, onEditHistory, showToast
 }) => {
   const { openQuickEdit, openRevisitModal } = useModals();
   
@@ -53,11 +54,11 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
       const isRevisitToday = hasRevisit && new Date(d.dataRivisita).getTime() === todayTime;
 
       // URGENZE
-      const pendingOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.stato === 'DA_EVADERE').sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      const pendingOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito !== true).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
       const futureHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() >= todayTime).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
       
       // STORICO
-      const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.stato === 'EVASO').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito === true).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
       const pastHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() < todayTime).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
       const pastVisits = history.filter((h: any) => h.tipo === 'VISITA').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
@@ -178,19 +179,38 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
           {/* FIX: La data non sparisce più se l'ordine è scaduto */}
           {activeFilters.includes('ORDINI') && group.pendingOrders.map((ord: any) => {
             const isOverdue = new Date(ord.data).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+            const isEseguito = ord.isEseguito === true;
+            
             return (
-            <div key={ord.originalIndex} onClick={() => openQuickEdit('ORDINE', group.id, group.data, ord.originalIndex)} className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200 hover:bg-blue-100'}`}>
-               <div className="flex items-center gap-1.5 min-w-0">
-                  <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`} />
-                  <span className={`text-[11px] font-black ${isOverdue ? 'text-red-900' : 'text-blue-900'}`}>€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
-                  <span className={`text-[9px] truncate ml-1 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>{ord.note || 'Senza note'}</span>
+            <div key={ord.originalIndex} className={`flex flex-col p-1.5 rounded-lg border ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+               <div onClick={() => openQuickEdit('ORDINE', group.id, group.data, ord.originalIndex)} className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                      <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`} />
+                      <span className={`text-[11px] font-black ${isOverdue ? 'text-red-900' : 'text-blue-900'}`}>€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
+                      <span className={`text-[9px] truncate ml-1 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>{ord.note || 'Senza note'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                      {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? 'text-red-800 bg-red-100' : 'text-white bg-blue-600'}`}>
+                        {new Date(ord.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'2-digit'})}
+                      </span>
+                  </div>
                </div>
-               <div className="flex items-center gap-1.5 shrink-0">
-                  {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? 'text-red-800 bg-red-100' : 'text-white bg-blue-600'}`}>
-                    {new Date(ord.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'2-digit'})}
-                  </span>
-               </div>
+               
+               {!isEseguito && (
+                 <div className="mt-1 pt-1 border-t border-blue-100/50 flex justify-end">
+                   <button 
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       onEditHistory(group.id, ord.originalIndex, ord.note, ord.importo || 0, undefined, undefined, undefined, true, new Date().toISOString(), ord.items, ord.dataEvasione);
+                       showToast("Ordine inviato ai sistemi!", "success");
+                     }}
+                     className="text-blue-600 font-black text-[10px] uppercase hover:underline ml-auto"
+                   >
+                     ESEGUI
+                   </button>
+                 </div>
+               )}
             </div>
           )})}
 

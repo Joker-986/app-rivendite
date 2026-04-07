@@ -50,14 +50,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const dateStr = `${meseSelezionato}-01T08:00:00.000Z`;
     setBudget(prev => {
       const filtered = prev.transazioni.filter(t => 
-        !(t.descrizione === "Inizializzazione Mese" && t.data.startsWith(meseSelezionato))
+        !(t.nota === "Inizializzazione Mese" && t.data.startsWith(meseSelezionato))
       );
       const initTx: BudgetTransaction = {
         id: `init-${meseSelezionato}`,
         data: dateStr,
-        descrizione: "Inizializzazione Mese",
-        importo: amount,
-        tipo: 'RICARICA'
+        nota: "Inizializzazione Mese",
+        importo: amount
       };
       return { ...prev, transazioni: [...filtered, initTx] };
     });

@@ -3,95 +3,48 @@ import { Product } from '../types';
 
 interface ProductContextType {
   products: Product[];
-  addProduct: (product: Product) => void;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
+  addProduct: (p: Omit<Product, 'id'>) => void;
+  updateProduct: (id: string, p: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
-  getCategories: () => string[];
-  getProductsByCategory: (category: string) => Product[];
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'tgest_products';
+const STORAGE_KEY = 'tgest_magazzino';
 
 const DEFAULT_PRODUCTS: Product[] = [
-  {
-    id: 'p1',
-    codice: 'Fasoul',
-    descrizione: 'Bundle Fasoul Premium',
-    categoria: 'Bundle',
-    unitaDefault: 'PZ',
-    prezzoUnitaDefault: 120,
-    valoreBonus: 8
-  },
-  {
-    id: 'p2',
-    codice: 'SKU-001',
-    descrizione: 'Prodotto Standard A',
-    categoria: 'Standard',
-    unitaDefault: 'PZ',
-    prezzoUnitaDefault: 45
-  },
-  {
-    id: 'p3',
-    codice: 'SKU-002',
-    descrizione: 'Prodotto Premium B',
-    categoria: 'Premium',
-    unitaDefault: 'PZ',
-    prezzoUnitaDefault: 85
-  }
+  { id: 'p1', codice: 'WAKA-SM', descrizione: 'Waka soMatch', prezzoUnita: 40, unita: 'Pezzi' },
+  { id: 'p2', codice: 'WAKA-U', descrizione: 'Waka Ultra', prezzoUnita: 99.90, unita: 'Pezzi' },
+  { id: 'p3', codice: 'RELX-PP', descrizione: 'RELX Prime PREMIUM', prezzoUnita: 163.50, unita: 'Pezzi' },
+  { id: 'p4', codice: 'RELX-PL', descrizione: 'RELX Prime LIGHT', prezzoUnita: 99.90, unita: 'Pezzi' },
+  { id: 'p5', codice: 'RELX-IE', descrizione: 'RELX KIT Infinity Essential', prezzoUnita: 50, unita: 'Pezzi' }
 ];
 
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
-
-  // Load from localStorage
-  useEffect(() => {
+  const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setProducts(parsed);
-      } catch (e) {
-        console.error('Error parsing products', e);
-      }
-    }
-  }, []);
+    return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+  });
 
-  // Save to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
   }, [products]);
 
-  const addProduct = (product: Product) => {
-    setProducts(prev => [...prev, product]);
+  const addProduct = (p: Omit<Product, 'id'>) => {
+    const newProduct = { ...p, id: Date.now().toString() };
+    setProducts(prev => [...prev, newProduct]);
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  const updateProduct = (id: string, p: Partial<Product>) => {
+    setProducts(prev => prev.map(prod => prod.id === id ? { ...prod, ...p } : prod));
   };
 
   const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
-  };
-
-  const getCategories = () => {
-    return Array.from(new Set(products.map(p => p.categoria)));
-  };
-
-  const getProductsByCategory = (category: string) => {
-    return products.filter(p => p.categoria === category);
+    setProducts(prev => prev.filter(prod => prod.id !== id));
   };
 
   return (
-    <ProductContext.Provider value={{
-      products,
-      addProduct,
-      updateProduct,
-      deleteProduct,
-      getCategories,
-      getProductsByCategory
-    }}>
+    <ProductContext.Provider value={{ products, addProduct, updateProduct, deleteProduct }}>
       {children}
     </ProductContext.Provider>
   );
@@ -99,8 +52,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 export const useProducts = () => {
   const context = useContext(ProductContext);
-  if (context === undefined) {
-    throw new Error('useProducts must be used within a ProductProvider');
-  }
+  if (!context) throw new Error('useProducts must be used within a ProductProvider');
   return context;
 };
