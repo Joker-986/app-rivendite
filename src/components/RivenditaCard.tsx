@@ -33,7 +33,7 @@ export interface RivenditaCardProps {
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
-  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string) => void;
+  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
@@ -45,8 +45,10 @@ export interface RivenditaCardProps {
   jumpToPosition?: (fromIndex: number, toPosition: string) => void;
   aiLockedUntil: number | null;
   cooldownSeconds: number;
-  handleEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string) => void;
+  handleEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
   handleDeleteHistory: (id: string, index: number) => void;
+  startVisita: (id: string) => void;
+  endVisita: (id: string, note: string, tornoPiuTardi: boolean) => void;
 }
 
 const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivenditaId: string; openQuickEdit: any }) => {
@@ -149,18 +151,10 @@ const LastHostessTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rive
 const TimelineItem: React.FC<{ 
   entry: RivenditaHistoryEntry; 
   index: number; 
-  onEdit: (index: number, note: string, importo: number, data: string, ora: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void; 
-  onDelete: (index: number) => void;
+  onEdit: (index: number, note: string, importo: number, data: string, ora: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void; 
   showToast: (msg: string, type?: any) => void;
-}> = ({ entry, index, onEdit, onDelete, showToast }) => {
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [editNote, setEditNote] = React.useState(entry.note);
-  const [editImporto, setEditImporto] = React.useState(entry.importo || 0);
-  
-  const initialDate = new Date(entry.data);
-  const [editData, setEditData] = React.useState(initialDate.toISOString().split('T')[0]);
-  const [editOra, setEditOra] = React.useState(initialDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-
+  onOpenModal: () => void;
+}> = ({ entry, index, onEdit, showToast, onOpenModal }) => {
   const configs = {
     VISITA: { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Visita' },
     ORDINE: { icon: <ClipboardList className="w-3 h-3" />, color: 'bg-blue-100 text-blue-600', label: 'Ordine' },
@@ -168,6 +162,15 @@ const TimelineItem: React.FC<{
   };
   const config = configs[entry.tipo] || configs.VISITA;
   const dataOra = new Date(entry.data);
+  let displayTime = `${dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • ${dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+
+  if (entry.tipo === 'VISITA' && entry.visitaInizio && entry.visitaFine) {
+    const dInizio = new Date(entry.visitaInizio).getTime();
+    const dFine = new Date(entry.visitaFine).getTime();
+    const mins = Math.max(1, Math.round((dFine - dInizio) / 60000));
+    const dataStr = new Date(entry.visitaInizio).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+    displayTime = `${dataStr} • ${mins} min`;
+  }
 
   return (
     <div className="flex gap-3 mb-4 last:mb-0">
@@ -178,7 +181,7 @@ const TimelineItem: React.FC<{
         <div className="w-0.5 h-full bg-slate-100 -mt-1"></div>
       </div>
       
-      <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm relative">
+      <div className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm relative group">
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
@@ -190,107 +193,51 @@ const TimelineItem: React.FC<{
               )
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100">
-              {dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • {dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-            {!isEditing && (
-              <div className="flex items-center gap-1">
-                <button onClick={() => setIsEditing(true)} className="p-1.5 bg-white border border-slate-100 rounded-md text-slate-400 hover:text-brand-600 active:scale-95 transition-all shadow-sm"><Edit3 className="w-3 h-3" /></button>
-                <button onClick={() => onDelete(index)} className="p-1.5 bg-white border border-slate-100 rounded-md text-slate-400 hover:text-red-600 active:scale-95 transition-all shadow-sm"><Trash2 className="w-3 h-3" /></button>
-              </div>
-            )}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onOpenModal}
+              className="text-[11px] font-bold text-brand-700 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm hover:bg-brand-50 transition-colors"
+            >
+              {displayTime}
+            </button>
+            <button onClick={onOpenModal} className="w-7 h-7 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-brand-600 active:scale-95 transition-all shadow-sm"><Edit3 className="w-3.5 h-3.5" /></button>
           </div>
         </div>
 
-        {isEditing ? (
-          <div className="mt-3 space-y-2 animate-in fade-in zoom-in-95 duration-200">
-            <textarea
-              value={editNote}
-              onChange={(e) => setEditNote(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 min-h-[60px] resize-none"
-              placeholder="Inserisci note..."
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={editData}
-                onChange={(e) => setEditData(e.target.value)}
-                className="text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <input
-                type="time"
-                value={editOra}
-                onChange={(e) => setEditOra(e.target.value)}
-                className="text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            {entry.tipo === 'ORDINE' && (
-              <input
-                type="number"
-                inputMode="decimal"
-                value={editImporto || ''}
-                onChange={(e) => setEditImporto(Number(e.target.value))}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
-                placeholder="Importo €"
-              />
-            )}
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => { 
-                setIsEditing(false); 
-                setEditNote(entry.note); 
-                setEditImporto(entry.importo || 0);
-                const d = new Date(entry.data);
-                setEditData(d.toISOString().split('T')[0]);
-                setEditOra(d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-              }} className="flex-1 py-2 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-xl hover:bg-slate-300 transition-colors">Annulla</button>
-              <button onClick={() => { onEdit(index, editNote, editImporto, editData, editOra, undefined, entry.isEseguito, entry.dataEsecuzione, entry.items); setIsEditing(false); }} className="flex-1 py-2 bg-brand-600 text-white text-[11px] font-bold rounded-xl shadow-md shadow-brand-100 hover:bg-brand-700 transition-colors">Salva</button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
-              {entry.note}
-            </p>
-            {entry.tipo === 'ORDINE' && (
-              <div className="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
-                <div className="flex flex-col">
-                  {entry.importo > 0 && (
-                    <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
-                  )}
-                  {entry.dataEvasione && (
-                    <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {new Date(entry.dataEvasione).toLocaleDateString('it-IT')}</span>
-                  )}
-                  {entry.items && entry.items.length > 0 && (
-                    <p className="text-[10px] text-slate-500 italic mt-0.5 leading-tight">
-                      {entry.items.map((it: any) => `${it.quantita}x ${it.codice}`).join(', ')}
-                    </p>
-                  )}
-                </div>
-                
-                {!entry.isEseguito ? (
-                  <button 
-                    onClick={() => {
-                      onEdit(index, entry.note, entry.importo || 0, editData, editOra, undefined, true, new Date().toISOString(), entry.items);
-                      showToast("Ordine inviato ai sistemi!", "success");
-                    }}
-                    className="text-blue-600 font-black text-[10px] uppercase hover:underline ml-auto"
-                  >
-                    ESEGUI
-                  </button>
-                ) : (
-                  <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                    ESEGUITO IL {new Date(entry.dataEsecuzione || '').toLocaleDateString('it-IT')}
-                  </span>
-                )}
-              </div>
-            )}
-            {entry.tipo !== 'ORDINE' && entry.importo > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-200/50">
+        <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-wrap mt-2">
+          {entry.note}
+        </p>
+
+        {entry.tipo === 'ORDINE' && (
+          <div className="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
+            <div className="flex flex-col">
+              {entry.importo > 0 && (
                 <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
-              </div>
+              )}
+              {entry.dataEvasione && (
+                <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {new Date(entry.dataEvasione).toLocaleDateString('it-IT')}</span>
+              )}
+            </div>
+            
+            {!entry.isEseguito ? (
+              <button 
+                onClick={() => {
+                  const initialDate = new Date(entry.data);
+                  const eData = initialDate.toISOString().split('T')[0];
+                  const eOra = initialDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                  onEdit(index, entry.note, entry.importo || 0, eData, eOra, undefined, true, new Date().toISOString(), entry.items);
+                  showToast("Ordine inviato ai sistemi!", "success");
+                }}
+                className="text-blue-600 font-black text-[10px] uppercase hover:underline ml-auto"
+              >
+                ESEGUI
+              </button>
+            ) : (
+              <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                ESEGUITO IL {new Date(entry.dataEsecuzione || '').toLocaleDateString('it-IT')}
+              </span>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -326,7 +273,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   aiLockedUntil,
   cooldownSeconds,
   handleEditHistory,
-  handleDeleteHistory
+  handleDeleteHistory,
+  startVisita,
+  endVisita
 }) => {
   const { openShare, openQuickEdit, openRevisitModal, openKpiAssign, setSelectedRivenditaId } = useModals();
   const { missions } = useStrategy();
@@ -356,6 +305,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const isExpanded = expandedCardId === id;
   const [isCopied, setIsCopied] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [tornoPiuTardi, setTornoPiuTardi] = useState(false);
   
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
@@ -793,17 +743,35 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
       <div className="mt-2 pt-4 border-t border-slate-50 flex flex-col gap-2">
         {activeTab === 'giro' && (
-          <button
-            onClick={() => initiateVisitToggle(id)}
-            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm ${
-              extra.visitata === 'Si' 
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100' 
-                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {extra.visitata === 'Si' ? 'Aggiorna Orario Visita' : 'Rivendita visitata'}
-          </button>
+          extra.visitaInCorso ? (
+            <div className="flex flex-col gap-2.5 w-full animate-in fade-in duration-300">
+              <button
+                onClick={() => {
+                  endVisita(id, extra.note || '', tornoPiuTardi);
+                  setTornoPiuTardi(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm bg-amber-600 text-white animate-pulse hover:bg-amber-700 shadow-amber-100"
+              >
+                Fine Visita
+              </button>
+              <label className="flex items-center gap-2.5 text-sm text-slate-700 font-medium cursor-pointer bg-white/50 p-2.5 rounded-lg border border-slate-200/70 hover:bg-slate-50 transition-colors">
+                <input 
+                  type="checkbox" 
+                  checked={tornoPiuTardi}
+                  onChange={(e) => setTornoPiuTardi(e.target.checked)}
+                  className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                />
+                Torno più tardi (Mantieni nel Giro)
+              </label>
+            </div>
+          ) : (
+            <button
+              onClick={() => startVisita(id)}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all shadow-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100"
+            >
+              Inizio Visita
+            </button>
+          )
         )}
 
         {/* Azioni Prioritarie: Ordine e Calendar */}
@@ -889,9 +857,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   key={`${id}-history-${i}`} 
                   entry={h} 
                   index={i}
-                  onEdit={(idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione) => handleEditHistory(id, idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione)}
-                  onDelete={(idx) => handleDeleteHistory(id, idx)}
+                  onEdit={(idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine) => handleEditHistory(id, idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine)}
                   showToast={showToast}
+                  onOpenModal={() => openQuickEdit(h.tipo, id, extra, i)}
                 />
               ))}
             </div>

@@ -55,6 +55,8 @@ export interface RivenditaHistoryEntry {
   dataEvasione?: string;    // La data scelta per la consegna (YYYY-MM-DD)
   isEseguito?: boolean;     // Il flag magico per la Regia
   dataEsecuzione?: string;  // Quando hai cliccato "Eseguito"
+  visitaInizio?: string;
+  visitaFine?: string;
 }
 
 export interface Mission {
@@ -143,6 +145,7 @@ export interface RivenditaExtra {
   targetMese?: number;
   targetSpecifico?: number;
   carrelloBozza?: OrderItem[]; // Supporto per non perdere dati se si chiude la scheda
+  visitaInCorso?: string;
   [key: string]: any;
 }
 

@@ -245,7 +245,7 @@ export default function App() {
   const { 
     handleExportData, handleImportData, handleGenerateSyncCode, 
     handleImportFromSyncCode, exportHistoryToExcel, exportGiroForMyMaps, 
-    handleClearAllData, riparaDatiStorici, isSyncing, generatedSyncCode, setGeneratedSyncCode, syncCodeInput, setSyncCodeInput 
+    handleClearAllData, isSyncing, generatedSyncCode, setGeneratedSyncCode, syncCodeInput, setSyncCodeInput 
   } = usePersistence({ 
     giroVisite, crmAnagrafiche, stores, rubrica, 
     setGiroVisite, setCrmAnagrafiche, setStores, setRubrica, 
@@ -259,14 +259,6 @@ export default function App() {
       setShowChangelog(true);
     }
   }, []);
-
-  useEffect(() => {
-    const lastRepair = localStorage.getItem('last_repair_v');
-    if (lastRepair !== '3.00') {
-      riparaDatiStorici();
-      localStorage.setItem('last_repair_v', '3.00');
-    }
-  }, [riparaDatiStorici]);
 
   const dismissChangelog = () => {
     localStorage.setItem('seen_changelog_version', DATA_VERSION);
@@ -653,7 +645,7 @@ export default function App() {
     });
   }, []);
 
-  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string) => {
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => {
     setRubrica(prev => {
       const current = prev[id] || {};
       const history = [...(current.history || [])];
@@ -679,11 +671,8 @@ export default function App() {
       }
 
       const isoDateStr = eventDate.toISOString();
-      const dateOnlyStr = isoDateStr.split('T')[0];
 
-      // Anti-Duplicazione: sovrascrive se esiste già un evento dello stesso tipo in quel giorno
-      const existingIndex = history.findIndex(h => h.tipo === type && h.data.startsWith(dateOnlyStr));
-      
+      // FIX BUG: Creiamo sempre un nuovo record per mantenere lo storico completo
       const newEntry: RivenditaHistoryEntry = { 
         data: isoDateStr, 
         tipo: type, 
@@ -691,19 +680,17 @@ export default function App() {
         importo: amount, 
         items: items,
         dataEvasione: dataEvasione,
-        isEseguito: type === 'ORDINE' ? false : undefined
+        isEseguito: type === 'ORDINE' ? false : undefined,
+        visitaInizio: visitaInizio,
+        visitaFine: visitaFine
       };
 
-      if (existingIndex !== -1) {
-        history[existingIndex] = newEntry;
-      } else {
-        history.push(newEntry);
-      }
-
+      history.push(newEntry);
       history.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
       const now = new Date();
       const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+      const dateOnlyStr = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
 
       const updates: Partial<RivenditaExtra> = {
         history: history.slice(0, 20),
@@ -739,40 +726,63 @@ export default function App() {
     showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : 'Attività salvata!', 'success');
   }, []);
 
-  const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
-    const sorted = [...history].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-    const lastVisita = sorted.find(h => h.tipo === 'VISITA');
-    const oggiStr = new Date().toISOString().split('T')[0];
-    
-    setRubrica(prev => {
-      const current = prev[id];
-      if (!current) return prev;
+const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
+  const sorted = [...history].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  const lastVisita = sorted.find(h => h.tipo === 'VISITA');
+  const oggi = new Date();
+  const oggiStr = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`;
+  
+  setRubrica(prev => {
+    const current = prev[id];
+    if (!current) return prev;
 
-      let nuovoStatoVisitata = current.visitata;
+    let nuovoStatoVisitata = current.visitata;
+    let newDataVisita = current.dataVisita || '';
+    let newOraVisita = current.oraVisita || '';
+    let newLastDataVisita = current.lastDataVisita || '';
+    let newLastOraVisita = current.lastOraVisita || '';
 
-      if (lastVisita) {
-        const lastDateStr = lastVisita.data.split('T')[0];
-        if (lastDateStr === oggiStr) {
-          nuovoStatoVisitata = 'Si';
-        } else if (current.visitata === 'Si') {
-          nuovoStatoVisitata = 'No'; // Annulla solo il giro di oggi, non azzera data/ora
-        }
+    if (lastVisita) {
+      const lastDateObj = new Date(lastVisita.data);
+      const lastDateStr = `${lastDateObj.getFullYear()}-${String(lastDateObj.getMonth() + 1).padStart(2, '0')}-${String(lastDateObj.getDate()).padStart(2, '0')}`;
+      const lastTimeStr = lastDateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+      newLastDataVisita = lastDateStr;
+      newLastOraVisita = lastTimeStr;
+
+      if (lastDateStr === oggiStr) {
+        nuovoStatoVisitata = current.visitata === 'Da Rivisitare' ? 'Da Rivisitare' : 'Si';
+        newDataVisita = lastDateStr;
+        newOraVisita = lastTimeStr;
       } else {
-        nuovoStatoVisitata = 'No';
+        nuovoStatoVisitata = 'No'; 
+        newDataVisita = '';
+        newOraVisita = '';
       }
+    } else {
+      nuovoStatoVisitata = 'No';
+      newDataVisita = '';
+      newOraVisita = '';
+      newLastDataVisita = '';
+      newLastOraVisita = '';
+    }
 
-      return {
-        ...prev,
-        [id]: {
-          ...current,
-          history: sorted,
-          visitata: nuovoStatoVisitata
-        }
-      };
-    });
-  }, []);
+    return {
+      ...prev,
+      [id]: {
+        ...current,
+        history: sorted,
+        visitata: nuovoStatoVisitata,
+        dataVisita: newDataVisita,
+        oraVisita: newOraVisita,
+        lastDataVisita: newLastDataVisita,
+        lastOraVisita: newLastOraVisita
+      }
+    };
+  });
+}, []);
 
-  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string) => {
+  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string) => {
     setRubrica(prev => {
       const current = prev[id];
       if (!current || !current.history) return prev;
@@ -792,7 +802,9 @@ export default function App() {
         ...(isEseguito !== undefined ? { isEseguito } : {}),
         ...(dataEsecuzione ? { dataEsecuzione } : {}),
         ...(newItems ? { items: newItems } : {}),
-        ...(newDataEvasione ? { dataEvasione: newDataEvasione } : {})
+        ...(newDataEvasione ? { dataEvasione: newDataEvasione } : {}),
+        ...(visitaInizio ? { visitaInizio } : {}),
+        ...(visitaFine ? { visitaFine } : {})
       };
       
       setTimeout(() => reconcileHistoryData(id, newHistory), 0);
@@ -801,23 +813,16 @@ export default function App() {
   }, [reconcileHistoryData]);
 
   const handleDeleteHistory = React.useCallback((id: string, index: number) => {
-    openConfirm({
-      title: 'Elimina Evento',
-      message: 'Sei sicuro di voler eliminare questa voce dalla cronologia?',
-      isDestructive: true,
-      onConfirm: () => {
-        setRubrica(prev => {
-          const current = prev[id];
-          if (!current || !current.history) return prev;
-          const newHistory = [...current.history];
-          newHistory.splice(index, 1);
-          
-          // Chiamata differita alla riconciliazione
-          setTimeout(() => reconcileHistoryData(id, newHistory), 0);
-          
-          return { ...prev, [id]: { ...current, history: newHistory } };
-        });
-      }
+    setRubrica(prev => {
+      const current = prev[id];
+      if (!current || !current.history) return prev;
+      const newHistory = [...current.history];
+      newHistory.splice(index, 1);
+      
+      // Chiamata differita alla riconciliazione
+      setTimeout(() => reconcileHistoryData(id, newHistory), 0);
+      
+      return { ...prev, [id]: { ...current, history: newHistory } };
     });
   }, [reconcileHistoryData]);
 
@@ -951,26 +956,52 @@ export default function App() {
     }
   }, [isSaved, rubrica, handleRubricaMultiUpdate, handleRubricaUpdate, showToast]);
 
-  const confirmVisit = useCallback(() => {
-    if (!pendingVisitId) return;
-    const id = pendingVisitId;
-    const existing = rubrica[id];
-    
-    handleActivitySave(id, 'VISITA', existing?.note || '');
-    
+  const confirmVisit = useCallback((id: string) => {
+    // Passiamo stringa vuota per creare un nuovo record pulito nello storico
+    handleActivitySave(id, 'VISITA', '');
     openRevisitModal(id);
     setPendingVisitId(null);
-    showToast('Visita registrata!');
-  }, [pendingVisitId, rubrica, handleActivitySave, showToast, openRevisitModal]);
+    showToast('Nuovo passaggio registrato con successo!');
+  }, [handleActivitySave, showToast, openRevisitModal]);
 
   const initiateVisitToggle = useCallback((id: string) => {
-    setPendingVisitId(id);
+    setPendingVisitId(id); // Mantenuto per sicurezza di stato
+    const isGiaVisitata = rubrica[id]?.visitata === 'Si';
+
     openConfirm({
-      title: 'Conferma Visita',
-      message: 'Vuoi segnare questa rivendita come visitata ora?',
-      onConfirm: () => confirmVisit()
+      title: isGiaVisitata ? 'Nuovo Passaggio' : 'Conferma Visita',
+      message: isGiaVisitata 
+        ? "Stai registrando un NUOVO passaggio in questa rivendita oggi. Lo storico precedente rimarrà intatto. Vuoi procedere?" 
+        : 'Vuoi segnare questa rivendita come visitata ora?',
+      onConfirm: () => confirmVisit(id) // Passiamo l'id direttamente bypassando lo state
     });
-  }, [confirmVisit, openConfirm]);
+  }, [confirmVisit, openConfirm, rubrica]);
+
+  const startVisita = useCallback((id: string) => {
+    setRubrica(prev => ({
+      ...prev,
+      [id]: { ...prev[id], visitaInCorso: new Date().toISOString() }
+    }));
+  }, []);
+
+  const endVisita = useCallback((id: string, note: string, tornoPiuTardi: boolean) => {
+    const existing = rubrica[id];
+    const startTimeIso = existing?.visitaInCorso || new Date().toISOString();
+    const endTimeIso = new Date().toISOString();
+
+    // Salvataggio pulito senza hack testuali. Passiamo i timestamp.
+    handleActivitySave(id, 'VISITA', note.trim(), 0, undefined, undefined, startTimeIso, endTimeIso);
+
+    setRubrica(prev => ({
+      ...prev,
+      [id]: { ...prev[id], visitaInCorso: undefined, visitata: tornoPiuTardi ? 'Da Rivisitare' : 'Si', note: '' }
+    }));
+
+    if (!tornoPiuTardi) {
+      openRevisitModal(id);
+    }
+    showToast(tornoPiuTardi ? 'Visita in sospeso salvata.' : 'Visita completata!');
+  }, [rubrica, handleActivitySave, openRevisitModal, showToast]);
 
   const toggleExpandCard = useCallback((id: string) => {
     setExpandedCardId(prev => prev === id ? null : id);
@@ -1496,7 +1527,9 @@ export default function App() {
     aiLockedUntil,
     cooldownSeconds,
     handleEditHistory,
-    handleDeleteHistory
+    handleDeleteHistory,
+    startVisita,
+    endVisita
   }), [
     activeTab,
     expandedCardId,
@@ -1517,7 +1550,9 @@ export default function App() {
     aiLockedUntil,
     cooldownSeconds,
     handleEditHistory,
-    handleDeleteHistory
+    handleDeleteHistory,
+    startVisita,
+    endVisita
   ]);
 
   // --- GESTIONE TASTO INDIETRO ANDROID (HARDWARE BACK BUTTON) ---
@@ -2196,7 +2231,6 @@ export default function App() {
         syncCodeInput={syncCodeInput}
         setSyncCodeInput={setSyncCodeInput}
         handleImportFromSyncCode={handleImportFromSyncCode}
-        riparaDatiStorici={riparaDatiStorici}
         handleExportData={handleExportData}
         handleImportData={handleImportData}
         crmCount={crmAnagrafiche.length}
@@ -2253,6 +2287,8 @@ export default function App() {
         showToast={showToast} 
         missions={missions}
         selectedRivenditaId={selectedRivenditaId}
+        startVisita={startVisita}
+        endVisita={endVisita}
       />
     </div>
   );

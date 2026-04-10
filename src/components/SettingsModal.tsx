@@ -14,7 +14,6 @@ interface SettingsModalProps {
   syncCodeInput: string;
   setSyncCodeInput: (val: string) => void;
   handleImportFromSyncCode: () => void;
-  riparaDatiStorici: () => void;
   handleExportData: () => void;
   handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
   crmCount: number;
@@ -35,7 +34,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   syncCodeInput,
   setSyncCodeInput,
   handleImportFromSyncCode,
-  riparaDatiStorici,
   handleExportData,
   handleImportData,
   crmCount,
@@ -135,14 +133,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </p>
             
             <div className="grid grid-cols-1 gap-3">
-              <button
-                onClick={riparaDatiStorici}
-                className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
-              >
-                <RefreshCw className="w-4 h-4 text-brand-600" />
-                Riparazione Dati Storici
-              </button>
-
               <button
                 onClick={handleExportData}
                 className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 active:scale-95 transition-all shadow-sm"

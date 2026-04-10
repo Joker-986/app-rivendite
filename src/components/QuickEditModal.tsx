@@ -10,7 +10,7 @@ interface QuickEditModalProps {
   rivenditaId: string;
   extra: any;
   onUpdateRubrica: (id: string, field: string, value: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
   onDeleteHistory: (id: string, index: number) => void;
   targetHistoryIndex?: number;
 }
@@ -21,15 +21,18 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
   const { openConfirm } = useModals();
 
   const [data, setData] = useState('');
+  const [oraInizio, setOraInizio] = useState('');
   const [ora, setOra] = useState('');
   const [note, setNote] = useState('');
   const [importo, setImporto] = useState<number>(0);
   const [isEvaso, setIsEvaso] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [dataEvasione, setDataEvasione] = useState('');
+  const [isEditingTimeRange, setIsEditingTimeRange] = useState(false);
+  const formattedData = data ? new Date(data).toLocaleDateString('it-IT') : '-';
   
   // Stato per salvare la "Fotografia" iniziale dei dati
-  const [initialState, setInitialState] = useState({ data: '', ora: '', note: '', importo: 0, isEvaso: false, items: [] as any[], dataEvasione: '' });
+  const [initialState, setInitialState] = useState({ data: '', oraInizio: '', ora: '', note: '', importo: 0, isEvaso: false, items: [] as any[], dataEvasione: '' });
 
   const actualIndex = useMemo(() => {
     if (targetHistoryIndex !== undefined) return targetHistoryIndex;
@@ -46,7 +49,25 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         const d = new Date(entry.data);
         const initData = d.toISOString().split('T')[0];
         const initOra = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        const initNote = entry.note || '';
+        
+        let initOraInizio = initOra;
+        let cleanNote = entry.note || '';
+
+        if (editType === 'VISITA') {
+          if (entry.visitaInizio) {
+             initOraInizio = new Date(entry.visitaInizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+          } else {
+             // Fallback: Deduce l'inizio e pulisce la stringa legacy
+             const match = cleanNote.match(/\[⌚ (\d+) min\]\s*/);
+             if (match) {
+                const mins = parseInt(match[1], 10);
+                const startD = new Date(d.getTime() - mins * 60000);
+                initOraInizio = startD.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                cleanNote = cleanNote.replace(/\[⌚ \d+ min\]\s*/, '');
+             }
+          }
+        }
+
         const initImporto = entry.importo || 0;
         const initEvaso = entry.isEseguito === true;
         const initItems = entry.items || [];
@@ -54,8 +75,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
 
         // Impostiamo i dati visibili
         setData(initData);
+        setOraInizio(initOraInizio);
         setOra(initOra);
-        setNote(initNote);
+        setNote(cleanNote);
         setImporto(initImporto);
         setIsEvaso(initEvaso);
         setItems(initItems);
@@ -64,8 +86,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         // Salviamo la fotografia per il confronto
         setInitialState({
           data: initData,
+          oraInizio: initOraInizio,
           ora: initOra,
-          note: initNote,
+          note: cleanNote,
           importo: initImporto,
           isEvaso: initEvaso,
           items: initItems,
@@ -75,12 +98,20 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
     }
   }, [isOpen, editType, extra, actualIndex]);
 
+  const durataMin = useMemo(() => {
+    if (!data || !oraInizio || !ora) return 0;
+    const start = new Date(`${data}T${oraInizio}:00`).getTime();
+    const end = new Date(`${data}T${ora}:00`).getTime();
+    return Math.max(0, Math.round((end - start) / 60000));
+  }, [data, oraInizio, ora]);
+
   if (!isOpen || !editType || actualIndex < 0) return null;
 
   // FUNZIONE PARACADUTE
   const handleCloseRequest = () => {
     const hasChanges = 
       data !== initialState.data || 
+      oraInizio !== initialState.oraInizio || 
       ora !== initialState.ora || 
       note !== initialState.note || 
       importo !== initialState.importo || 
@@ -109,7 +140,14 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         onUpdateRubrica(rivenditaId, 'richiestaOrdine', false);
       }
     }
-    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato, isEvaso, isEvaso ? new Date().toISOString() : undefined, items);
+
+    let vInizio, vFine;
+    if (editType === 'VISITA') { 
+        vInizio = `${data}T${oraInizio}:00`; 
+        vFine = `${data}T${ora}:00`; 
+    }
+
+    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato, isEvaso, isEvaso ? new Date().toISOString() : undefined, items, dataEvasione, vInizio, vFine);
     onClose();
   };
 
@@ -142,8 +180,8 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
             entry.data?.split('T')[0], 
             entry.data?.split('T')[1]?.substring(0, 5), 
             entry.stato, 
-            true, 
-            entry.dataEsecuzione || new Date().toISOString(), 
+            entry.isEseguito, // Mantiene lo stato originale (Bozza o Evaso) invece di forzare true
+            entry.dataEsecuzione, 
             cart,
             dataEvasione
           );
@@ -173,30 +211,85 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Smart */}
-        <div className={`p-5 border-b flex items-center justify-between ${config.bg} ${config.border}`}>
+        <div className={`p-4 border-b flex items-center justify-between ${config.bg} ${config.border}`}>
           <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-sm ${config.color}`}>
-              <Icon className="w-6 h-6" />
+            <div className={`w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm ${config.color}`}>
+              <Icon className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 tracking-tight">{config.title}</h3>
+            <div className="flex flex-col">
+              <h3 className="text-base font-black text-slate-800 tracking-tight">{config.title}</h3>
+              {editType === 'VISITA' && (
+                <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mt-0.5 animate-in fade-in">
+                  <Clock className="w-3 h-3" /> Durata totale: {durataMin} min
+                </span>
+              )}
+            </div>
           </div>
-          <button onClick={handleCloseRequest} className="p-2.5 bg-white/60 hover:bg-white rounded-full transition-colors text-slate-500 shadow-sm active:scale-95">
-            <X className="w-5 h-5" />
+          <button onClick={handleCloseRequest} className="p-2 bg-white/60 hover:bg-white rounded-full transition-colors text-slate-500 shadow-sm active:scale-95">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
         <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Data</label>
-              <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+          {editType === 'VISITA' && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Orario del passaggio</label>
+              
+              {!isEditingTimeRange ? (
+                /* RIGA DI RIEPILOGO STILE TILE (Pillola) */
+                <button 
+                  onClick={() => setIsEditingTimeRange(true)} 
+                  className="w-full flex items-center justify-center gap-2 p-2.5 bg-white border border-slate-100 rounded-full shadow-sm hover:bg-slate-50 transition-colors group"
+                >
+                  <span className="text-sm font-bold text-slate-700">
+                    {formattedData} <span className="text-slate-400 font-medium px-1">•</span> {oraInizio} - {ora}
+                  </span>
+                  <Edit3 className="w-3.5 h-3.5 text-slate-300 group-hover:text-brand-500 transition-colors" />
+                </button>
+              ) : (
+                /* CONTROLLI EDIT TEMPORANEI (LAYOUT VERTICALE) */
+                <div className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl animate-in fade-in zoom-in-95">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data della Visita</label>
+                    <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full h-12 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none transition-shadow" />
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ora Inizio</label>
+                    <input type="time" value={oraInizio} onChange={(e) => setOraInizio(e.target.value)} className="w-full h-12 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none transition-shadow" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ora Fine</label>
+                    <div className="flex items-center gap-2">
+                      <input type="time" value={ora} onChange={(e) => setOra(e.target.value)} className="flex-1 h-12 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none transition-shadow" />
+                      <button 
+                        onClick={() => setIsEditingTimeRange(false)} 
+                        className="h-12 w-12 flex items-center justify-center shrink-0 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 shadow-sm active:scale-95 transition-all" 
+                        title="Conferma orari"
+                      >
+                        <Check className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Ora</label>
-              <input type="time" value={ora} onChange={(e) => setOra(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+          )}
+
+          {editType !== 'VISITA' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Data</label>
+                <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Ora</label>
+                <input type="time" value={ora} onChange={(e) => setOra(e.target.value)} className="w-full h-12 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+              </div>
             </div>
-          </div>
+          )}
 
           {editType === 'ORDINE' && (
             <div className="space-y-2">
@@ -229,11 +322,11 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
-          <button onClick={handleDelete} className="w-14 h-14 flex items-center justify-center bg-white border border-red-200 text-red-500 rounded-2xl hover:bg-red-50 active:scale-95 transition-all shadow-sm shrink-0" title="Elimina Evento">
-            <Trash2 className="w-6 h-6" />
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
+          <button onClick={handleDelete} className="w-10 h-10 flex items-center justify-center bg-white border border-red-200 text-red-500 rounded-xl hover:bg-red-50 active:scale-95 transition-all shadow-sm shrink-0" title="Elimina Evento">
+            <Trash2 className="w-4 h-4" />
           </button>
-          <button onClick={handleSave} className={`flex-1 h-14 flex items-center justify-center gap-2 text-white font-bold rounded-2xl border-b-[4px] active:border-b active:translate-y-[3px] transition-all shadow-md ${editType === 'ORDINE' && isEvaso ? 'bg-emerald-600 border-emerald-700 hover:bg-emerald-700' : 'bg-brand-600 border-brand-700 hover:bg-brand-700'}`}>
+          <button onClick={handleSave} className={`flex-1 h-10 flex items-center justify-center gap-2 text-white font-bold text-sm rounded-xl border-b-[3px] active:border-b active:translate-y-[2px] transition-all shadow-sm ${editType === 'ORDINE' && isEvaso ? 'bg-emerald-600 border-emerald-700 hover:bg-emerald-700' : 'bg-brand-600 border-brand-700 hover:bg-brand-700'}`}>
             {editType === 'ORDINE' && isEvaso ? 'Salva e Archivia' : 'Salva Modifiche'}
           </button>
         </div>

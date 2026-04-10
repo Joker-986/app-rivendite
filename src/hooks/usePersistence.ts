@@ -1,6 +1,6 @@
 import { useState, useCallback, Dispatch, SetStateAction, ChangeEvent } from 'react';
 import { SearchResult, RivenditaExtra, RubricaData } from '../types';
-import { getRivenditaId, riparaDatiStorici as riparaDatiStoriciHelper } from '../utils/helpers';
+import { getRivenditaId } from '../utils/helpers';
 import packageVersion from '../version.json';
 import { useModals } from '../contexts/ModalContext';
 
@@ -256,18 +256,6 @@ export function usePersistence({
     });
   };
 
-  const riparaDatiStorici = useCallback(() => {
-    const { updatedRubrica, promotedCount, repairCount } = riparaDatiStoriciHelper(rubrica, crmAnagrafiche, stores, giroVisite);
-    
-    if (promotedCount > 0 || repairCount > 0) {
-      setRubrica(updatedRubrica);
-      showToast(`Migrazione completata: ${promotedCount} ordini strutturati, ${repairCount} riparazioni effettuate.`);
-      localStorage.setItem('rubrica', JSON.stringify(updatedRubrica));
-    } else {
-      showToast("Nessun dato da riparare.", "info");
-    }
-  }, [rubrica, crmAnagrafiche, stores, giroVisite, setRubrica, showToast]);
-
   return {
     handleExportData,
     handleImportData,
@@ -276,7 +264,6 @@ export function usePersistence({
     exportHistoryToExcel,
     exportGiroForMyMaps,
     handleClearAllData,
-    riparaDatiStorici,
     isSyncing,
     generatedSyncCode,
     setGeneratedSyncCode,

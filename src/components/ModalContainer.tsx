@@ -10,12 +10,14 @@ const ModalContainer: React.FC<{
   rubrica: RubricaData;
   combinedRivendite: SearchResult[]; // Aggiunta questa prop
   onUpdateRubrica: (id: string, field: string, value: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
   onDeleteHistory: (id: string, index: number) => void;
   showToast: (msg: string, type?: any) => void;
   missions?: any[];
   selectedRivenditaId?: string | null;
-}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast, missions: propMissions, selectedRivenditaId }) => {
+  startVisita: (id: string) => void;
+  endVisita: (id: string, note: string, tornoPiuTardi: boolean) => void;
+}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast, missions: propMissions, selectedRivenditaId, startVisita, endVisita }) => {
   const { 
     confirmModal, closeConfirm, 
     shareModal, closeShare, 
