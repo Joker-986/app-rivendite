@@ -47,7 +47,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
       const entry = extra.history[actualIndex];
       if (entry) {
         const d = new Date(entry.data);
-        const initData = d.toISOString().split('T')[0];
+        const initData = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const initOra = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         
         let initOraInizio = initOra;
@@ -171,19 +171,22 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         initialCart={entry.items || []}
         initialNote={entry.note || ''}
         initialDataEvasione={entry.dataEvasione || entry.data?.split('T')[0]}
-        onConfirmOrder={(cart, totaleEuro, note, dataEvasione) => {
+        initialIsEvaso={entry.isEseguito === true}
+        onConfirmOrder={(cart, totaleEuro, note, dataEvasioneDalModulo, isEvasoDalModulo) => {
+          const evasoFinale = isEvasoDalModulo !== undefined ? isEvasoDalModulo : entry.isEseguito;
           onEditHistory(
             rivenditaId, 
             actualIndex, 
             note, 
             totaleEuro, 
-            entry.data?.split('T')[0], 
-            entry.data?.split('T')[1]?.substring(0, 5), 
+            data, // Mantiene la data di creazione originale intatta (NON usare dataEvasione qui)
+            ora,  // Mantiene l'ora di creazione originale
             entry.stato, 
-            entry.isEseguito, // Mantiene lo stato originale (Bozza o Evaso) invece di forzare true
-            entry.dataEsecuzione, 
+            evasoFinale, 
+            // Se appena evaso, salva oggi. Se era GIA' evaso, preserva la vecchia data di esecuzione!
+            evasoFinale ? (entry.dataEsecuzione || new Date().toISOString()) : undefined, 
             cart,
-            dataEvasione
+            dataEvasioneDalModulo // Aggiorna esclusivamente la data di consegna (11° parametro)
           );
           onClose();
         }}

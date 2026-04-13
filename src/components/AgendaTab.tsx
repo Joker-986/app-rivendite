@@ -5,7 +5,7 @@ import {
   AlertOctagon, Zap, CalendarDays, Rocket
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
-import { getRivenditaId, handleNavigation } from '../utils/helpers';
+import { getRivenditaId, handleNavigation, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
 import { useModals } from '../contexts/ModalContext';
 
 interface AgendaTabProps {
@@ -21,17 +21,29 @@ interface AgendaTabProps {
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void;
 }
 
+const getLocalMidnightTime = (dateStr: string) => {
+  if (!dateStr) return 0;
+  const d = new Date(dateStr);
+  // Imposta a mezzanotte locale per il confronto corretto nell'agenda
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
 const AgendaTab: React.FC<AgendaTabProps> = ({
   rubrica, crmAnagrafiche, stores, giroVisite, 
   setRivenditaFilter, setActiveTab, onEditHistory, showToast
 }) => {
   const { openQuickEdit, openRevisitModal } = useModals();
   
-  const [activeFilters, setActiveFilters] = useState<string[]>(['ORDINI', 'HOSTESS', 'APPUNTAMENTI']);
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [showArchived, setShowArchived] = useState(false);
 
-  const toggleFilter = (filter: string) => {
-    setActiveFilters(prev => prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]);
+  const toggleFilter = (filter: string, isolate: boolean = false) => {
+    if (isolate) {
+      setActiveFilters([filter]); // Se isolo, tengo solo quello
+    } else {
+      setActiveFilters(prev => prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]);
+    }
   };
 
   const processedData = useMemo(() => {
@@ -54,8 +66,8 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
       const isRevisitToday = hasRevisit && new Date(d.dataRivisita).getTime() === todayTime;
 
       // URGENZE
-      const pendingOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito !== true).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
-      const futureHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() >= todayTime).sort((a: any, b: any) => new Date(a.data).getTime() - new Date(b.data).getTime());
+      const pendingOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito !== true).sort((a: any, b: any) => getLocalMidnightTime(a.dataEvasione || a.data) - getLocalMidnightTime(b.dataEvasione || b.data));
+      const futureHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && getLocalMidnightTime(h.data) >= todayTime).sort((a: any, b: any) => getLocalMidnightTime(a.dataEsecuzione || a.data) - getLocalMidnightTime(b.dataEsecuzione || b.data));
       
       // STORICO
       const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito === true).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
@@ -93,10 +105,10 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
         validDates.push(new Date(g.data.dataRivisita).setHours(0,0,0,0));
       }
       if (activeFilters.includes('ORDINI')) {
-        g.pendingOrders.forEach((o: any) => validDates.push(new Date(o.data).setHours(0,0,0,0)));
+        g.pendingOrders.forEach((o: any) => validDates.push(getLocalMidnightTime(o.dataEvasione || o.data)));
       }
       if (activeFilters.includes('HOSTESS')) {
-        g.futureHostess.forEach((h: any) => validDates.push(new Date(h.data).setHours(0,0,0,0)));
+        g.futureHostess.forEach((h: any) => validDates.push(getLocalMidnightTime(h.dataEsecuzione || h.data)));
       }
 
       let bucket = 'ARCHIVIO';
@@ -178,7 +190,8 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
 
           {/* FIX: La data non sparisce più se l'ordine è scaduto */}
           {activeFilters.includes('ORDINI') && group.pendingOrders.map((ord: any) => {
-            const isOverdue = new Date(ord.data).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+            const targetDateStr = (ord.dataEvasione || ord.data).split('T')[0];
+            const isOverdue = targetDateStr < getTodayLocalISO();
             const isEseguito = ord.isEseguito === true;
             
             return (
@@ -192,7 +205,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                   <div className="flex items-center gap-1.5 shrink-0">
                       {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isOverdue ? 'text-red-800 bg-red-100' : 'text-white bg-blue-600'}`}>
-                        {new Date(ord.data).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'2-digit'})}
+                        {safeFormatDate(ord.dataEvasione || ord.data, 'short')}
                       </span>
                   </div>
                </div>
@@ -218,7 +231,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
             <div key={h.originalIndex} onClick={() => openQuickEdit('HOSTESS', group.id, group.data, h.originalIndex)} className="flex items-center justify-between p-1.5 rounded-lg bg-purple-50 border border-purple-200 cursor-pointer hover:bg-purple-100">
                <div className="flex items-center gap-1.5 min-w-0">
                   <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                  <span className="text-[10px] font-bold text-purple-900 truncate">Hostess: {new Date(h.data).toLocaleDateString('it-IT')} {new Date(h.data).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</span>
+                  <span className="text-[10px] font-bold text-purple-900 truncate">Hostess: {safeFormatDate(h.dataEsecuzione || h.data)} {new Date(h.data).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</span>
                </div>
                <Edit3 className="w-3 h-3 text-purple-400 shrink-0" />
             </div>
@@ -239,14 +252,14 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                         <span className="text-[10px] font-bold text-slate-600">€{parseFloat(ord.importo || 0).toLocaleString('it-IT')}</span>
                         <span className="text-[9px] text-slate-400 truncate ml-1">{ord.note}</span>
                      </div>
-                     <span className="text-[9px] font-bold text-slate-400">{new Date(ord.data).toLocaleDateString('it-IT')}</span>
+                     <span className="text-[9px] font-bold text-slate-400">{safeFormatDate(ord.dataEsecuzione || ord.dataEvasione || ord.data)}</span>
                   </div>
                ))}
                {activeFilters.includes('HOSTESS') && group.pastHostess.map((h: any) => (
                   <div key={h.originalIndex} onClick={() => openQuickEdit('HOSTESS', group.id, group.data, h.originalIndex)} className="flex items-center justify-between p-1.5 rounded-md bg-white/80 border border-slate-100 cursor-pointer hover:bg-white">
                      <div className="flex items-center gap-1.5 min-w-0">
                         <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span className="text-[10px] font-bold text-slate-600 truncate">Hostess {new Date(h.data).toLocaleDateString('it-IT')}</span>
+                        <span className="text-[10px] font-bold text-slate-600 truncate">Hostess {safeFormatDate(h.dataEsecuzione || h.data)}</span>
                      </div>
                   </div>
                ))}
@@ -254,7 +267,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                   <div key={`vis-${idx}`} className="flex items-center justify-between p-1.5 rounded-md bg-white/80 border border-slate-100">
                      <div className="flex items-center gap-1.5 min-w-0">
                         <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span className="text-[10px] font-bold text-slate-600 truncate">Visita {new Date(v.data).toLocaleDateString('it-IT')}</span>
+                        <span className="text-[10px] font-bold text-slate-600 truncate">Visita {safeFormatDate(v.visitaInizio || v.data)}</span>
                      </div>
                   </div>
                ))}
@@ -267,22 +280,55 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-500 pb-20">
-      <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm py-2 px-1">
-        <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1">
-          <button onClick={() => toggleFilter('ORDINI')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('ORDINI') ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-500 border-slate-200'}`}>
-            <ShoppingBag className="w-3.5 h-3.5" /> Ordini
-          </button>
-          <button onClick={() => toggleFilter('HOSTESS')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('HOSTESS') ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-slate-500 border-slate-200'}`}>
-            <UserCheck className="w-3.5 h-3.5" /> Hostess
-          </button>
-          <button onClick={() => toggleFilter('APPUNTAMENTI')} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${activeFilters.includes('APPUNTAMENTI') ? 'bg-orange-600 text-white border-orange-700' : 'bg-white text-slate-500 border-slate-200'}`}>
-            <CalendarClock className="w-3.5 h-3.5" /> Appuntamenti
-          </button>
-          <div className="w-px h-5 bg-slate-300 mx-0.5 shrink-0"></div>
-          <button onClick={() => setShowArchived(!showArchived)} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[11px] transition-all border shadow-sm shrink-0 ${showArchived ? 'bg-slate-800 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
-            <History className="w-3.5 h-3.5" /> + Archivio
-          </button>
+      <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm p-2 shadow-sm border-b border-slate-200/50 flex items-center gap-2">
+        
+        {/* Segmented Control Ultra-Compatto */}
+        <div className="flex bg-slate-200/60 p-1 rounded-xl gap-1 flex-1 border border-slate-200">
+          {['ORDINI', 'HOSTESS', 'APPUNTAMENTI'].map((filter) => {
+            const isActive = activeFilters.includes(filter);
+            
+            let activeClasses = '';
+            let Icon = ShoppingBag;
+            
+            if (filter === 'ORDINI') {
+              activeClasses = 'bg-blue-600 text-white shadow-sm';
+              Icon = ShoppingBag;
+            } else if (filter === 'HOSTESS') {
+              activeClasses = 'bg-purple-600 text-white shadow-sm';
+              Icon = UserCheck;
+            } else if (filter === 'APPUNTAMENTI') {
+              activeClasses = 'bg-amber-500 text-white shadow-sm';
+              Icon = CalendarClock;
+            }
+
+            return (
+              <button
+                key={filter}
+                onClick={() => toggleFilter(filter)}
+                onDoubleClick={() => toggleFilter(filter, true)}
+                className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-1.5 sm:py-2 px-1 text-[9px] sm:text-[10px] font-black rounded-lg transition-all select-none ${
+                  isActive 
+                    ? activeClasses 
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="capitalize">{filter.toLowerCase()}</span>
+              </button>
+            );
+          })}
         </div>
+        
+        {/* Tasto Archivio Squadrato e Compatto */}
+        <button
+          onClick={() => setShowArchived(!showArchived)}
+          className={`flex items-center justify-center w-10 h-10 sm:h-9 rounded-xl border transition-all shrink-0 ${
+            showArchived ? 'bg-slate-800 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+          }`}
+          title="Mostra Archivio Storico"
+        >
+          <History className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="px-1">

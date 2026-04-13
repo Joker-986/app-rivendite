@@ -13,7 +13,8 @@ import { useStrategy } from '../contexts/StrategyContext';
 import { 
   formatGoogleCalendarDate, getAvailableTimes, handleNavigation, 
   toTitleCase, loadFromStorage, getRivenditaId, 
-  getGoogleResetDate, calcolaFineTurno, ORARI_INIZIO 
+  getGoogleResetDate, calcolaFineTurno, ORARI_INIZIO,
+  safeFormatDate, getTodayLocalISO
 } from '../utils/helpers';
 import { EnrichedDetails } from '../services/geminiService';
 
@@ -63,13 +64,14 @@ const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivend
 
   if (!lastOrderInfo) return null;
 
-  const eventDate = new Date(lastOrderInfo.data);
-  const today = new Date();
-  eventDate.setHours(0,0,0,0); today.setHours(0,0,0,0);
+  const isEvaso = lastOrderInfo.isEseguito === true;
 
-  let label = "Ordine Precedente";
-  if (eventDate > today) label = "Ordine Programmato";
-  else if (eventDate.getTime() === today.getTime()) label = "Ordine Odierno";
+  // Colori dinamici
+  const bgClass = isEvaso ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100";
+  const iconColor = isEvaso ? "text-emerald-500" : "text-amber-500";
+  const labelColor = isEvaso ? "text-emerald-700" : "text-amber-700";
+  const badgeBg = isEvaso ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
+  const importoColor = isEvaso ? "text-emerald-700" : "text-amber-700";
 
   return (
     <div 
@@ -77,21 +79,37 @@ const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivend
         const idx = data.history.findIndex((h: any) => h.tipo === 'ORDINE');
         openQuickEdit('ORDINE', rivenditaId, data, idx);
       }} 
-      className="mt-1 p-3 bg-white border border-slate-100 rounded-xl flex items-start gap-2 shadow-inner cursor-pointer hover:bg-slate-50 transition-colors active:scale-[0.98]"
+      className={`mt-1 p-3 border rounded-xl flex items-start gap-2 shadow-inner cursor-pointer transition-colors active:scale-[0.98] ${bgClass}`}
     >
-      <div className="flex-shrink-0 mt-0.5"><Package className="w-3.5 h-3.5 text-brand-500" /></div>
+      <div className="flex-shrink-0 mt-0.5"><Package className={`w-3.5 h-3.5 ${iconColor}`} /></div>
       <div className="flex-grow flex items-center justify-between min-w-0">
         <div className="flex flex-col min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{label}:</span>
-            <span className="text-[9px] font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
-              {new Date(lastOrderInfo.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+            <span className={`text-[9px] font-black uppercase tracking-wider ${labelColor}`}>
+              {isEvaso ? 'Ordine Evaso' : 'Ordine in Bozza'}
+            </span>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${badgeBg}`}>
+              {(() => {
+                const targetDate = lastOrderInfo.dataEvasione || lastOrderInfo.data;
+                if (!targetDate) return '';
+                // Se la data contiene trattini (formato YYYY-MM-DD o ISO)
+                if (targetDate.includes('-')) {
+                  const datePart = targetDate.split('T')[0];
+                  const [y, m, d] = datePart.split('-');
+                  if (y && m && d) return `${d}/${m}`;
+                }
+                // Fallback di emergenza
+                return new Date(targetDate).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+              })()}
             </span>
           </div>
-          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">{lastOrderInfo.note || "Nessuna nota"}</p>
+          <p className="text-[11px] font-bold text-slate-700 leading-tight truncate pr-2">
+            {lastOrderInfo.note || "Nessuna nota"}
+          </p>
         </div>
-        <div className="text-right flex-shrink-0">
-          <span className="text-[10px] font-black text-brand-700">€{Number(lastOrderInfo.importo || 0).toLocaleString('it-IT')}</span>
+        <div className="text-right flex-shrink-0 flex flex-col items-end">
+          <span className={`text-[10px] font-black ${importoColor}`}>€{Number(lastOrderInfo.importo || 0).toLocaleString('it-IT')}</span>
+          {!isEvaso && <span className="text-[8px] font-black text-amber-600 animate-pulse mt-0.5">DA EVADERE ⏳</span>}
         </div>
       </div>
     </div>
@@ -161,8 +179,9 @@ const TimelineItem: React.FC<{
     HOSTESS: { icon: <UserCheck className="w-3 h-3" />, color: 'bg-purple-100 text-purple-600', label: 'Hostess' }
   };
   const config = configs[entry.tipo] || configs.VISITA;
-  const dataOra = new Date(entry.data);
-  let displayTime = `${dataOra.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} • ${dataOra.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+  const targetDateStr = entry.tipo === 'ORDINE' ? (entry.dataEsecuzione || entry.dataEvasione || entry.data) : (entry.visitaInizio || entry.data);
+  let displayTime = safeFormatDate(targetDateStr);
+  if (entry.ora) displayTime += ` • ${entry.ora}`;
 
   if (entry.tipo === 'VISITA' && entry.visitaInizio && entry.visitaFine) {
     const dInizio = new Date(entry.visitaInizio).getTime();
@@ -215,17 +234,17 @@ const TimelineItem: React.FC<{
                 <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
               )}
               {entry.dataEvasione && (
-                <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {new Date(entry.dataEvasione).toLocaleDateString('it-IT')}</span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {safeFormatDate(entry.dataEvasione)}</span>
               )}
             </div>
             
             {!entry.isEseguito ? (
               <button 
                 onClick={() => {
-                  const initialDate = new Date(entry.data);
-                  const eData = initialDate.toISOString().split('T')[0];
-                  const eOra = initialDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                  onEdit(index, entry.note, entry.importo || 0, eData, eOra, undefined, true, new Date().toISOString(), entry.items);
+                  const targetDateStr = entry.dataEvasione || entry.data;
+                  const eData = targetDateStr.split('T')[0];
+                  const eOra = entry.ora || '12:00';
+                  onEdit(index, entry.note, entry.importo || 0, eData, eOra, undefined, true, getTodayLocalISO(), entry.items);
                   showToast("Ordine inviato ai sistemi!", "success");
                 }}
                 className="text-blue-600 font-black text-[10px] uppercase hover:underline ml-auto"
@@ -667,16 +686,6 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="text-xs col-span-2">
             <span className="text-slate-400 block mb-0.5 font-medium">PEC</span>
             <span className="font-bold text-slate-700 truncate select-all">{extra.pec || res.pec || res['PEC']}</span>
-          </div>
-        )}
-        {showCrmData && extra.richiestaOrdine && (
-          <div className="text-xs col-span-2 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
-            <span className="text-slate-400 block mb-1 font-bold uppercase tracking-wider text-[9px]">Stato Ordine</span>
-            <span className="font-medium text-slate-700 flex items-center gap-1.5">
-              {extra.dataOrdine ? `${new Date(extra.dataOrdine).toLocaleDateString('it-IT')} - ` : ''}
-              {extra.ordineEvaso ? <span className="text-emerald-600 font-black">Evaso ✓</span> : <span className="text-amber-600 font-black animate-pulse">Da evadere ⏳</span>}
-            </span>
-            {extra.noteOrdine && <div className="mt-1.5 p-2 bg-white rounded border border-slate-200 text-slate-600 italic leading-snug">{extra.noteOrdine}</div>}
           </div>
         )}
       </div>

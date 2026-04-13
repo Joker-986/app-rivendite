@@ -653,7 +653,13 @@ export default function App() {
       let eventDate = new Date();
       let finalNotes = notes;
 
-      if (type === 'ORDINE' && current.dataOrdine) {
+      if (type === 'ORDINE' && dataEvasione) {
+        // Splittiamo la stringa "YYYY-MM-DD" e creiamo la data usando i componenti locali
+        const [year, month, day] = dataEvasione.split('-').map(Number);
+        eventDate = new Date(year, month - 1, day);
+        // Manteniamo ore e minuti attuali per l'ordinamento in timeline, ma il giorno è bloccato
+        eventDate.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
+      } else if (type === 'ORDINE' && current.dataOrdine) {
         const [y, m, d] = current.dataOrdine.split('-');
         eventDate = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0);
       } else if (type === 'HOSTESS' && current.hostessData) {
@@ -671,6 +677,11 @@ export default function App() {
       }
 
       const isoDateStr = eventDate.toISOString();
+      
+      let budgetScalato = 0;
+      if (type === 'ORDINE' && items) {
+        budgetScalato = items.reduce((acc, item) => (item.isOmaggio || item.isCredito) ? acc + (item.quantita * item.prezzoApplicato) : acc, 0);
+      }
 
       // FIX BUG: Creiamo sempre un nuovo record per mantenere lo storico completo
       const newEntry: RivenditaHistoryEntry = { 
@@ -679,6 +690,7 @@ export default function App() {
         note: finalNotes, 
         importo: amount, 
         items: items,
+        budgetAmScalato: budgetScalato > 0 ? budgetScalato : undefined,
         dataEvasione: dataEvasione,
         isEseguito: type === 'ORDINE' ? false : undefined,
         visitaInizio: visitaInizio,
@@ -790,7 +802,16 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
       
       let finalData = newHistory[index].data;
       if (newData && newOra) {
-        finalData = `${newData}T${newOra}:00`;
+        // Splittiamo la stringa "YYYY-MM-DD" e creiamo la data usando i componenti locali
+        const [year, month, day] = newData.split('-').map(Number);
+        const [hour, minute] = newOra.split(':').map(Number);
+        const localDateTime = new Date(year, month - 1, day, hour, minute, 0);
+        
+        if (!isNaN(localDateTime.getTime())) {
+          finalData = localDateTime.toISOString();
+        } else {
+          finalData = `${newData}T${newOra}:00`; // Fallback in caso di browser obsoleti
+        }
       }
 
       newHistory[index] = { 
@@ -800,7 +821,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         data: finalData,
         ...(newStato ? { stato: newStato } : {}),
         ...(isEseguito !== undefined ? { isEseguito } : {}),
-        ...(dataEsecuzione ? { dataEsecuzione } : {}),
+        ...(isEseguito === false ? { dataEsecuzione: undefined } : dataEsecuzione ? { dataEsecuzione } : {}),
         ...(newItems ? { items: newItems } : {}),
         ...(newDataEvasione ? { dataEvasione: newDataEvasione } : {}),
         ...(visitaInizio ? { visitaInizio } : {}),

@@ -42,6 +42,7 @@ export interface OrderItem {
   unita: number;            // Moltiplicatore usato (es. 10 o 1)
   prezzoApplicato: number;  // Prezzo cristallizzato al momento dell'ordine
   isOmaggio: boolean;       // Se true, costo 0 per cliente, scala budget AM
+  isCredito?: boolean;
 }
 
 export interface RivenditaHistoryEntry {

@@ -85,6 +85,28 @@ export const calcolaFineTurno = (inizio: string) => {
   return `${fineOre.toString().padStart(2, '0')}:${minuti.toString().padStart(2, '0')}`;
 };
 
+export const getTodayLocalISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export const safeFormatDate = (dateStr: string, format: 'full' | 'short' = 'full') => {
+  if (!dateStr) return '';
+  
+  // Crea un oggetto Date (il browser lo convertirà automaticamente in orario locale)
+  const dObj = new Date(dateStr);
+  
+  // Se la data non è valida, restituisci stringa vuota
+  if (isNaN(dObj.getTime())) return '';
+
+  const day = String(dObj.getDate()).padStart(2, '0');
+  const month = String(dObj.getMonth() + 1).padStart(2, '0');
+  const year = dObj.getFullYear();
+
+  if (format === 'short') return `${day}/${month}`;
+  return `${day}/${month}/${year}`;
+};
+
 export const ORARI_INIZIO = [
   "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
   "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00"
