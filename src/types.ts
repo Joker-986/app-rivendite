@@ -60,6 +60,15 @@ export interface RivenditaHistoryEntry {
   visitaFine?: string;
 }
 
+export interface MissionDetail {
+  id: string;
+  nome: string;
+  comune: string;
+  valore?: number;
+  data?: string;
+  nota?: string;
+}
+
 export interface Mission {
   id: string;
   nome: string;
@@ -71,6 +80,7 @@ export interface Mission {
   progressoAttuale: number;
   valoreGenerato?: number;
   stato?: "ATTIVA" | "ARCHIVIATA";
+  dettagliProgresso?: MissionDetail[];
 }
 
 export interface CampaignPeriod {

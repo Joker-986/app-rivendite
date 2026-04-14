@@ -27,7 +27,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addTransaction = useCallback((transaction: Omit<BudgetTransaction, 'id'>) => {
     const newTransaction: BudgetTransaction = {
       ...transaction,
-      id: `t-${Math.random().toString(36).substring(2, 9)}`
+      id: `t-${Math.random().toString(36).substring(2, 9)}`,
+      importo: Math.abs(transaction.importo) // FIX: Forza valore positivo
     };
     setBudget(prev => ({ ...prev, transazioni: [...prev.transazioni, newTransaction] }));
   }, []);
@@ -56,7 +57,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         id: `init-${meseSelezionato}`,
         data: dateStr,
         nota: "Inizializzazione Mese",
-        importo: amount
+        importo: Math.abs(amount), // FIX: Previeni inversioni di segno
+        tipo: 'RICARICA' // FIX CRITICO: Rende la transazione visibile come entrata
       };
       return { ...prev, transazioni: [...filtered, initTx] };
     });

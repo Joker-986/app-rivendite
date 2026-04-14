@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
-import { useBudget } from '../contexts/BudgetContext';
 import { useProducts } from '../contexts/ProductContext';
 import { RubricaData, Mission, Campaign, CampaignPeriod, RivenditaExtra, SearchResult } from '../types';
 import { getRivenditaId } from '../utils/helpers';
+import DrillDownModal from './DrillDownModal';
 
 interface StrategyDashboardProps {
   rubrica: RubricaData;
@@ -39,32 +39,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     products, updateProduct 
   } = useProducts();
   
-  const { budget, calculateBalance, initializeBudget, addTransaction, reconcileBudget } = useBudget();
   const { openConfirm } = useModals();
-  const balance = calculateBalance(meseSelezionato);
-  
-  // LOGICA TESORETTO: (Totale Ricariche) - (Totale Omaggi Programmati/Evasi)
-  const tesorettoVal = React.useMemo(() => {
-    const totalRecharges = budget.transazioni
-      .filter(t => t.tipo === 'RICARICA')
-      .reduce((acc, t) => acc + t.importo, 0);
-    
-    let totalSpent = 0;
-    (Object.values(rubrica) as RivenditaExtra[]).forEach(riv => {
-      // Sottrae Omaggi dalla history (Evasi)
-      riv.history?.forEach(h => {
-        if (h.budgetAmScalato) totalSpent += h.budgetAmScalato;
-      });
-      // Sottrae Omaggi dal Carrello Bozza (Impegnato/Promessa)
-      riv.carrelloBozza?.forEach(item => {
-        if (item.isOmaggio) {
-          totalSpent += (item.quantita * item.prezzoApplicato);
-        }
-      });
-    });
-
-    return totalRecharges - totalSpent;
-  }, [budget, rubrica]);
   
   const [showEditor, setShowEditor] = useState(false);
   const [showArchivedMissions, setShowArchivedMissions] = useState(false);
@@ -72,8 +47,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
   const [massAssignMission, setMassAssignMission] = useState<Mission | null>(null);
   const [assignSearchTerm, setAssignSearchTerm] = useState('');
-  const [budgetAction, setBudgetAction] = useState<'INIT' | 'TOPUP' | 'RECONCILE' | null>(null);
-  const [budgetAmount, setBudgetAmount] = useState<string>('');
+  const [drillDownMission, setDrillDownMission] = useState<{nome: string, dettagli: any[]} | null>(null);
 
   const handleGlobalCleanup = () => {
     openConfirm({
@@ -106,26 +80,72 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       const id = getRivenditaId(r);
       const extra = rubrica[id];
       if (extra?.stato === 'Attivata') {
-        const orders = extra.history?.filter(h => h.tipo === 'ORDINE') || [];
-        if (orders.length > 0) {
-          const lastOrder = new Date(orders[0].data);
-          const delta = (annoSel - lastOrder.getFullYear()) * 12 + (meseSel - (lastOrder.getMonth() + 1));
-          
-          const item = { 
-            res: r, 
-            nome: r.isStore ? `Store ${r.storeNumber}` : `Riv. ${r['Num. Rivendita']}`,
-            comune: r['Comune'],
-            dataUltimo: orders[0].data 
-          };
-          
-          if (delta >= 5) scadute.push(item);
-          else if (delta === 4) inScadenza.push(item);
-          else if (delta === 3) aRischio.push(item);
+        // 1. Funzione helper per parsare le date in modo sicuro (Italiane DD/MM/YYYY e ISO YYYY-MM-DD)
+        const parseSafeDate = (dateStr: string) => {
+          if (!dateStr) return new Date(0);
+          if (dateStr.includes('/')) {
+            const [d, m, y] = dateStr.split('/');
+            return new Date(`${y}-${m}-${d}`);
+          }
+          return new Date(dateStr);
+        };
+
+        // 2. Accettiamo 'true' (ordini evasi nuovi) e 'undefined' (storico legacy), scartiamo solo 'false' (bozze in corso)
+        const validOrders = extra.history?.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito !== false) || [];
+
+        // 3. Ordina dal più recente al più vecchio
+        validOrders.sort((a: any, b: any) => {
+          const dateA = a.dataEvasione || a.data;
+          const dateB = b.dataEvasione || b.data;
+          return parseSafeDate(dateB).getTime() - parseSafeDate(dateA).getTime();
+        });
+
+        if (validOrders.length > 0) {
+          const effectiveDateStr = validOrders[0].dataEvasione || validOrders[0].data;
+          const lastOrder = parseSafeDate(effectiveDateStr);
+
+          if (!isNaN(lastOrder.getTime())) {
+            const delta = (annoSel - lastOrder.getFullYear()) * 12 + (meseSel - (lastOrder.getMonth() + 1));
+            
+            const item = { 
+              res: r, 
+              id: id,
+              nome: r.isStore ? `Store ${r.storeNumber}` : `Riv. ${r['Num. Rivendita']}`,
+              comune: r['Comune'],
+              dataUltimo: effectiveDateStr.includes('/') ? effectiveDateStr : new Date(effectiveDateStr).toLocaleDateString('it-IT'),
+              deltaMesi: delta
+            };
+            
+            if (delta >= 5) scadute.push(item);
+            else if (delta === 4) inScadenza.push(item);
+            else if (delta === 3) aRischio.push(item);
+          }
         }
       }
     });
     return { scadute, inScadenza, aRischio };
   }, [rubrica, combinedRivendite, meseSelezionato]);
+
+  const campaignEarnings = React.useMemo(() => {
+    const earnings: Record<string, number> = {};
+    campaigns.filter(c => c.stato !== 'ARCHIVIATA').forEach(c => { earnings[c.id] = 0; });
+    
+    Object.values(rubrica as RubricaData).forEach((riv: RivenditaExtra) => {
+      riv.history?.forEach(entry => {
+        if (entry.tipo === 'ORDINE' && entry.items && entry.data.startsWith(meseSelezionato)) {
+          entry.items.forEach(item => {
+            campaigns.filter(c => c.stato !== 'ARCHIVIATA').forEach(campaign => {
+              if (item.codice === campaign.sku || item.descrizione.toLowerCase().includes(campaign.sku.toLowerCase())) {
+                const isValid = campaign.periodi.some(p => entry.data >= p.dataInizio && (!p.dataFine || entry.data <= p.dataFine));
+                if (isValid) earnings[campaign.id] += (item.quantita * campaign.valoreBonus);
+              }
+            });
+          });
+        }
+      });
+    });
+    return earnings;
+  }, [rubrica, campaigns, meseSelezionato]);
   
   const [showRadar, setShowRadar] = useState(false);
   
@@ -139,12 +159,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   
   const totalWeight = activeMissions.reduce((acc, m) => acc + m.pesoPercentuale, 0);
   const isWeightValid = totalWeight === 100;
-
-  // Sinergia Budget Alert
-  const showBudgetAlert = balance < 50 && activeMissions.some(m => 
-    (m.tipo === 'ATTIVAZIONE' || m.tipo === 'PRODOTTO') && 
-    (m.target > 0 ? (m.progressoAttuale / m.target) < 0.8 : true)
-  );
 
   const handleSaveMission = () => {
     if (!editingMission?.nome || !editingMission?.tipo || editingMission.target === undefined || editingMission.pesoPercentuale === undefined) return;
@@ -177,27 +191,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       } as Campaign);
     }
     setEditingCampaign(null);
-  };
-
-  const handleInitializeBudget = () => {
-    const amount = parseFloat(budgetAmount);
-    if (isNaN(amount)) return;
-
-    if (budgetAction === 'INIT') {
-      initializeBudget(amount, meseSelezionato);
-    } else if (budgetAction === 'TOPUP') {
-      addTransaction({
-        data: new Date().toISOString(),
-        descrizione: "Ricarica Intramese",
-        importo: amount,
-        tipo: 'RICARICA'
-      });
-    } else if (budgetAction === 'RECONCILE') {
-      reconcileBudget(amount, meseSelezionato);
-    }
-    
-    setBudgetAction(null);
-    setBudgetAmount('');
   };
 
   return (
@@ -241,114 +234,41 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         </div>
       </div>
 
-      {/* SIMULATORE STIPENDIO */}
-      <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl -ml-12 -mb-12"></div>
+      {/* SIMULATORE STIPENDIO - APPLE CLEAN (Mobile Perfect) */}
+      <div className="bg-white border border-slate-200/80 rounded-[2rem] p-5 sm:p-6 shadow-sm overflow-hidden">
         
-        <div className="relative z-10 space-y-6">
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Stipendio Stimato (Lordo)</p>
-              <h3 className="text-4xl font-black tracking-tighter">€{(monthlyBase + totalBonus).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</h3>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Bonus Totale</p>
-              <p className="text-xl font-black text-brand-400">+€{totalBonus.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10">
-            <div className="text-center">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Base RAL</p>
-              <p className="text-sm font-black">€{monthlyBase.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="text-center border-x border-white/10">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">MBO Maturato</p>
-              <p className="text-sm font-black text-brand-400">€{mboBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Extra Bonus</p>
-              <p className="text-sm font-black text-purple-400">€{extraBonus.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* BLOCCO BUDGET AM (v4.0) */}
-      <div className="mx-1 bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-brand-50 rounded-lg flex items-center justify-center text-brand-600">
-              <DollarSign className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-black text-slate-800 uppercase tracking-widest">Budget AM</span>
+        {/* Top: Totali */}
+        <div className="flex justify-between items-end pb-5 border-b border-slate-100/80">
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Stipendio Stimato (Lordo)</p>
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter leading-none">
+              €{(monthlyBase + totalBonus).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </h3>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Saldo Attuale</p>
-            <p className={`text-lg font-black ${balance < 50 ? 'text-amber-600' : 'text-brand-600'}`}>€{balance.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Bonus Totale</p>
+            <p className="text-xl sm:text-2xl font-black text-[#0ba321] leading-none">+€{totalBonus.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           </div>
         </div>
-        
-        <div className="grid grid-cols-2 gap-3">
-          <button 
-            onClick={() => { setBudgetAction('INIT'); setBudgetAmount('500'); }}
-            className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-slate-800 transition-all shadow-sm"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> INIZIALIZZA MESE
-          </button>
-          <button 
-            onClick={() => { setBudgetAction('TOPUP'); setBudgetAmount('100'); }}
-            className="flex items-center justify-center gap-2 py-2.5 bg-brand-50 text-brand-700 rounded-xl text-[10px] font-black hover:bg-brand-100 transition-all border border-brand-100"
-          >
-            <Plus className="w-3.5 h-3.5" /> RICARICA INTRAMESE
-          </button>
-          <button 
-            onClick={() => { setBudgetAction('RECONCILE'); setBudgetAmount(balance.toFixed(2)); }}
-            className="col-span-2 flex items-center justify-center gap-2 py-2 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black hover:bg-slate-200 transition-all border border-slate-200"
-          >
-            <Settings2 className="w-3 h-3" /> RETTIFICA SALDO ATTUALE
-          </button>
+
+        {/* Bottom: Breakdown a 3 colonne */}
+        <div className="grid grid-cols-3 pt-4">
+          <div className="text-center border-r border-slate-200/60 pr-2">
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Base RAL</p>
+            <p className="text-sm sm:text-base font-bold text-slate-700">€{monthlyBase.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
+          
+          <div className="text-center border-r border-slate-200/60 px-2">
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">MBO Maturato</p>
+            <p className="text-sm sm:text-base font-bold text-brand-600">€{mboBonus.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
+          
+          <div className="text-center pl-2">
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Extra Bonus</p>
+            <p className="text-sm sm:text-base font-bold text-purple-600">€{extraBonus.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          </div>
         </div>
 
-        {budgetAction && (
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                {budgetAction === 'INIT' ? 'Inizializzazione Mese' : 'Ricarica Intramese'}
-              </h4>
-              <button onClick={() => setBudgetAction(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input 
-                  type="number" 
-                  autoFocus
-                  value={budgetAmount}
-                  onChange={e => setBudgetAmount(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all"
-                  placeholder="Importo €"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">€</span>
-              </div>
-              <button 
-                onClick={handleInitializeBudget}
-                className="px-6 bg-brand-600 text-white rounded-xl font-black text-[10px] shadow-lg shadow-brand-100 hover:bg-brand-700 transition-all"
-              >
-                CONFERMA
-              </button>
-            </div>
-          </div>
-        )}
-
-        {showBudgetAlert && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 animate-pulse">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-[10px] text-amber-700 font-bold leading-tight">
-              Budget AM critico (€{balance.toFixed(2)}). Ottimizza gli omaggi per centrare i target MBO!
-            </p>
-          </div>
-        )}
       </div>
 
       {/* ALERT PESO PERCENTUALE */}
@@ -873,7 +793,21 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             const earnedValue = potentialValue * (percentage / 100);
 
             return (
-              <div key={mission.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all">
+              <div 
+                key={mission.id} 
+                onClick={() => {
+                  const enrichedDettagli = (mission.dettagliProgresso || []).map(d => {
+                    const r = combinedRivendite.find(cr => getRivenditaId(cr) === d.id);
+                    return {
+                      ...d,
+                      nome: r ? (r.isStore ? `Store ${r.storeNumber || r.storeName || ''}` : `Riv. ${r['Num. Rivendita']}`) : d.nome,
+                      comune: r ? (r['Comune'] || '') : d.comune
+                    };
+                  });
+                  setDrillDownMission({ nome: mission.nome, dettagli: enrichedDettagli });
+                }}
+                className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer"
+              >
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${mission.tipo === 'FATTURATO' ? 'bg-blue-50 text-blue-600' : mission.tipo === 'ATTIVAZIONE' ? 'bg-emerald-50 text-emerald-600' : 'bg-purple-50 text-purple-600'}`}>
@@ -928,43 +862,21 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
         <div className="grid grid-cols-1 gap-3">
           {campaigns.filter(c => c.stato !== 'ARCHIVIATA').map(campaign => {
-            // Calcola bonus specifico per questa campagna
-            let campaignEarned = 0;
-            Object.values(rubrica as RubricaData).forEach((riv: RivenditaExtra) => {
-              riv.history?.forEach(entry => {
-                // Filtro temporale iniettato per il rendering visivo
-                if (entry.tipo === 'ORDINE' && entry.items && entry.data.startsWith(meseSelezionato)) {
-                  entry.items.forEach(item => {
-                    if (item.codice === campaign.sku || item.descrizione.toLowerCase().includes(campaign.sku.toLowerCase())) {
-                      const orderDate = entry.data;
-                      const isValid = campaign.periodi.some(p => {
-                        const start = p.dataInizio;
-                        const end = p.dataFine;
-                        return orderDate >= start && (!end || orderDate <= end);
-                      });
-                      if (isValid) {
-                        campaignEarned += (item.quantita * campaign.valoreBonus);
-                      }
-                    }
-                  });
-                }
-              });
-            });
+            const campaignEarned = campaignEarnings[campaign.id] || 0;
 
             return (
-              <div key={campaign.id} className="bg-purple-600 rounded-[2rem] p-6 text-white shadow-lg shadow-purple-200 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+              <div key={campaign.id} className="bg-white border border-purple-100 rounded-[2rem] p-5 shadow-sm relative overflow-hidden hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-4 relative z-10">
-                  <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-inner">
-                    <ShoppingBag className="w-8 h-8 text-white" />
+                  <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center border border-purple-100 shrink-0">
+                    <ShoppingBag className="w-6 h-6 text-purple-600" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-black tracking-tight">{campaign.nome}</h3>
-                    <p className="text-xs text-purple-100 font-medium">+€{campaign.valoreBonus.toFixed(2)} per {campaign.sku}</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold text-slate-800 tracking-tight truncate">{campaign.nome}</h3>
+                    <p className="text-[11px] text-slate-500 font-medium truncate">+€{campaign.valoreBonus.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per {campaign.sku}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-black">€{campaignEarned.toLocaleString('it-IT')}</p>
-                    <p className="text-[10px] font-bold text-purple-200 uppercase tracking-widest">Maturato</p>
+                  <div className="text-right shrink-0">
+                    <p className="text-2xl font-bold text-purple-600">€{campaignEarned.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Maturato</p>
                   </div>
                 </div>
               </div>
@@ -1006,7 +918,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     <div key={`scad-${i}`} className="flex justify-between items-center p-2.5 bg-red-50 border border-red-100 rounded-xl">
                       <div>
                         <p className="text-xs font-bold text-red-900">{item.nome} • {item.comune}</p>
-                        <p className="text-[9px] text-red-700 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                        <p className="text-[9px] text-red-700 font-medium">Ultimo ordine: {item.dataUltimo}</p>
                       </div>
                     </div>
                   ))}
@@ -1023,7 +935,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     <div key={`inscad-${i}`} className="flex justify-between items-center p-2.5 bg-amber-50 border border-amber-100 rounded-xl">
                       <div>
                         <p className="text-xs font-bold text-amber-900">{item.nome} • {item.comune}</p>
-                        <p className="text-[9px] text-amber-700 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                        <p className="text-[9px] text-amber-700 font-medium">Ultimo ordine: {item.dataUltimo}</p>
                       </div>
                     </div>
                   ))}
@@ -1040,7 +952,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     <div key={`risch-${i}`} className="flex justify-between items-center p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
                       <div>
                         <p className="text-xs font-bold text-slate-700">{item.nome} • {item.comune}</p>
-                        <p className="text-[9px] text-slate-500 font-medium">Ultimo ordine: {new Date(item.dataUltimo).toLocaleDateString('it-IT')}</p>
+                        <p className="text-[9px] text-slate-500 font-medium">Ultimo ordine: {item.dataUltimo}</p>
                       </div>
                     </div>
                   ))}
@@ -1054,16 +966,12 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           </div>
         )}
       </div>
-
-      {/* STORICO */}
-      <div className="mt-12 space-y-8 border-t border-white/10 pt-8 pb-20">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold">Camera di Regia</h2>
-          <div className={`px-4 py-2 rounded-xl font-black text-white ${tesorettoVal < 0 ? 'bg-red-500 animate-pulse' : 'bg-brand-600'}`}>
-            TESORETTO AM: €{tesorettoVal.toLocaleString('it-IT')}
-          </div>
-        </div>
-      </div>
+      <DrillDownModal 
+        isOpen={!!drillDownMission} 
+        onClose={() => setDrillDownMission(null)} 
+        missionName={drillDownMission?.nome || ''} 
+        dettagli={drillDownMission?.dettagli || []} 
+      />
     </div>
   );
 };

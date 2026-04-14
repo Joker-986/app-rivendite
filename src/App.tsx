@@ -2126,6 +2126,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
                 orderStats={orderStats}
                 fatturatoPeriodo={fatturatoPeriodo}
                 crmStats={crmStats}
+                rubrica={rubrica}
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
               />

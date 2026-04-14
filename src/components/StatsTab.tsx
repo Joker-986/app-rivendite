@@ -12,9 +12,15 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  History
+  History,
+  Plus,
+  RefreshCw,
+  Settings2,
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { useBudget } from '../contexts/BudgetContext';
+import { useStrategy } from '../contexts/StrategyContext';
 
 interface StatsTabProps {
   statsPeriod: string;
@@ -26,6 +32,7 @@ interface StatsTabProps {
   orderStats: any;
   fatturatoPeriodo: number;
   crmStats: any;
+  rubrica: any;
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
 }
@@ -40,6 +47,7 @@ const StatsTab: React.FC<StatsTabProps> = ({
   orderStats,
   fatturatoPeriodo,
   crmStats,
+  rubrica,
   setRivenditaFilter,
   setActiveTab
 }) => {
@@ -49,12 +57,46 @@ const StatsTab: React.FC<StatsTabProps> = ({
   // I'll include it here just in case it's needed for future expansions or if I missed something.
   const [statsOrdiniOpen, setStatsOrdiniOpen] = useState(false);
   const [statsBudgetOpen, setStatsBudgetOpen] = useState(true);
+  const [budgetAction, setBudgetAction] = useState<'INIT' | 'TOPUP' | 'RECONCILE' | null>(null);
+  const [newTx, setNewTx] = useState({ importo: '', nota: '', tipo: 'RICARICA' as 'RICARICA' | 'SPESA' });
 
-  const { budget, calculateBalance } = useBudget();
-  
-  // Ottiene il mese corrente per il calcolo del budget in tempo reale nelle statistiche
+  const { budget, calculateBalance, initializeBudget, addTransaction, reconcileBudget } = useBudget();
   const currentMonth = new Date().toISOString().substring(0, 7);
   const balance = calculateBalance(currentMonth);
+
+  const { missions } = useStrategy();
+  const activeMissions = missions.filter(m => m.stato !== 'ARCHIVIATA');
+  const showBudgetAlert = balance < 50 && activeMissions.some(m => 
+    (m.tipo === 'ATTIVAZIONE' || m.tipo === 'PRODOTTO') && 
+    (m.target > 0 ? (m.progressoAttuale / m.target) < 0.8 : true)
+  );
+
+  const tesorettoVal = React.useMemo(() => {
+    const totalRecharges = budget.transazioni.filter((t: any) => t.tipo === 'RICARICA').reduce((acc: number, t: any) => acc + t.importo, 0);
+    let totalSpent = 0;
+    Object.values(rubrica).forEach((riv: any) => {
+      riv.history?.forEach((h: any) => { if (h.budgetAmScalato) totalSpent += h.budgetAmScalato; });
+      riv.carrelloBozza?.forEach((item: any) => { if (item.isOmaggio) totalSpent += (item.quantita * item.prezzoApplicato); });
+    });
+    return totalRecharges - totalSpent;
+  }, [budget, rubrica]);
+
+  const handleInitializeBudget = () => {
+    const amount = parseFloat(newTx.importo);
+    if (isNaN(amount)) return;
+    if (budgetAction === 'INIT') initializeBudget(amount, currentMonth);
+    else if (budgetAction === 'TOPUP') {
+      addTransaction({ 
+        data: new Date().toISOString(), 
+        descrizione: newTx.nota || (newTx.tipo === 'RICARICA' ? "Ricarica Intramese" : "Storno Manuale"), 
+        importo: amount, 
+        tipo: newTx.tipo 
+      });
+    }
+    else if (budgetAction === 'RECONCILE') reconcileBudget(amount, currentMonth);
+    setBudgetAction(null);
+    setNewTx({ importo: '', nota: '', tipo: 'RICARICA' });
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -82,18 +124,78 @@ const StatsTab: React.FC<StatsTabProps> = ({
 
         {statsBudgetOpen && (
           <div className="p-5 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-slate-900 rounded-2xl p-4 text-white">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Disponibilità Attuale</p>
-                <p className="text-2xl font-black">€{balance.toLocaleString('it-IT')}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tesoretto Reale</p>
+                <p className={`text-2xl font-black ${tesorettoVal < 0 ? 'text-red-400' : 'text-emerald-400'}`}>€{tesorettoVal.toLocaleString('it-IT')}</p>
               </div>
-              <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100">
-                <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest mb-1">Mese Corrente</p>
-                <p className="text-2xl font-black text-brand-700 capitalize">
-                  {new Date().toLocaleDateString('it-IT', { month: 'long' })}
-                </p>
+              <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100 flex flex-col justify-center">
+                <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest mb-1">Fondo Base</p>
+                <p className="text-xl font-black text-brand-700">€{balance.toLocaleString('it-IT')}</p>
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button onClick={() => { setBudgetAction('INIT'); setNewTx(prev => ({ ...prev, importo: '500' })); }} className="flex items-center justify-center gap-1.5 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black hover:bg-slate-800 shadow-sm"><RefreshCw className="w-3 h-3" /> INIZIALIZZA</button>
+              <button onClick={() => { setBudgetAction('TOPUP'); setNewTx(prev => ({ ...prev, importo: '100', tipo: 'RICARICA' })); }} className="flex items-center justify-center gap-1.5 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[9px] font-black border border-emerald-200"><Plus className="w-3 h-3" /> RICARICA</button>
+              <button onClick={() => { setBudgetAction('RECONCILE'); setNewTx(prev => ({ ...prev, importo: balance.toFixed(2) })); }} className="col-span-2 flex items-center justify-center gap-1.5 py-2 bg-slate-50 text-slate-600 rounded-xl text-[9px] font-black border border-slate-200"><Settings2 className="w-3 h-3" /> RETTIFICA SALDO</button>
+            </div>
+
+            {budgetAction && (
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4 space-y-3">
+                {budgetAction === 'TOPUP' && (
+                  <div className="flex bg-slate-200 p-1 rounded-xl gap-1">
+                    <button 
+                      onClick={() => setNewTx(prev => ({ ...prev, tipo: 'RICARICA' }))}
+                      className={`flex-1 py-2 text-[10px] font-black rounded-lg transition-all ${newTx.tipo === 'RICARICA' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      RICARICA (+)
+                    </button>
+                    <button 
+                      onClick={() => setNewTx(prev => ({ ...prev, tipo: 'SPESA' }))}
+                      className={`flex-1 py-2 text-[10px] font-black rounded-lg transition-all ${newTx.tipo === 'SPESA' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      STORNO (-)
+                    </button>
+                  </div>
+                )}
+                
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-2">
+                    <input 
+                      type="number" 
+                      autoFocus 
+                      value={newTx.importo} 
+                      onChange={e => setNewTx(prev => ({ ...prev, importo: e.target.value }))} 
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500" 
+                      placeholder="Importo €" 
+                    />
+                    {budgetAction === 'TOPUP' && (
+                      <input 
+                        type="text" 
+                        value={newTx.nota} 
+                        onChange={e => setNewTx(prev => ({ ...prev, nota: e.target.value }))} 
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500" 
+                        placeholder="Nota (opzionale)" 
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={handleInitializeBudget} className="flex-1 px-4 bg-brand-600 text-white rounded-lg font-black text-[10px]">CONFERMA</button>
+                    <button onClick={() => setBudgetAction(null)} className="p-2 bg-slate-200 text-slate-600 rounded-lg flex items-center justify-center"><X className="w-4 h-4"/></button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showBudgetAlert && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 animate-pulse mb-4">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-amber-700 font-bold leading-tight">
+                  Budget AM critico (€{balance.toFixed(2)}). Ottimizza gli omaggi per centrare i target MBO!
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ultime Transazioni</h4>

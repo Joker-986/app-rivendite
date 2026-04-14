@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod } from '../types';
+import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail } from '../types';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -185,40 +185,70 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (mission.stato === 'ARCHIVIATA') return mission;
         let progress = 0;
         let generatedValue = 0;
+        let dettagli: MissionDetail[] = [];
 
-        Object.values(rubrica).forEach(riv => {
+        Object.entries(rubrica).forEach(([rivId, riv]) => {
+          const rivNome = riv.isStore ? `Store ${riv.storeNumber}` : `Riv. ${riv['Num. Rivendita']}`;
+          const comune = riv.Comune || riv['Comune'] || '';
+
           if (mission.tipo === 'FATTURATO') {
             if (mission.targetSingolo && mission.targetSingolo > 0) {
               // Logica Sbarramento: se ha la missione assegnata, calcola se ha raggiunto la soglia in €
               if (riv.targetIdoneo?.includes(mission.id)) {
                 let storeTotal = 0;
+                let lastOrderDate = '';
                 riv.history?.forEach(h => {
                   if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
                     storeTotal += (h.importo || 0);
+                    lastOrderDate = h.data;
                   }
                 });
                 generatedValue += storeTotal;
-                if (storeTotal >= mission.targetSingolo) progress += 1;
+                if (storeTotal >= mission.targetSingolo) {
+                  progress += 1;
+                  dettagli.push({
+                    id: rivId,
+                    nome: rivNome,
+                    comune: comune,
+                    valore: storeTotal,
+                    data: lastOrderDate
+                  });
+                }
               }
             } else {
               // Logica standard: somma globale del fatturato
               riv.history?.forEach(h => {
                 if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
-                  progress += (h.importo || 0);
-                  generatedValue += (h.importo || 0);
+                  const val = (h.importo || 0);
+                  progress += val;
+                  generatedValue += val;
+                  dettagli.push({
+                    id: rivId,
+                    nome: rivNome,
+                    comune: comune,
+                    valore: val,
+                    data: h.data
+                  });
                 }
               });
             }
           } else if (mission.tipo === 'ATTIVAZIONE') {
             // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
             if (riv.targetIdoneo?.includes(mission.id)) {
-              const hasOrderThisMonth = riv.history?.some(h => h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato));
-              if (hasOrderThisMonth) {
+              const activationOrder = riv.history?.find(h => h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato));
+              if (activationOrder) {
                 progress += 1;
+                dettagli.push({
+                  id: rivId,
+                  nome: rivNome,
+                  comune: comune,
+                  valore: 1,
+                  data: activationOrder.data
+                });
               }
             }
           } else if (mission.tipo === 'PRODOTTO') {
-            const hasBoughtProduct = riv.history?.some(h => {
+            const productOrder = riv.history?.find(h => {
               if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
                 return h.items.some(item => 
                   item.codice.toLowerCase() === mission.nome.toLowerCase() || 
@@ -228,13 +258,22 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               return false;
             });
 
-            if (hasBoughtProduct) {
+            if (productOrder) {
               progress += 1;
+              dettagli.push({
+                id: rivId,
+                nome: rivNome,
+                comune: comune,
+                valore: 1,
+                data: productOrder.data
+              });
             }
           }
         });
-
-        return { ...mission, progressoAttuale: progress, valoreGenerato: generatedValue };
+        
+        dettagli.sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
+        
+        return { ...mission, progressoAttuale: progress, valoreGenerato: generatedValue, dettagliProgresso: dettagli };
       });
     });
   }, []);
