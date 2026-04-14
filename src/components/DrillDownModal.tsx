@@ -12,13 +12,19 @@ interface DrillDownModalProps {
 const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missionName, dettagli }) => {
   if (!isOpen) return null;
 
+  const [highlightedIds, setHighlightedIds] = React.useState<string[]>([]);
+
   const totaleElementi = dettagli.length;
   // Calcola il valore totale. Se è palesemente un conteggio (es. tutti i valori sono 1), lo formattiamo diversamente
   const totaleValore = dettagli.reduce((acc, curr) => acc + (curr.valore || 0), 0);
   const isEuro = totaleValore > totaleElementi && totaleValore > 50; 
 
+  const toggleHighlight = (id: string) => { 
+    setHighlightedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); 
+  };
+
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setHighlightedIds([]); onClose(); }}>
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
         
         {/* Header Modale */}
@@ -29,7 +35,7 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
               {totaleElementi} Negozi {totaleValore > 0 && `• Totale: ${isEuro ? '€' : ''}${totaleValore.toLocaleString('it-IT')}`}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 bg-white hover:bg-slate-200 rounded-full transition-colors shadow-sm text-slate-500">
+          <button onClick={() => { setHighlightedIds([]); onClose(); }} className="p-2 bg-white hover:bg-slate-200 rounded-full transition-colors shadow-sm text-slate-500">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -42,7 +48,15 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
             </div>
           ) : (
             dettagli.map((item, idx) => (
-              <div key={item.id || idx} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center hover:shadow-md transition-shadow">
+              <div 
+                key={item.id || idx} 
+                onClick={() => toggleHighlight(item.id || String(idx))}
+                className={`p-3 rounded-xl border flex justify-between items-center transition-all cursor-pointer ${
+                  highlightedIds.includes(item.id || String(idx)) 
+                    ? 'bg-emerald-50 border-emerald-400 shadow-sm ring-1 ring-emerald-400/50' 
+                    : 'bg-white border-slate-100 hover:shadow-md hover:border-slate-300'
+                }`}
+              >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-slate-800 truncate">{item.nome}</p>
                   <div className="flex items-center gap-3 mt-1">
