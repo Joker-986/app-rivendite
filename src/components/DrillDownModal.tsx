@@ -30,9 +30,12 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
         {/* Header Modale */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
           <div>
-            <h3 className="font-black text-slate-800 tracking-tight">{missionName}</h3>
-            <p className="text-[10px] font-bold text-brand-600 uppercase tracking-widest">
-              {totaleElementi} Negozi {totaleValore > 0 && `• Totale: ${isEuro ? '€' : ''}${totaleValore.toLocaleString('it-IT')}`}
+            <h2 className="text-lg font-black text-slate-800 leading-tight">{missionName}</h2>
+            <p className="text-xs font-medium text-slate-500 mt-0.5">
+              {totaleElementi} {totaleElementi === 1 ? 'Rivendita' : 'Rivendite'}
+              {highlightedIds.length > 0 && (
+                <span className="text-emerald-600 font-bold"> • Selezionate: {highlightedIds.length}</span>
+              )}
             </p>
           </div>
           <button onClick={() => { setHighlightedIds([]); onClose(); }} className="p-2 bg-white hover:bg-slate-200 rounded-full transition-colors shadow-sm text-slate-500">

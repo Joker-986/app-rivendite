@@ -126,26 +126,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     return { scadute, inScadenza, aRischio };
   }, [rubrica, combinedRivendite, meseSelezionato]);
 
-  const campaignEarnings = React.useMemo(() => {
-    const earnings: Record<string, number> = {};
-    campaigns.filter(c => c.stato !== 'ARCHIVIATA').forEach(c => { earnings[c.id] = 0; });
-    
-    Object.values(rubrica as RubricaData).forEach((riv: RivenditaExtra) => {
-      riv.history?.forEach(entry => {
-        if (entry.tipo === 'ORDINE' && entry.items && entry.data.startsWith(meseSelezionato)) {
-          entry.items.forEach(item => {
-            campaigns.filter(c => c.stato !== 'ARCHIVIATA').forEach(campaign => {
-              if (item.codice === campaign.sku || item.descrizione.toLowerCase().includes(campaign.sku.toLowerCase())) {
-                const isValid = campaign.periodi.some(p => entry.data >= p.dataInizio && (!p.dataFine || entry.data <= p.dataFine));
-                if (isValid) earnings[campaign.id] += (item.quantita * campaign.valoreBonus);
-              }
-            });
-          });
-        }
-      });
-    });
-    return earnings;
-  }, [rubrica, campaigns, meseSelezionato]);
   
   const [showRadar, setShowRadar] = useState(false);
   
@@ -177,7 +157,10 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   };
 
   const handleSaveCampaign = () => {
-    if (!editingCampaign?.nome || !editingCampaign?.sku || editingCampaign.valoreBonus === undefined) return;
+    if (!editingCampaign?.nome || !editingCampaign?.sku || editingCampaign.valoreBonus === undefined) {
+      alert("Errore: Compila il nome, il bonus e seleziona un Prodotto (SKU) dal menu a tendina.");
+      return;
+    }
     
     if (editingCampaign.id) {
       updateCampaign(editingCampaign.id, editingCampaign);
@@ -619,13 +602,16 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   />
                   
                   <div className="grid grid-cols-2 gap-3">
-                    <input 
-                      type="text" 
-                      placeholder="SKU Prodotto" 
-                      value={editingCampaign.sku} 
+                    <select 
+                      value={editingCampaign.sku || ''} 
                       onChange={e => setEditingCampaign({...editingCampaign, sku: e.target.value})}
-                      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-purple-500 transition-all"
-                    />
+                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-purple-500 transition-all text-white"
+                    >
+                      <option value="">Seleziona SKU...</option>
+                      {products.filter(p => p.attivo !== false).map(p => (
+                        <option key={p.id} value={p.codice}>{p.codice} - {p.descrizione}</option>
+                      ))}
+                    </select>
                     <div className="relative">
                       <input 
                         type="number" 
@@ -862,7 +848,39 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
         <div className="grid grid-cols-1 gap-3">
           {campaigns.filter(c => c.stato !== 'ARCHIVIATA').map(campaign => {
-            const campaignEarned = campaignEarnings[campaign.id] || 0;
+            // Simuliamo una rubrica temporanea con solo questa campagna per calcolare il suo bonus specifico tramite il motore centrale
+            const singleCampaignContext = { ...rubrica }; // Copia la rubrica
+            
+            // Creiamo un array temporaneo con solo la campagna corrente per farla calcolare dalla funzione globale
+            const tempCampaigns = [campaign];
+            
+            // Ricalcoliamo il bonus ESCLUSIVAMENTE per questa campagna usando la logica centrale
+            let campaignEarned = 0;
+            
+            Object.values(singleCampaignContext).forEach((riv: RivenditaExtra) => {
+              riv.history?.forEach(entry => {
+                // IL FIX CRITICO: Scartiamo le BOZZE
+                if (entry.tipo === 'ORDINE' && entry.isEseguito !== false && entry.items) {
+                   entry.items.forEach(item => {
+                      tempCampaigns.forEach(c => {
+                          if (item.codice === c.sku || item.descrizione.toLowerCase().includes(c.sku.toLowerCase())) {
+                              // Controlliamo il periodo in modo rigoroso
+                              const isValid = c.periodi.some(p => {
+                                  const orderDate = entry.data.split('T')[0];
+                                  const startDate = p.dataInizio.split('T')[0];
+                                  const endDate = p.dataFine ? p.dataFine.split('T')[0] : null;
+                                  
+                                  return orderDate >= startDate && (!endDate || orderDate <= endDate);
+                              });
+                              if(isValid) {
+                                  campaignEarned += (item.quantita * c.valoreBonus);
+                              }
+                          }
+                      });
+                   });
+                }
+              });
+            });
 
             return (
               <div key={campaign.id} className="bg-white border border-purple-100 rounded-[2rem] p-5 shadow-sm relative overflow-hidden hover:shadow-md transition-shadow">
