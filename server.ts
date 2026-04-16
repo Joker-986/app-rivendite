@@ -659,6 +659,54 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
   }
 });
 
+// --- NUOVA ROTTA SANDBOX: CODICE ISTAT PAGINE BIANCHE (CORRETTA) ---
+app.post('/api/logista', async (req, res) => {
+  const { comune } = req.body;
+  if (!comune) return res.status(400).json({ error: 'Comune mancante' });
+
+  try {
+    const url = `https://www.paginebianche.it/codice-istat?dv=${encodeURIComponent(comune)}`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const results = [];
+
+    // CASO A: Risultati Multipli (Lista)
+    if ($('.box-dis__item').length > 0) {
+      $('.box-dis__item').each((i, el) => {
+        const istat = $(el).find('span.result-cap').text().trim();
+        const localita = $(el).find('.result-localita').text().trim() || comune;
+        if (istat && /^\d{6}$/.test(istat)) {
+          results.push({ istat, localita });
+        }
+      });
+    } 
+    // CASO B: Risultato Singolo (Pagina Diretta)
+    else {
+      const istat = $('span.result-cap').first().text().trim();
+      let localita = "";
+      const parentText = $('span.result-cap').first().parent().text();
+      if (parentText.includes('Località:')) {
+        localita = parentText.split('Località:')[1].trim();
+      }
+      if (istat && /^\d{6}$/.test(istat)) {
+        results.push({ istat, localita: localita || comune });
+      }
+    }
+
+    if (results.length > 0) {
+      res.json({ results });
+    } else {
+      res.status(404).json({ error: `Nessun comune trovato per: ${comune}` });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

@@ -31,6 +31,7 @@ export interface Product {
   prezzoUnita: number;
   unita: 'Pezzi' | 'Stecche';
   attivo?: boolean;
+  categoria?: string;
 }
 
 // 2. IL CARRELLO (ORDER ITEM)

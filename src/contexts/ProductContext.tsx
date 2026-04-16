@@ -31,16 +31,47 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [products]);
 
   const addProduct = (p: Omit<Product, 'id'>) => {
-    const newProduct = { ...p, id: Date.now().toString() };
-    setProducts(prev => [...prev, newProduct]);
+    setProducts(prev => {
+      // 1. Controllo anti-duplicato (case-insensitive)
+      const skuExists = prev.some(prod => prod.codice.trim().toUpperCase() === p.codice.trim().toUpperCase());
+      if (skuExists) {
+        alert(`Errore: Il codice SKU "${p.codice}" esiste già in magazzino. Scegli un codice univoco.`);
+        return prev; // Blocca il salvataggio
+      }
+      
+      // 2. Creazione sicura (attivo di default se non specificato)
+      const newProduct: Product = { 
+        ...p, 
+        id: Date.now().toString(),
+        attivo: p.attivo !== false 
+      };
+      return [...prev, newProduct];
+    });
   };
 
   const updateProduct = (id: string, p: Partial<Product>) => {
-    setProducts(prev => prev.map(prod => prod.id === id ? { ...prod, ...p } : prod));
+    setProducts(prev => {
+      // 1. Controllo anti-duplicato solo se si sta modificando il codice SKU
+      if (p.codice) {
+        const skuExists = prev.some(prod => 
+          prod.id !== id && // Escludi se stesso
+          prod.codice.trim().toUpperCase() === p.codice!.trim().toUpperCase()
+        );
+        if (skuExists) {
+          alert(`Errore: Il codice SKU "${p.codice}" è già assegnato a un altro prodotto.`);
+          return prev; // Blocca il salvataggio
+        }
+      }
+      
+      // 2. Aggiornamento
+      return prev.map(prod => prod.id === id ? { ...prod, ...p } : prod);
+    });
   };
 
   const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(prod => prod.id !== id));
+    // FIX CRITICO: Soft Delete. Non cancelliamo l'oggetto, lo rendiamo invisibile.
+    // Questo preserva l'integrità dei vecchi ordini e delle campagne.
+    setProducts(prev => prev.map(prod => prod.id === id ? { ...prod, attivo: false } : prod));
   };
 
   return (

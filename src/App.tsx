@@ -9,6 +9,7 @@ import AgendaTab from './components/AgendaTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
+import CodiceLogistaTab from './components/CodiceLogistaTab';
 import SettingsModal from './components/SettingsModal';
 import ModalContainer from './components/ModalContainer';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
@@ -1655,6 +1656,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
             <button id="tab-crm" onClick={() => handleTabChange('crm')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>CRM ({crmList.length})</button>
             <button id="tab-store" onClick={() => handleTabChange('store')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Store ({storeList.length})</button>
             <button id="tab-magazzino" onClick={() => { handleTabChange('magazzino'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'magazzino' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Magazzino</button>
+            <button id="tab-logista" onClick={() => handleTabChange('logista')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'logista' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Cod. Logista</button>
             
             {provincesInCrm.map(prov => (
               <button key={prov} id={`tab-prov_${prov}`} onClick={() => handleTabChange(`prov_${prov}`)} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{prov}</button>
@@ -1892,7 +1894,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && (
+            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -1948,7 +1950,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
             )}
 
               {/* Filtri Comuni */}
-              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && (
+              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2130,6 +2132,8 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
               />
+            ) : activeTab === 'logista' ? (
+              <CodiceLogistaTab />
             ) : activeTab === 'magazzino' ? (
               <WarehouseTab />
             ) : activeTab === 'giro' ? (
