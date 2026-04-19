@@ -296,7 +296,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   startVisita,
   endVisita
 }) => {
-  const { openShare, openQuickEdit, openRevisitModal, openKpiAssign, setSelectedRivenditaId } = useModals();
+  const { openShare, openDualShare, openQuickEdit, openRevisitModal, openKpiAssign, setSelectedRivenditaId } = useModals();
   const { missions } = useStrategy();
   const id = getRivenditaId(res);
 
@@ -326,6 +326,21 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const [showTimeline, setShowTimeline] = useState(false);
   const [tornoPiuTardi, setTornoPiuTardi] = useState(false);
   
+  // Estrazione sicura dell'ultima nota (Priorità: Ultima in History -> Root extra -> Rubrica)
+  const displayNote = React.useMemo(() => {
+    const id = getRivenditaId(res);
+    const rubricaEntry = rubrica?.[id];
+    
+    // 1. Cerca PRIMA l'ultima nota disponibile nello storico (invertendo l'array)
+    const historyList = extra?.history || rubricaEntry?.history || [];
+    const lastHistoryNote = historyList.find(h => h.note?.trim())?.note;
+    
+    // 2. Seleziona la più recente, altrimenti fallback ai vecchi campi radice
+    const foundNote = lastHistoryNote || extra?.note || rubricaEntry?.note;
+    
+    return foundNote?.trim();
+  }, [res, extra, rubrica]);
+
   // Per disabilitare il bottone down correttamente
   const isLastInGiro = activeTab === 'giro' && idx === (res as any)._giroLength - 1;
 
@@ -333,58 +348,10 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   // Definisce se i dati del CRM devono essere mostrati (vero sia nel CRM che nel Giro)
   const showCrmData = isCrmTab || activeTab === 'giro';
 
-  const shareText = React.useMemo(() => {
-    const enriched = enrichedDetails;
-    let text = `*${res.isStore ? 'STORE' : 'RIVENDITA'} #${res.storeNumber || res['Num. Rivendita']}*\n`;
-    text += `Indirizzo: ${toTitleCase(res['Indirizzo'])}${capToDisplay ? `, ${capToDisplay}` : ''}\n`;
-    text += `Comune: ${(res['Comune'] || '').toUpperCase()} (${res['Prov.']})\n`;
-    
-    if (extra.stato) text += `Stato CRM: ${extra.stato}\n`;
-    if (extra.riferimento) text += `Referente: ${extra.riferimento}\n`;
-    if (extra.pIva) text += `P. IVA: ${extra.pIva}\n`;
-    if (extra.codiceUnivoco) text += `Codice SDI: ${extra.codiceUnivoco}\n`;
-    if (extra.telefono || (enriched && enriched.phone)) text += `Telefono: ${extra.telefono || enriched?.phone}\n`;
-    if (extra.mail || (enriched && enriched.email)) text += `Email: ${extra.mail || enriched?.email}\n`;
-    if (enriched && enriched.openingHours) text += `Orari: ${enriched.openingHours}\n`;
-
-    // Storico Visite
-    if (extra.visitata === 'Si' && extra.dataVisita) {
-      text += `Ultima Visita: ${new Date(extra.dataVisita).toLocaleDateString('it-IT')}${extra.oraVisita ? ' alle ' + extra.oraVisita : ''}\n`;
-    } else if (extra.lastDataVisita) {
-      text += `Ultima Visita: ${new Date(extra.lastDataVisita).toLocaleDateString('it-IT')}${extra.lastOraVisita ? ' alle ' + extra.lastOraVisita : ''}\n`;
-    }
-    if (extra.dataRivisita) {
-      text += `Prossima Visita: ${new Date(extra.dataRivisita).toLocaleDateString('it-IT')}${extra.oraRivisita ? ' alle ' + extra.oraRivisita : ''}\n`;
-    }
-
-    // Ordini
-    if (extra.richiestaOrdine) {
-      text += `\n--- ORDINE ---\n`;
-      text += `Stato: ${extra.ordineEvaso ? '✅ Evaso' : '⏳ DA EVADERE'}\n`;
-      if (extra.dataOrdine) text += `Inserito il: ${new Date(extra.dataOrdine).toLocaleDateString('it-IT')}\n`;
-      if (extra.noteOrdine) text += `Articoli: ${extra.noteOrdine}\n`;
-    }
-
-    if (extra.note || (enriched && enriched.notes)) text += `\nNote: ${extra.note || enriched?.notes}\n`;
-
-    return text.trim();
-  }, [res, extra, enrichedDetails, id]);
-
   const handleShare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (navigator.share) {
-      navigator.share({
-        text: shareText
-      }).catch((err) => {
-        if (err.name !== 'AbortError') {
-          openShare(shareText);
-        }
-      });
-    } else {
-      openShare(shareText);
-    }
+    openDualShare(res, extra, enrichedDetails);
   };
 
   return (
@@ -635,10 +602,34 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         </div>
       )}
 
-      {extra.note && (
-        <div className="p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-slate-600 italic mt-2">
-          <div className="flex items-center gap-1.5 mb-1 text-amber-700 font-bold uppercase tracking-wider text-[9px]"><BookOpen className="w-3 h-3" /> Note</div>
-          <p className="leading-relaxed">{extra.note}</p>
+      {displayNote && (
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const id = getRivenditaId(res);
+            
+            // Cerca nell'array history se esiste un evento con questa esatta nota
+            const historyList = extra?.history || rubrica?.[id]?.history || [];
+            const foundIndex = historyList.findIndex(h => h.note?.trim() === displayNote);
+            
+            if (foundIndex >= 0) {
+              // Nota trovata nello storico: apriamo il modale puntando esattamente a quell'evento
+              openQuickEdit(historyList[foundIndex].tipo, id, extra, foundIndex);
+            } else {
+              // Fallback: è una nota legacy (nella root di extra o rubrica). 
+              // Apriamo il modale in modalità 'VISITA' creando un evento temporaneo o passando undefined all'indice se supportato.
+              openQuickEdit('VISITA', id, extra); 
+            }
+          }}
+          className="mt-3 bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 shadow-sm cursor-pointer hover:bg-amber-100 transition-all active:scale-[0.98] group"
+        >
+          <div className="flex items-start gap-2">
+            <Edit3 className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0 group-hover:text-amber-600 transition-colors" />
+            <p className="text-[11px] font-medium text-amber-800 leading-snug line-clamp-2">
+              {displayNote}
+            </p>
+          </div>
         </div>
       )}
       

@@ -22,6 +22,13 @@ export interface QuickEditModalState {
   targetIndex?: number;
 }
 
+export interface DualShareModalState {
+  isOpen: boolean;
+  res: any | null;
+  extra: any | null;
+  enrichedDetails: any | null;
+}
+
 // --- INTERFACCIA DEL CONTESTO ---
 interface ModalContextType {
   // Confirm Modal
@@ -33,6 +40,11 @@ interface ModalContextType {
   shareModal: ShareModalState;
   openShare: (text: string) => void;
   closeShare: () => void;
+
+  // Dual Share Modal (Sviluppo Parallelo)
+  dualShareModal: DualShareModalState;
+  openDualShare: (res: any, extra: any, enrichedDetails?: any) => void;
+  closeDualShare: () => void;
 
   // Quick Edit Modal
   quickEditModal: QuickEditModalState;
@@ -64,6 +76,10 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     isOpen: false, text: ''
   });
 
+  const [dualShareModal, setDualShareModal] = useState<DualShareModalState>({
+    isOpen: false, res: null, extra: null, enrichedDetails: null
+  });
+
   const [quickEditModal, setQuickEditModal] = useState<QuickEditModalState>({
     isOpen: false, editType: null, rivenditaId: '', extra: {}
   });
@@ -79,6 +95,11 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Funzioni Share
   const openShare = (text: string) => setShareModal({ isOpen: true, text });
   const closeShare = () => setShareModal(prev => ({ ...prev, isOpen: false }));
+
+  const openDualShare = (res: any, extra: any, enrichedDetails?: any) => 
+    setDualShareModal({ isOpen: true, res, extra, enrichedDetails });
+  const closeDualShare = () => 
+    setDualShareModal(prev => ({ ...prev, isOpen: false }));
 
   // Funzioni Quick Edit
   const openQuickEdit = (type: 'VISITA' | 'ORDINE' | 'HOSTESS', id: string, extra: any, index?: number) => {
@@ -98,6 +119,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <ModalContext.Provider value={{
       confirmModal, openConfirm, closeConfirm,
       shareModal, openShare, closeShare,
+      dualShareModal, openDualShare, closeDualShare,
       quickEditModal, openQuickEdit, closeQuickEdit,
       revisitModalId, openRevisitModal, closeRevisitModal,
       isKpiAssignOpen, openKpiAssign, closeKpiAssign,

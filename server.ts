@@ -659,6 +659,80 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
   }
 });
 
+// --- NUOVA ROTTA DUAL MESSAGING (FOLLOW-UP AI) ---
+app.post('/api/followup', async (req, res) => {
+  try {
+    const { rivendita, extra, noteLibere, enrichedDetails, aiOptions } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY non configurata.' });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    // Estrazione dati chiave per il prompt
+    const nomeReferente = extra?.riferimento || 'Referente';
+    const hasName = nomeReferente.toLowerCase() !== 'referente';
+
+    // 1. COSTRUZIONE MODULARE DEL SYSTEM PROMPT
+    let systemInstructions = `Sei un esperto agente commerciale che scrive a un cliente tabaccaio/negoziante su WhatsApp.
+    REGOLA 1: Se c'è il nome del referente (${hasName ? nomeReferente : 'NESSUNO'}), inizia con "Ciao ${nomeReferente},". Altrimenti inizia con "Ciao,". Non nominare l'azienda.
+    REGOLA 2: NIENTE EMOJI. Zero. Vietate.
+    REGOLA 3: Niente elenchi puntati o numerati. Solo paragrafi discorsivi e brevi.
+    REGOLA 4: Lunghezza massima 50-60 parole. Vai dritto al punto.
+    REGOLA 5: Sii persuasivo ma mai invadente.
+    
+    L'utente vuole focalizzare il messaggio su questi argomenti specifici (IGNORA IL RESTO):
+    `;
+
+    if (aiOptions?.note && noteLibere) {
+      systemInstructions += `- NOTA OPERATIVA: Basa il corpo principale del messaggio su questa nota: "${noteLibere}". Fai una domanda aperta o una chiamata all'azione per spingere alla chiusura su questo punto.\n`;
+    }
+    
+    if (aiOptions?.ordini) {
+      const lastOrder = extra?.history?.find((h: any) => h.tipo === 'ORDINE');
+      if (lastOrder) {
+        systemInstructions += `- ORDINI: Ricorda al cliente l'ultimo ordine del ${lastOrder.data} di €${lastOrder.importo} (${lastOrder.isEseguito ? 'Evaso' : 'In lavorazione/Bozza'}).\n`;
+      } else {
+        systemInstructions += `- ORDINI: Chiedi cortesemente se ha bisogno di un riassortimento dei prodotti mancanti.\n`;
+      }
+    }
+
+    if (aiOptions?.visite) {
+      const lastDate = extra?.dataVisita || extra?.lastDataVisita;
+      if (lastDate) {
+        systemInstructions += `- VISITE: Cita la visita effettuata il ${lastDate}.\n`;
+      }
+    }
+
+    if (aiOptions?.hostess) {
+      systemInstructions += `- HOSTESS: Chiedi un feedback sull'ultima attività della hostess in store o se serve programmarne una nuova.\n`;
+    }
+
+    const finalPrompt = `Scrivi il messaggio WhatsApp seguendo alla lettera le istruzioni di sistema e usando questi dati per il contesto (se richiesti):\nDati Rivendita: ${JSON.stringify(rivendita)}\nNote: ${noteLibere}`;
+
+    // 2. CHIAMATA A GEMINI
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: finalPrompt,
+      config: {
+        systemInstruction: systemInstructions,
+        temperature: 0.7, // Tono naturale, leggermente creativo ma sotto controllo
+      }
+    });
+
+    if (response.text) {
+      res.json({ message: response.text });
+    } else {
+      res.status(500).json({ error: 'Nessuna risposta dal modello AI.' });
+    }
+
+  } catch (error: any) {
+    console.error('Errore /api/followup:', error);
+    res.status(500).json({ error: 'Errore durante la generazione del messaggio AI.', details: error.message });
+  }
+});
+
 // --- NUOVA ROTTA SANDBOX: CODICE ISTAT PAGINE BIANCHE (CORRETTA) ---
 app.post('/api/logista', async (req, res) => {
   const { comune } = req.body;

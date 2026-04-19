@@ -34,3 +34,24 @@ export async function enrichRivendita(rivendita: any): Promise<EnrichedDetails> 
     };
   }
 }
+
+// --- NUOVO MOTORE DUAL MESSAGING (Sviluppo Parallelo) ---
+export async function generateFollowUpMessage(rivendita: any, extra: any, noteLibere: string, enrichedDetails: any, aiOptions?: any): Promise<string> {
+  try {
+    const response = await fetch('/api/followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rivendita, extra, noteLibere, enrichedDetails, aiOptions })
+    });
+
+    if (!response.ok) {
+      throw new Error('Errore di rete sulla rotta followup');
+    }
+
+    const data = await response.json();
+    return data.message || "Errore nella generazione del messaggio.";
+  } catch (error) {
+    console.error("Error calling /api/followup:", error);
+    return "⚠️ Impossibile contattare l'Intelligenza Artificiale. Verifica la connessione o riprova più tardi.";
+  }
+}
