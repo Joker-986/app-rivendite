@@ -576,86 +576,88 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   const ai = new GoogleGenAI({ apiKey });
 
-  try {
-    // TENTATIVO 1: GEMINI CON RICERCA WEB
-    const responseWeb = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }], // <-- Ricerca Web Attivata
-        temperature: 0.1
-        // RIMOSSI responseMimeType e responseSchema per compatibilità con googleSearch
-      }
-    });
+  // --- CASCATA MULTI-MODELLO (Waterfall Array) ---
+  const waterfallModels = [
+    { id: "gemini-3-flash", name: "Gemini 3 Flash" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+    { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite" },
+    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" }
+  ];
 
-    let responseText = responseWeb.text;
-    
-    // Pulizia del markdown prima del parsing
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.replace(/^```json/, '').replace(/```$/, '').trim();
-    } else if (responseText.startsWith('```')) {
-      responseText = responseText.replace(/^```/, '').replace(/```$/, '').trim();
-    }
+  let finalJson: any = null;
+  let success = false;
+  let usedModelName = "";
+  let isFallback = false;
 
-    const dataWeb = JSON.parse(responseText || '{}');
-    
-    return res.json({
-      openingHours: dataWeb.openingHours || "Non disponibile",
-      phone: (dataWeb.phone || "Non disponibile").toString().replace(/\s+/g, ''),
-      zona: dataWeb.zona || "Non disponibile",
-      notes: dataWeb.notes || "",
-      confidence: Number(dataWeb.confidence) || 0,
-      engine: "Gemini 3 Flash (Web)"
-    });
-
-  } catch (errorWeb: any) {
-    console.warn("Ricerca Web fallita, tento Gemini Offline...", errorWeb.message);
-    
+  for (let i = 0; i < waterfallModels.length; i++) {
+    const currentModel = waterfallModels[i];
     try {
-      // TENTATIVO 2: GEMINI OFFLINE (Senza tools)
-      const responseOffline = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+      console.log(`[AI Enrich] Tentativo ${i + 1}/${waterfallModels.length} con: ${currentModel.name}`);
+      
+      const response = await ai.models.generateContent({
+        model: currentModel.id,
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,
-          // NESSUN TOOL INSERITO: Interroga solo il database interno
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              openingHours: { type: Type.STRING }, phone: { type: Type.STRING },
-              zona: { type: Type.STRING }, notes: { type: Type.STRING }, confidence: { type: Type.NUMBER }
-            },
-            required: ["openingHours", "phone", "zona", "notes", "confidence"]
-          }
+          tools: [{ googleSearch: {} }],
+          temperature: 0.1
         }
       });
 
-      let textOffline = responseOffline.text || '{}';
-      textOffline = textOffline.replace(/```json/g, '').replace(/```/g, '').trim();
-      const dataOffline = JSON.parse(textOffline || '{}');
+      let responseText = response.text || "{}";
       
-      return res.json({
-        openingHours: dataOffline.openingHours || "Non disponibile",
-        phone: (dataOffline.phone || "Non disponibile").toString().replace(/\s+/g, ''),
-        zona: dataOffline.zona || "Non disponibile",
-        notes: `[Modalità Offline] ${dataOffline.notes || ''}`.trim(),
-        confidence: Number(dataOffline.confidence) || 0,
-        engine: "Gemini 3 Flash (Offline)"
-      });
+      // PULIZIA REGEX CORAZZATA (Cattura il JSON ovunque si trovi nel testo)
+      let cleanedText = responseText.trim();
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedText = jsonMatch[0];
+      }
 
-    } catch (errorOffline: any) {
-      console.error("Fallimento totale Gemini:", errorOffline.message);
+      finalJson = JSON.parse(cleanedText);
       
-      // TENTATIVO 3: FALLBACK ESTREMO
-      return res.json({
-        openingHours: "Non disponibile", phone: "Non disponibile", zona: "Non disponibile",
-        notes: "Servizio AI temporaneamente non disponibile.",
-        confidence: 0,
-        engine: "Sistema Disconnesso"
-      });
+      success = true;
+      usedModelName = currentModel.name;
+      isFallback = (i > 0); 
+      console.log(`[AI Enrich] Successo con ${currentModel.name}`);
+      break; 
+
+    } catch (error: any) {
+      console.warn(`[AI Enrich] Errore con ${currentModel.name}:`, error.status || error.message);
+
+      const errorMsg = error.message ? error.message.toLowerCase() : "";
+      const isRateLimit = error.status === 429 || errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('too many');
+      const isServerError = error.status >= 500 || errorMsg.includes('503') || errorMsg.includes('unavailable');
+
+      if (isRateLimit || isServerError || !error.status) {
+        console.log(`[AI Enrich] Limite o server giù. Fallback in corso...`);
+        if (i < waterfallModels.length - 1) continue; 
+      }
+      
+      console.error(`[AI Enrich] Errore irreversibile o fine cascata.`);
+      break; 
     }
+  }
+
+  if (success && finalJson) {
+    return res.json({
+      openingHours: finalJson.openingHours || "Non disponibile",
+      phone: (finalJson.phone || "Non disponibile").toString().replace(/\s+/g, ''),
+      zona: finalJson.zona || "Non disponibile",
+      notes: finalJson.notes || "",
+      confidence: Number(finalJson.confidence) || 0,
+      modelUsed: usedModelName,
+      fallbackTriggered: isFallback
+    });
+  } else {
+    return res.json({
+      openingHours: "Non disponibile",
+      phone: "Non disponibile",
+      zona: "Non disponibile",
+      notes: "⚠️ Impossibile recuperare dati AI dopo vari tentativi.",
+      confidence: 0,
+      modelUsed: "Nessuno",
+      fallbackTriggered: true
+    });
   }
 });
 

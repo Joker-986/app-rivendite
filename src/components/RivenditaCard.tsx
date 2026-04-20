@@ -684,7 +684,16 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
       {enrichedDetails && (
         <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-brand-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex justify-between items-center mb-3">
-            <span className="text-[9px] font-black text-brand-600 uppercase">Analisi {enrichedDetails.engine || 'AI'}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black text-brand-600 uppercase">
+                Analisi {enrichedDetails.modelUsed || enrichedDetails.engine || 'AI'}
+              </span>
+              {enrichedDetails.fallbackTriggered && (
+                <span className="bg-amber-100 text-amber-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm ring-1 ring-amber-200/50" title="Rete congestionata, usato modello di backup">
+                  Rete Intasata • Base
+                </span>
+              )}
+            </div>
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
               enrichedDetails.confidence > 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
             }`}>
