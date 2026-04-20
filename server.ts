@@ -576,11 +576,11 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   const ai = new GoogleGenAI({ apiKey });
 
-  // --- CASCATA MULTI-MODELLO (Waterfall Array) ---
+  // --- CASCATA MULTI-MODELLO UFFICIALE (ID di Sistema e Nomi Puliti UI) ---
   const waterfallModels = [
-    { id: "gemini-3-flash", name: "Gemini 3 Flash" },
+    { id: "gemini-3-flash-preview", name: "Gemini 3 Flash" },
+    { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite" },
     { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite" },
     { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" }
   ];
 
