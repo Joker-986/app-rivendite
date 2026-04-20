@@ -77,7 +77,10 @@ const DualShareModal = ({ shareModal, closeShare, showToast }: any) => {
 
     // 4. ULTIMA VISITA
     if (options.ultimaVisita) {
-      const lastDate = extra?.dataVisita || extra?.lastDataVisita;
+      // Cerca prima la data dell'ultima visita registrata nello storico
+      const historyVisita = extra?.history?.find((h: any) => h.tipo === 'VISITA' && h.data)?.data;
+      const lastDate = historyVisita || extra?.dataVisita || extra?.lastDataVisita;
+      
       if (lastDate) {
         text += `\n📅 --- ULTIMA VISITA ---\n`;
         text += `Effettuata il: ${new Date(lastDate).toLocaleDateString('it-IT')}\n`;
@@ -86,7 +89,10 @@ const DualShareModal = ({ shareModal, closeShare, showToast }: any) => {
 
     // 5. NOTE: L'ultima nota inserita
     if (options.note) {
-      const notaAgente = extra?.note?.trim();
+      // Cerca prima la nota più recente nello storico
+      const lastHistoryNote = extra?.history?.find((h: any) => h.note?.trim())?.note;
+      const notaAgente = (lastHistoryNote || extra?.note)?.trim();
+      
       if (notaAgente) {
         text += `\n📝 --- NOTE ---\n${notaAgente}\n`;
       }
