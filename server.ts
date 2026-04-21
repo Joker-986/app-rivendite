@@ -576,12 +576,11 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   const ai = new GoogleGenAI({ apiKey });
 
-  // --- CASCATA MULTI-MODELLO (Ottimizzata per API Free Tier) ---
+  // --- CASCATA MULTI-MODELLO (Versione Free Tier Blindata) ---
   const waterfallModels = [
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
-    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
-    { id: "gemini-1.5-flash-8b", name: "Gemini 1.5 Flash 8B" }
+    { id: "gemini-1.5-flash-latest", name: "Gemini 1.5 Flash" },
+    { id: "gemini-1.5-flash-8b-latest", name: "Gemini 1.5 Flash 8B" },
+    { id: "gemini-1.5-pro-latest", name: "Gemini 1.5 Pro" }
   ];
 
   let finalJson: any = null;
