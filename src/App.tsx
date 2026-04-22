@@ -10,6 +10,7 @@ import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
 import CodiceLogistaTab from './components/CodiceLogistaTab';
+import CalcolatoreInverso from './components/CalcolatoreInverso';
 import SettingsModal from './components/SettingsModal';
 import ModalContainer from './components/ModalContainer';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
@@ -1667,6 +1668,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
             <button id="tab-regia" onClick={() => { handleTabChange('regia'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'regia' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Regia</button>
             
             <button id="tab-statistiche" onClick={() => { handleTabChange('statistiche'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'statistiche' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Statistiche</button>
+            <button id="tab-calcolatore" onClick={() => handleTabChange('calcolatore')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'calcolatore' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Calcolatore</button>
           </div>
         </div>
       </nav>
@@ -1894,7 +1896,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && (
+            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -1950,7 +1952,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
             )}
 
               {/* Filtri Comuni */}
-              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && (
+              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2136,6 +2138,8 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
               <CodiceLogistaTab />
             ) : activeTab === 'magazzino' ? (
               <WarehouseTab />
+            ) : activeTab === 'calcolatore' ? (
+              <CalcolatoreInverso />
             ) : activeTab === 'giro' ? (
               viewMode === 'map' ? (
                 <MapView results={getSortedList} />
