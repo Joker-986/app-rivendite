@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package, Wand2, ShoppingBag } from 'lucide-react';
+import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package, Wand2, ShoppingBag, MoveRight, MoveLeft, EyeOff } from 'lucide-react';
 import MapView from './components/MapView';
 import RivenditaCard from './components/RivenditaCard';
 import GuideModal from './components/GuideModal';
 import ChangelogModal from './components/ChangelogModal';
 import StoreModal from './components/StoreModal';
 import AgendaTab from './components/AgendaTab';
+import NoteDiCreditoTab from './components/NoteDiCreditoTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
@@ -228,6 +229,33 @@ export default function App() {
     message: string;
     type: 'success' | 'error' | 'info';
   }>({ show: false, message: '', type: 'info' });
+
+  // --- LOGICA JIGGLE E RIORDINO TAB ---
+  const [isTabEditMode, setIsTabEditMode] = useState(false);
+  const [tabOrder, setTabOrder] = useState<string[]>(() => {
+    const saved = localStorage.getItem('customTabOrder');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [hiddenTabs, setHiddenTabs] = useState<string[]>(() => {
+    const saved = localStorage.getItem('hiddenTabs');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => { localStorage.setItem('customTabOrder', JSON.stringify(tabOrder)); }, [tabOrder]);
+  useEffect(() => { localStorage.setItem('hiddenTabs', JSON.stringify(hiddenTabs)); }, [hiddenTabs]);
+
+  const startLongPress = () => {
+    if (isTabEditMode) return;
+    longPressTimer.current = setTimeout(() => {
+      setIsTabEditMode(true);
+      if (navigator.vibrate) navigator.vibrate(50); // Vibrazione iOS/Android
+    }, 800);
+  };
+  const clearLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
 
   useEffect(() => {
     setCrmAnagrafiche(prev => {
@@ -1140,14 +1168,67 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
     ...storeList.map(res => (res['Prov.'] || '').toUpperCase())
   ])).sort(), [crmList, storeList]);
 
-  const getOrderedTabs = useCallback(() => {
-    const tabs = ['search', 'giro', 'agenda', 'crm', 'store', 'magazzino'];
-    provincesInCrm.forEach(p => tabs.push(`prov_${p}`));
-    tabs.push('rip');
-    tabs.push('regia');
-    tabs.push('statistiche');
-    return tabs;
-  }, [provincesInCrm]);
+  // --- MOTORE DI ORDINAMENTO E JIGGLE ---
+  const allAvailableTabsObj = useMemo(() => {
+    const fixed = [
+      { id: 'search', label: 'Cerca', count: 0 },
+      { id: 'giro', label: 'Giro', count: giroVisiteList.length },
+      { id: 'agenda', label: 'Agenda', count: 0 },
+      { id: 'rimborsi', label: 'Rimborsi', count: 0 },
+      { id: 'crm', label: 'CRM', count: crmList.length },
+      { id: 'store', label: 'Store', count: storeList.length },
+      { id: 'magazzino', label: 'Magazzino', count: 0 },
+      { id: 'logista', label: 'Cod. Logista', count: 0 }
+    ];
+    const provs = provincesInCrm.map(prov => ({
+      id: `prov_${prov}`,
+      label: prov,
+      count: 0
+    }));
+    const end = [
+      { id: 'rip', label: 'RIP', count: ripList.length },
+      { id: 'regia', label: 'Regia', count: 0 },
+      { id: 'statistiche', label: 'Statistiche', count: 0 },
+      { id: 'calcolatore', label: 'Calcolatore', count: 0 }
+    ];
+    return [...fixed, ...provs, ...end];
+  }, [giroVisiteList.length, crmList.length, storeList.length, ripList.length, provincesInCrm]);
+
+  const orderedTabsList = useMemo(() => {
+    let base = [...allAvailableTabsObj];
+    if (tabOrder.length > 0) {
+      base.sort((a, b) => {
+        const iA = tabOrder.indexOf(a.id);
+        const iB = tabOrder.indexOf(b.id);
+        if (iA === -1 && iB === -1) return 0;
+        if (iA === -1) return 1;
+        if (iB === -1) return -1;
+        return iA - iB;
+      });
+    }
+    return base;
+  }, [allAvailableTabsObj, tabOrder]);
+
+  const moveTab = (id: string, direction: 'left' | 'right') => {
+    const currentOrder = orderedTabsList.map(t => t.id);
+    const index = currentOrder.indexOf(id);
+    if (index === -1) return;
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= currentOrder.length) return;
+    
+    const newOrder = [...currentOrder];
+    [newOrder[index], newOrder[newIndex]] = [newOrder[newIndex], newOrder[index]];
+    setTabOrder(newOrder);
+    if (navigator.vibrate) navigator.vibrate(30);
+  };
+
+  const toggleTabVisibility = (id: string) => {
+    setHiddenTabs(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+    if (navigator.vibrate) navigator.vibrate(30);
+  };
+
+  const visibleTabs = orderedTabsList.filter(t => !hiddenTabs.includes(t.id));
+  const hasHiddenTabs = hiddenTabs.length > 0;
 
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -1155,28 +1236,25 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
     setRivenditaFilter('');
     setComuneFilter('');
     setZonaFilter('');
-    if (tab === 'giro') {
-      setRubricaSort('none');
-    }
+    if (tab === 'giro') setRubricaSort('none');
     window.scrollTo(0, 0);
   }, []);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
     if (activeTab === 'giro' && viewMode === 'map') return;
-    
-    const tabs = getOrderedTabs();
+    const tabs = visibleTabs.map(t => t.id);
     const currentIndex = tabs.indexOf(activeTab);
-    let nextTab = activeTab;
+    if (currentIndex === -1) return;
     
+    let nextTab = activeTab;
     if (direction === 'left') {
-      const nextIndex = (currentIndex + 1) % tabs.length;
-      nextTab = tabs[nextIndex];
+      nextTab = tabs[(currentIndex + 1) % tabs.length];
     } else if (direction === 'right') {
-      const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      nextTab = tabs[prevIndex];
+      nextTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
     }
     handleTabChange(nextTab);
-  }, [activeTab, getOrderedTabs, handleTabChange, viewMode]);
+  }, [activeTab, visibleTabs, handleTabChange, viewMode]);
+  // ------------------------------------
 
   const moveCard = useCallback((index: number, direction: 'up' | 'down') => {
     setGiroVisite(prev => {
@@ -1650,30 +1728,110 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans" style={{ overscrollBehaviorY: 'contain' }}>
       {/* Top Navigation Bar */}
-      <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-30">
-        <div className="max-w-md mx-auto px-3 py-3">
-          <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] [will-change:scroll-position] whitespace-nowrap">
-            <button id="tab-search" onClick={() => handleTabChange('search')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'search' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Cerca</button>
-            <button id="tab-giro" onClick={() => handleTabChange('giro')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'giro' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Giro ({giroVisiteList.length})</button>
-            <button id="tab-agenda" onClick={() => handleTabChange('agenda')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'agenda' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Agenda</button>
-            <button id="tab-crm" onClick={() => handleTabChange('crm')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'crm' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>CRM ({crmList.length})</button>
-            <button id="tab-store" onClick={() => handleTabChange('store')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'store' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Store ({storeList.length})</button>
-            <button id="tab-magazzino" onClick={() => { handleTabChange('magazzino'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'magazzino' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Magazzino</button>
-            <button id="tab-logista" onClick={() => handleTabChange('logista')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'logista' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Cod. Logista</button>
-            
-            {provincesInCrm.map(prov => (
-              <button key={prov} id={`tab-prov_${prov}`} onClick={() => handleTabChange(`prov_${prov}`)} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === `prov_${prov}` ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{prov}</button>
+      {/* Top Navigation Bar - Clean UI */}
+      <nav className="sticky top-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-b border-slate-200 z-40 transition-all">
+        <div className="max-w-md mx-auto px-3 py-3 relative">
+          <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden p-1 scroll-smooth [webkit-overflow-scrolling:touch] [transform:translateZ(0)] whitespace-nowrap">
+            {visibleTabs.map((tab) => (
+              <button 
+                  key={`nav-${tab.id}`}
+                  id={`tab-${tab.id}`} 
+                  onClick={() => handleTabChange(tab.id)}
+                  onTouchStart={startLongPress}
+                  onTouchEnd={clearLongPress}
+                  onMouseDown={startLongPress}
+                  onMouseUp={clearLongPress}
+                  onMouseLeave={clearLongPress}
+                  className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all select-none ${
+                    activeTab === tab.id 
+                      ? (tab.id === 'rimborsi' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'bg-brand-600 text-white shadow-lg shadow-brand-100')
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label} {tab.count > 0 ? `(${tab.count})` : ''}
+              </button>
             ))}
-
-            <button id="tab-rip" onClick={() => handleTabChange('rip')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'rip' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>RIP ({ripList.length})</button>
             
-            <button id="tab-regia" onClick={() => { handleTabChange('regia'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'regia' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Regia</button>
-            
-            <button id="tab-statistiche" onClick={() => { handleTabChange('statistiche'); setRivenditaFilter(''); setComuneFilter(''); }} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'statistiche' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Statistiche</button>
-            <button id="tab-calcolatore" onClick={() => handleTabChange('calcolatore')} className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all ${activeTab === 'calcolatore' ? 'bg-brand-600 text-white shadow-lg shadow-brand-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Calcolatore</button>
+            {hasHiddenTabs && (
+              <div className="relative flex-none ml-1 border-l border-slate-200 pl-2">
+                <button onClick={() => setShowMoreMenu(!showMoreMenu)} className={`px-5 py-3 text-sm font-bold rounded-2xl flex items-center gap-1.5 transition-all ${showMoreMenu ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                  Altro {showMoreMenu ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* DROPDOWN MENU - Spostato fuori dall'overflow-x-auto */}
+          {showMoreMenu && hasHiddenTabs && (
+            <>
+              {/* Overlay invisibile per chiudere cliccando fuori */}
+              <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)}></div>
+              <div className="absolute top-[100%] right-3 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2">
+                <span className="text-[9px] font-black uppercase text-slate-400 px-3 py-1.5 tracking-widest border-b border-slate-50 mb-1">Tab Nascoste</span>
+                <div className="max-h-[60vh] overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                  {orderedTabsList.filter(t => hiddenTabs.includes(t.id)).map(tab => (
+                    <button key={`hidden-nav-${tab.id}`} onClick={() => { handleTabChange(tab.id); setShowMoreMenu(false); }} className="w-full px-4 py-3 text-left text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-brand-600 rounded-xl flex justify-between items-center transition-colors">
+                      {tab.label} {tab.count > 0 && <span className="bg-slate-100 text-slate-500 font-black px-2 py-0.5 rounded-full text-[10px]">{tab.count}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </nav>
+
+      {/* MODALE DI RIORDINO VERTICALE (MOBILE FRIENDLY) */}
+      {isTabEditMode && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-200">
+          <div className="bg-slate-50 rounded-t-3xl shadow-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-300">
+            <div className="bg-white px-5 py-4 flex justify-between items-center border-b border-slate-100 shadow-sm z-10">
+               <div>
+                 <h3 className="font-black text-xl text-slate-800 tracking-tight">Personalizza Menu</h3>
+                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tieni premuto su una tab per aprire</span>
+               </div>
+               <button onClick={() => setIsTabEditMode(false)} className="bg-emerald-600 active:bg-emerald-700 text-white font-black uppercase tracking-widest px-5 py-3 rounded-xl shadow-md transition-transform active:scale-95 flex items-center gap-1">
+                 <CheckCircle2 className="w-4 h-4"/> Fatto
+               </button>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 p-4 pb-12 space-y-6">
+               <div>
+                 <h4 className="text-[10px] font-black uppercase text-brand-600 mb-3 tracking-widest flex items-center gap-1.5"><Layers className="w-3.5 h-3.5"/> In Uso (Usa le frecce per spostare)</h4>
+                 <div className="space-y-2">
+                   {visibleTabs.map((tab, idx) => (
+                      <div key={`edit-${tab.id}`} className="flex items-center justify-between bg-white border border-slate-200 p-2.5 rounded-2xl shadow-sm">
+                         <div className="flex items-center gap-3 pl-2 min-w-0">
+                           <GripVertical className="w-5 h-5 text-slate-300 shrink-0"/>
+                           <span className="font-black text-slate-700 text-[15px] truncate">{tab.label}</span>
+                         </div>
+                         <div className="flex gap-1.5 shrink-0">
+                           <button disabled={idx===0} onClick={() => moveTab(tab.id, 'left')} className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 disabled:opacity-30 active:bg-slate-200 active:scale-95 transition-all"><ChevronUp className="w-6 h-6"/></button>
+                           <button disabled={idx===visibleTabs.length-1} onClick={() => moveTab(tab.id, 'right')} className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 disabled:opacity-30 active:bg-slate-200 active:scale-95 transition-all"><ChevronDown className="w-6 h-6"/></button>
+                           <button onClick={() => toggleTabVisibility(tab.id)} className="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-xl flex items-center justify-center active:bg-red-200 active:scale-95 transition-all ml-1"><EyeOff className="w-5 h-5"/></button>
+                         </div>
+                      </div>
+                   ))}
+                 </div>
+               </div>
+
+               {hiddenTabs.length > 0 && (
+                 <div>
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest flex items-center gap-1.5"><EyeOff className="w-3.5 h-3.5"/> Tab Nascoste</h4>
+                   <div className="space-y-2">
+                     {orderedTabsList.filter(t => hiddenTabs.includes(t.id)).map(tab => (
+                        <div key={`edit-hidden-${tab.id}`} className="flex items-center justify-between bg-slate-100/50 border border-slate-200 border-dashed p-2.5 rounded-2xl">
+                           <span className="font-bold text-slate-500 pl-2">{tab.label}</span>
+                           <button onClick={() => toggleTabVisibility(tab.id)} className="px-5 py-3 bg-white border border-slate-200 text-slate-700 font-black rounded-xl text-[12px] uppercase tracking-wide flex items-center gap-2 shadow-sm active:scale-95 transition-all"><Plus className="w-4 h-4 text-emerald-500"/> Ripristina</button>
+                        </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-md mx-auto p-4 space-y-6 overflow-hidden" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
         <div 
@@ -1898,7 +2056,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && (
+            {activeTab !== 'regia' && activeTab !== 'statistiche' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && activeTab !== 'rimborsi' && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -1954,7 +2112,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
             )}
 
               {/* Filtri Comuni */}
-              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && (
+              {activeTab !== 'statistiche' && activeTab !== 'regia' && activeTab !== 'agenda' && activeTab !== 'magazzino' && activeTab !== 'logista' && activeTab !== 'calcolatore' && activeTab !== 'rimborsi' && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2120,6 +2278,15 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
                 setActiveTab={setActiveTab}
                 showToast={showToast}
                 onEditHistory={handleEditHistory}
+              />
+            ) : activeTab === 'rimborsi' ? (
+              <NoteDiCreditoTab 
+                rubrica={rubrica}
+                crmAnagrafiche={crmAnagrafiche}
+                stores={stores}
+                giroVisite={giroVisite}
+                onEditHistory={handleEditHistory}
+                showToast={showToast}
               />
             ) : activeTab === 'statistiche' ? (
               <StatsTab 

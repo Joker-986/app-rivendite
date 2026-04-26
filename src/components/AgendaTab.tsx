@@ -62,7 +62,8 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
              return acc + (item.prezzoApplicato * item.quantita * unita);
           }, 0);
           
-          const ndcObj = { id, riv, data: d, h, totaleCredito, originalIndex: h.originalIndex };
+          const isMismatch = h.isEseguito === true;
+          const ndcObj = { id, riv, data: d, h, totaleCredito, originalIndex: h.originalIndex, isMismatch };
           
           if (h.ndcEseguita) cNdc.push(ndcObj);
           else pNdc.push(ndcObj);
@@ -390,14 +391,19 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                 </div>
                 <div className="mt-2">
                   {pendingNdc.map((ndc, i) => (
-                    <div key={`pNdc-${i}`} className="bg-emerald-50/30 border border-emerald-200 rounded-2xl p-2.5 mb-3 shadow-sm">
+                    <div key={`pNdc-${i}`} className={`border rounded-2xl p-2.5 mb-3 shadow-sm transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : 'bg-emerald-50/30 border-emerald-200'}`}>
                       <div className="flex justify-between items-center mb-2 gap-2">
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <h3 className="font-black text-slate-800 text-[13px] truncate">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</h3>
                           <span className="text-[9px] font-bold text-slate-400 uppercase truncate">• {ndc.riv['Comune']}</span>
                         </div>
+                        {ndc.isMismatch && (
+                          <span className="bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1 shrink-0">
+                            <AlertOctagon className="w-3 h-3" /> ⚠️ ORDINE EVASO: RICHIEDI NdC!
+                          </span>
+                        )}
                       </div>
-                      <div className="flex flex-col p-1.5 rounded-lg border bg-white border-emerald-100">
+                      <div className={`flex flex-col p-1.5 rounded-lg border ${ndc.isMismatch ? 'bg-white border-red-200' : 'bg-white border-emerald-100'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <Receipt className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
