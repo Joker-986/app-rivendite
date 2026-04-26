@@ -60,6 +60,8 @@ export interface RivenditaHistoryEntry {
   dataEsecuzione?: string;  // Quando hai cliccato "Eseguito"
   visitaInizio?: string;
   visitaFine?: string;
+  ndcEseguita?: boolean;    // Flag archiviazione Nota di Credito
+  dataEsecuzioneNdC?: string; // Timestamp chiusura Nota di Credito
 }
 
 export interface MissionDetail {

@@ -683,22 +683,23 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
       {enrichedDetails && (
         <div className="mt-4 p-4 bg-slate-50/80 rounded-2xl border border-brand-100 space-y-4 animate-in fade-in zoom-in-95 duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-black text-brand-600 uppercase">
+          <div className="flex flex-col gap-2 mb-3 border-b border-brand-100/50 pb-2">
+            <div className="flex justify-between items-start gap-2">
+              <span className="text-[10px] font-black text-brand-700 uppercase tracking-tight leading-tight">
                 Analisi {enrichedDetails.modelUsed || enrichedDetails.engine || 'AI'}
               </span>
-              {enrichedDetails.fallbackTriggered && (
-                <span className="bg-amber-100 text-amber-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm ring-1 ring-amber-200/50" title="Rete congestionata, usato modello di backup">
-                  Rete Intasata • Base
-                </span>
-              )}
+              <span className={`shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${
+                enrichedDetails.confidence > 80 ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'
+              }`}>
+                {enrichedDetails.confidence > 0 ? `Affidabilità ${enrichedDetails.confidence}%` : 'Nessun Dato'}
+              </span>
             </div>
-            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-              enrichedDetails.confidence > 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-            }`}>
-              {enrichedDetails.confidence > 0 ? `Affidabilità: ${enrichedDetails.confidence}%` : 'Affidabilità: Nessun dato trovato'}
-            </span>
+            {enrichedDetails.fallbackTriggered && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                <span className="text-[8px] font-bold text-amber-600 uppercase tracking-widest">Rete lenta: usato modello di backup</span>
+              </div>
+            )}
           </div>
           
           <div className="flex items-start gap-3">

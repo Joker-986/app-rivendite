@@ -796,7 +796,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
   });
 }, []);
 
-  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string) => {
+  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => {
     setRubrica(prev => {
       const current = prev[id];
       if (!current || !current.history) return prev;
@@ -827,7 +827,9 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         ...(newItems ? { items: newItems } : {}),
         ...(newDataEvasione ? { dataEvasione: newDataEvasione } : {}),
         ...(visitaInizio ? { visitaInizio } : {}),
-        ...(visitaFine ? { visitaFine } : {})
+        ...(visitaFine ? { visitaFine } : {}),
+        ...(ndcEseguita !== undefined ? { ndcEseguita } : {}),
+        ...(dataEsecuzioneNdC ? { dataEsecuzioneNdC } : {})
       };
       
       setTimeout(() => reconcileHistoryData(id, newHistory), 0);

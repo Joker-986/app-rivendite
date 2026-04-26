@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   CalendarClock, UserCheck, ShoppingBag, ChevronRight, Edit3, 
   History, ChevronDown, CheckCircle2, Navigation, Filter, MapPin,
-  AlertOctagon, Zap, CalendarDays, Rocket
+  AlertOctagon, Zap, CalendarDays, Rocket, Receipt
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, handleNavigation, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
@@ -18,7 +18,7 @@ interface AgendaTabProps {
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
   showToast: (message: string, type?: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[]) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => void;
 }
 
 const getLocalMidnightTime = (dateStr: string) => {
@@ -36,6 +36,45 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
   const { openQuickEdit, openRevisitModal } = useModals();
   
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  
+  const { pendingNdc, completedNdc } = useMemo(() => {
+    const pNdc: any[] = [];
+    const cNdc: any[] = [];
+    const allRiv = [...crmAnagrafiche, ...stores, ...giroVisite];
+    
+    // OTTIMIZZAZIONE O(1): Creazione Dizionario forzando gli ID a stringa (Risolve il bug della lista vuota)
+    const rivenditeMap = new Map();
+    allRiv.forEach(r => rivenditeMap.set(String(getRivenditaId(r)), r));
+    
+    Object.entries(rubrica).forEach(([id, d]: [string, any]) => {
+      const riv = rivenditeMap.get(String(id));
+      if (!riv) return;
+      
+      const history = (d.history || []).map((h: any, index: number) => ({ ...h, originalIndex: index }));
+      
+      history.forEach((h: any) => {
+        if (h.tipo === 'ORDINE' && h.items && h.items.some((i: any) => i.isCredito)) {
+          const creditItems = h.items.filter((i: any) => i.isCredito);
+          
+          // FIX ARITMETICO: Inclusione del moltiplicatore (item.unita)
+          const totaleCredito = creditItems.reduce((acc: number, item: any) => {
+             const unita = item.unita || 1;
+             return acc + (item.prezzoApplicato * item.quantita * unita);
+          }, 0);
+          
+          const ndcObj = { id, riv, data: d, h, totaleCredito, originalIndex: h.originalIndex };
+          
+          if (h.ndcEseguita) cNdc.push(ndcObj);
+          else pNdc.push(ndcObj);
+        }
+      });
+    });
+    
+    return { 
+       pendingNdc: pNdc.sort((a, b) => new Date(a.h.data).getTime() - new Date(b.h.data).getTime()),
+       completedNdc: cNdc.sort((a, b) => new Date(b.h.dataEsecuzioneNdC || b.h.data).getTime() - new Date(a.h.dataEsecuzioneNdC || a.h.data).getTime())
+    };
+  }, [rubrica, crmAnagrafiche, stores, giroVisite]);
   const [showArchived, setShowArchived] = useState(false);
 
   const toggleFilter = (filter: string, isolate: boolean = false) => {
@@ -284,7 +323,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
         
         {/* Segmented Control Ultra-Compatto */}
         <div className="flex bg-slate-200/60 p-1 rounded-xl gap-1 flex-1 border border-slate-200">
-          {['ORDINI', 'HOSTESS', 'APPUNTAMENTI'].map((filter) => {
+          {['ORDINI', 'RIMBORSI', 'HOSTESS', 'APPUNTAMENTI'].map((filter) => {
             const isActive = activeFilters.includes(filter);
             
             let activeClasses = '';
@@ -293,6 +332,9 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
             if (filter === 'ORDINI') {
               activeClasses = 'bg-blue-600 text-white shadow-sm';
               Icon = ShoppingBag;
+            } else if (filter === 'RIMBORSI') {
+              activeClasses = 'bg-emerald-600 text-white shadow-sm';
+              Icon = Receipt;
             } else if (filter === 'HOSTESS') {
               activeClasses = 'bg-purple-600 text-white shadow-sm';
               Icon = UserCheck;
@@ -332,13 +374,55 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
       </div>
 
       <div className="px-1">
-        {bucketedGroups.length === 0 ? (
+        {(bucketedGroups.length === 0 && (!activeFilters.includes('RIMBORSI') || (pendingNdc.length === 0 && completedNdc.length === 0))) ? (
           <div className="bg-white p-8 rounded-2xl border border-slate-100 text-center space-y-3 mt-4">
             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto"><Filter className="w-8 h-8 text-slate-200" /></div>
             <p className="text-slate-500 font-medium text-sm">Nessuna attività per i filtri selezionati.</p>
           </div>
         ) : (
           <div className="space-y-6">
+            {activeFilters.includes('RIMBORSI') && pendingNdc.length > 0 && (
+              <div className="relative pt-4 mb-8">
+                <div className="absolute top-0 left-4 right-4 h-px bg-emerald-200"></div>
+                <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm"><Receipt className="w-3.5 h-3.5"/></div>
+                  <h3 className="font-black text-[12px] uppercase tracking-widest text-emerald-600">Da Rimborsare (To-Do)</h3>
+                </div>
+                <div className="mt-2">
+                  {pendingNdc.map((ndc, i) => (
+                    <div key={`pNdc-${i}`} className="bg-emerald-50/30 border border-emerald-200 rounded-2xl p-2.5 mb-3 shadow-sm">
+                      <div className="flex justify-between items-center mb-2 gap-2">
+                        <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                          <h3 className="font-black text-slate-800 text-[13px] truncate">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</h3>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase truncate">• {ndc.riv['Comune']}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col p-1.5 rounded-lg border bg-white border-emerald-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Receipt className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                            <span className="text-[11px] font-black text-emerald-900">€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[9px] truncate ml-1 text-emerald-600">Nota di Credito (da Ordine del {safeFormatDate(ndc.h.data, 'short')})</span>
+                          </div>
+                        </div>
+                        <div className="mt-1 pt-1 border-t border-emerald-50 flex justify-end">
+                          <button 
+                            onClick={() => {
+                              onEditHistory(ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true, getTodayLocalISO());
+                              showToast("Nota di Credito archiviata!", "success");
+                            }}
+                            className="text-emerald-600 font-black text-[10px] uppercase hover:underline ml-auto flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> ESEGUI
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {scaduti.length > 0 && (
               <div className="relative pt-4">
                 <div className="absolute top-0 left-4 right-4 h-px bg-red-200"></div>
@@ -383,14 +467,34 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
               </div>
             )}
 
-            {archivio.length > 0 && (
+            {(archivio.length > 0 || (activeFilters.includes('RIMBORSI') && completedNdc.length > 0 && showArchived)) && (
               <div className="relative pt-4 mt-8 opacity-75">
                 <div className="absolute top-0 left-4 right-4 h-px bg-slate-300"></div>
                 <div className="absolute -top-3 left-6 bg-slate-50 px-3 flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center shadow-sm"><History className="w-3.5 h-3.5"/></div>
                   <h3 className="font-black text-[12px] uppercase tracking-widest text-slate-500">Solo Archivio</h3>
                 </div>
-                <div className="mt-2">{archivio.map(renderCard)}</div>
+                <div className="mt-2">
+                  {activeFilters.includes('RIMBORSI') && completedNdc.length > 0 && (
+                    <div className="mb-4 space-y-2">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rimborsi Archiviati</h4>
+                      {completedNdc.map((ndc, i) => (
+                        <div key={`cNdc-${i}`} className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 shadow-sm">
+                           <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] font-bold text-slate-700">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</span>
+                              <div className="flex items-center gap-1 text-[9px] text-slate-500 mt-0.5">
+                                <Receipt className="w-3 h-3 text-emerald-500 shrink-0" />
+                                <span>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                                <span>• Eseguito il {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.dataEsecuzione || ndc.h.data)}</span>
+                              </div>
+                           </div>
+                           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {archivio.map(renderCard)}
+                </div>
               </div>
             )}
           </div>
