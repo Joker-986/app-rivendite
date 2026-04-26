@@ -768,15 +768,12 @@ export default function App() {
     showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : 'Attività salvata!', 'success');
   }, []);
 
-const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
-  const sorted = [...history].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  const lastVisita = sorted.find(h => h.tipo === 'VISITA');
-  const oggi = new Date();
-  const oggiStr = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`;
-  
-  setRubrica(prev => {
-    const current = prev[id];
-    if (!current) return prev;
+  // PURE FUNCTION per riconciliazione sincrona (FIX PERDITA DATI SYNC)
+  const getReconciledRivendita = (current: any, history: any[]) => {
+    const sorted = [...history].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    const lastVisita = sorted.find(h => h.tipo === 'VISITA');
+    const oggi = new Date();
+    const oggiStr = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`;
 
     let nuovoStatoVisitata = current.visitata;
     let newDataVisita = current.dataVisita || '';
@@ -810,19 +807,22 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
     }
 
     return {
-      ...prev,
-      [id]: {
-        ...current,
-        history: sorted,
-        visitata: nuovoStatoVisitata,
-        dataVisita: newDataVisita,
-        oraVisita: newOraVisita,
-        lastDataVisita: newLastDataVisita,
-        lastOraVisita: newLastOraVisita
-      }
+      ...current,
+      history: sorted,
+      visitata: nuovoStatoVisitata,
+      dataVisita: newDataVisita,
+      oraVisita: newOraVisita,
+      lastDataVisita: newLastDataVisita,
+      lastOraVisita: newLastOraVisita
     };
-  });
-}, []);
+  };
+
+  const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
+    setRubrica(prev => {
+      if (!prev[id]) return prev;
+      return { ...prev, [id]: getReconciledRivendita(prev[id], history) };
+    });
+  }, []);
 
   const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => {
     setRubrica(prev => {
@@ -832,7 +832,6 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
       
       let finalData = newHistory[index].data;
       if (newData && newOra) {
-        // Splittiamo la stringa "YYYY-MM-DD" e creiamo la data usando i componenti locali
         const [year, month, day] = newData.split('-').map(Number);
         const [hour, minute] = newOra.split(':').map(Number);
         const localDateTime = new Date(year, month - 1, day, hour, minute, 0);
@@ -840,7 +839,7 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         if (!isNaN(localDateTime.getTime())) {
           finalData = localDateTime.toISOString();
         } else {
-          finalData = `${newData}T${newOra}:00`; // Fallback in caso di browser obsoleti
+          finalData = `${newData}T${newOra}:00`;
         }
       }
 
@@ -860,10 +859,10 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
         ...(dataEsecuzioneNdC ? { dataEsecuzioneNdC } : {})
       };
       
-      setTimeout(() => reconcileHistoryData(id, newHistory), 0);
-      return { ...prev, [id]: { ...current, history: newHistory } };
+      // SALVATAGGIO SINCRONO ISTANTANEO (Addio delay, addio perdita dati nel sync)
+      return { ...prev, [id]: getReconciledRivendita(current, newHistory) };
     });
-  }, [reconcileHistoryData]);
+  }, []);
 
   const handleDeleteHistory = React.useCallback((id: string, index: number) => {
     setRubrica(prev => {
@@ -872,12 +871,10 @@ const reconcileHistoryData = React.useCallback((id: string, history: any[]) => {
       const newHistory = [...current.history];
       newHistory.splice(index, 1);
       
-      // Chiamata differita alla riconciliazione
-      setTimeout(() => reconcileHistoryData(id, newHistory), 0);
-      
-      return { ...prev, [id]: { ...current, history: newHistory } };
+      // SALVATAGGIO SINCRONO ISTANTANEO
+      return { ...prev, [id]: getReconciledRivendita(current, newHistory) };
     });
-  }, [reconcileHistoryData]);
+  }, []);
 
   const handleRubricaMultiUpdate = useCallback((id: string, updates: Partial<RivenditaExtra>) => {
     setRubrica(prev => {
