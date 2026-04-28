@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   CalendarClock, UserCheck, ShoppingBag, ChevronRight, Edit3, 
   History, ChevronDown, CheckCircle2, Navigation, Filter, MapPin,
-  AlertOctagon, Zap, CalendarDays, Rocket, Receipt
+  AlertOctagon, Zap, CalendarDays, Rocket, Receipt, Ticket
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, handleNavigation, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
@@ -18,7 +18,7 @@ interface AgendaTabProps {
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
   showToast: (message: string, type?: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
 }
 
 const getLocalMidnightTime = (dateStr: string) => {
@@ -55,6 +55,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
       history.forEach((h: any) => {
         if (h.tipo === 'ORDINE' && h.items && h.items.some((i: any) => i.isCredito)) {
           const creditItems = h.items.filter((i: any) => i.isCredito);
+          const isVoucher = creditItems.some((i: any) => i.isVoucher);
           
           // FIX ARITMETICO: Inclusione del moltiplicatore (item.unita)
           const totaleCredito = creditItems.reduce((acc: number, item: any) => {
@@ -63,7 +64,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
           }, 0);
           
           const isMismatch = h.isEseguito === true;
-          const ndcObj = { id, riv, data: d, h, totaleCredito, originalIndex: h.originalIndex, isMismatch };
+          const ndcObj = { id, riv, data: d, h, totaleCredito, originalIndex: h.originalIndex, isMismatch, isVoucher };
           
           if (h.ndcEseguita) cNdc.push(ndcObj);
           else pNdc.push(ndcObj);
@@ -391,7 +392,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                 </div>
                 <div className="mt-2">
                   {pendingNdc.map((ndc, i) => (
-                    <div key={`pNdc-${i}`} className={`border rounded-2xl p-2.5 mb-3 shadow-sm transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : 'bg-emerald-50/30 border-emerald-200'}`}>
+                    <div key={`pNdc-${i}`} className={`border rounded-2xl p-2.5 mb-3 shadow-sm transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200 shadow-orange-100/50' : 'bg-emerald-50/30 border-emerald-200'}`}>
                       <div className="flex justify-between items-center mb-2 gap-2">
                         <div className="min-w-0 flex-1 flex items-center gap-1.5">
                           <h3 className="font-black text-slate-800 text-[13px] truncate">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</h3>
@@ -403,21 +404,27 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className={`flex flex-col p-1.5 rounded-lg border ${ndc.isMismatch ? 'bg-white border-red-200' : 'bg-white border-emerald-100'}`}>
+                      <div className={`flex flex-col p-1.5 rounded-lg border ${ndc.isMismatch ? 'bg-white border-red-200' : ndc.isVoucher ? 'bg-white border-orange-100' : 'bg-white border-emerald-100'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <Receipt className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-                            <span className="text-[11px] font-black text-emerald-900">€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                            <span className="text-[9px] truncate ml-1 text-emerald-600">Nota di Credito (da Ordine del {safeFormatDate(ndc.h.data, 'short')})</span>
+                            {ndc.isVoucher ? (
+                              <Ticket className="w-3.5 h-3.5 shrink-0 text-orange-600" />
+                            ) : (
+                              <Receipt className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                            )}
+                            <span className={`text-[11px] font-black ${ndc.isVoucher ? 'text-orange-900' : 'text-emerald-900'}`}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                            <span className={`text-[9px] truncate ml-1 ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'}`}>
+                              {ndc.isVoucher ? 'Voucher One Shot' : 'Nota di Credito'} (da Ordine del {safeFormatDate(ndc.h.data, 'short')})
+                            </span>
                           </div>
                         </div>
-                        <div className="mt-1 pt-1 border-t border-emerald-50 flex justify-end">
+                        <div className={`mt-1 pt-1 border-t ${ndc.isVoucher ? 'border-orange-50' : 'border-emerald-50'} flex justify-end`}>
                           <button 
                             onClick={() => {
                               onEditHistory(ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true, getTodayLocalISO());
-                              showToast("Nota di Credito archiviata!", "success");
+                              showToast(ndc.isVoucher ? "Voucher archiviato!" : "Nota di Credito archiviata!", "success");
                             }}
-                            className="text-emerald-600 font-black text-[10px] uppercase hover:underline ml-auto flex items-center gap-1"
+                            className={`${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} font-black text-[10px] uppercase hover:underline ml-auto flex items-center gap-1`}
                           >
                             <CheckCircle2 className="w-3 h-3" /> ESEGUI
                           </button>
@@ -489,9 +496,13 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                            <div className="flex flex-col min-w-0">
                               <span className="text-[11px] font-bold text-slate-700">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</span>
                               <div className="flex items-center gap-1 text-[9px] text-slate-500 mt-0.5">
-                                <Receipt className="w-3 h-3 text-emerald-500 shrink-0" />
-                                <span>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                                <span>• Eseguito il {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.dataEsecuzione || ndc.h.data)}</span>
+                                {ndc.isVoucher ? (
+                                  <Ticket className="w-3 h-3 text-orange-500 shrink-0" />
+                                ) : (
+                                  <Receipt className="w-3 h-3 text-emerald-500 shrink-0" />
+                                )}
+                                <span className={ndc.isVoucher ? 'text-orange-600 font-bold' : ''}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                                <span>• {ndc.isVoucher ? 'Voucher' : 'NdC'} • Eseguito il {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.dataEsecuzione || ndc.h.data)}</span>
                               </div>
                            </div>
                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />

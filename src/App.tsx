@@ -675,7 +675,7 @@ export default function App() {
     });
   }, []);
 
-  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => {
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => {
     setRubrica(prev => {
       const current = prev[id] || {};
       const history = [...(current.history || [])];
@@ -714,17 +714,18 @@ export default function App() {
       }
 
       // FIX BUG: Creiamo sempre un nuovo record per mantenere lo storico completo
-      const newEntry: RivenditaHistoryEntry = { 
-        data: isoDateStr, 
-        tipo: type, 
-        note: finalNotes, 
-        importo: amount, 
+      const newEntry: RivenditaHistoryEntry = {
+        data: isoDateStr,
+        tipo: type,
+        note: finalNotes,
+        importo: amount,
         items: items,
         budgetAmScalato: budgetScalato > 0 ? budgetScalato : undefined,
         dataEvasione: dataEvasione,
         isEseguito: type === 'ORDINE' ? false : undefined,
         visitaInizio: visitaInizio,
-        visitaFine: visitaFine
+        visitaFine: visitaFine,
+        paymentMethod: paymentMethod
       };
 
       history.push(newEntry);
@@ -824,7 +825,7 @@ export default function App() {
     });
   }, []);
 
-  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => {
+  const handleEditHistory = React.useCallback((id: string, index: number, newNote: string, newImporto: number, newData?: string, newOra?: string, newStato?: string, isEseguito?: boolean, dataEsecuzione?: string, newItems?: any[], newDataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, newPaymentMethod?: string) => {
     setRubrica(prev => {
       const current = prev[id];
       if (!current || !current.history) return prev;
@@ -856,7 +857,8 @@ export default function App() {
         ...(visitaInizio ? { visitaInizio } : {}),
         ...(visitaFine ? { visitaFine } : {}),
         ...(ndcEseguita !== undefined ? { ndcEseguita } : {}),
-        ...(dataEsecuzioneNdC ? { dataEsecuzioneNdC } : {})
+        ...(dataEsecuzioneNdC ? { dataEsecuzioneNdC } : {}),
+        ...(newPaymentMethod ? { paymentMethod: newPaymentMethod } : {})
       };
       
       // SALVATAGGIO SINCRONO ISTANTANEO (Addio delay, addio perdita dati nel sync)

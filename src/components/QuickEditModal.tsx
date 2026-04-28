@@ -10,7 +10,7 @@ interface QuickEditModalProps {
   rivenditaId: string;
   extra: any;
   onUpdateRubrica: (id: string, field: string, value: any) => void;
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
   onDeleteHistory: (id: string, index: number) => void;
   targetHistoryIndex?: number;
 }
@@ -28,11 +28,12 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
   const [isEvaso, setIsEvaso] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [dataEvasione, setDataEvasione] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [isEditingTimeRange, setIsEditingTimeRange] = useState(false);
   const formattedData = data ? new Date(data).toLocaleDateString('it-IT') : '-';
   
   // Stato per salvare la "Fotografia" iniziale dei dati
-  const [initialState, setInitialState] = useState({ data: '', oraInizio: '', ora: '', note: '', importo: 0, isEvaso: false, items: [] as any[], dataEvasione: '' });
+  const [initialState, setInitialState] = useState({ data: '', oraInizio: '', ora: '', note: '', importo: 0, isEvaso: false, items: [] as any[], dataEvasione: '', paymentMethod: '' });
 
   const actualIndex = useMemo(() => {
     if (targetHistoryIndex !== undefined) return targetHistoryIndex;
@@ -72,6 +73,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         const initEvaso = entry.isEseguito === true;
         const initItems = entry.items || [];
         const initDataEvasione = entry.dataEvasione || '';
+        const initPaymentMethod = entry.paymentMethod || 'Contanti alla consegna';
 
         // Impostiamo i dati visibili
         setData(initData);
@@ -82,6 +84,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         setIsEvaso(initEvaso);
         setItems(initItems);
         setDataEvasione(initDataEvasione);
+        setPaymentMethod(initPaymentMethod);
 
         // Salviamo la fotografia per il confronto
         setInitialState({
@@ -92,7 +95,8 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
           importo: initImporto,
           isEvaso: initEvaso,
           items: initItems,
-          dataEvasione: initDataEvasione
+          dataEvasione: initDataEvasione,
+          paymentMethod: initPaymentMethod
         });
       }
     }
@@ -117,7 +121,8 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
       importo !== initialState.importo || 
       isEvaso !== initialState.isEvaso ||
       JSON.stringify(items) !== JSON.stringify(initialState.items) ||
-      dataEvasione !== initialState.dataEvasione;
+      dataEvasione !== initialState.dataEvasione ||
+      paymentMethod !== initialState.paymentMethod;
 
     if (hasChanges) {
       openConfirm({
@@ -147,7 +152,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         vFine = `${data}T${ora}:00`; 
     }
 
-    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato, isEvaso, isEvaso ? new Date().toISOString() : undefined, items, dataEvasione, vInizio, vFine);
+    onEditHistory(rivenditaId, actualIndex, note, importo, data, ora, newStato, isEvaso, isEvaso ? new Date().toISOString() : undefined, items, dataEvasione, vInizio, vFine, undefined, undefined, paymentMethod);
     onClose();
   };
 
@@ -172,7 +177,8 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         initialNote={entry.note || ''}
         initialDataEvasione={entry.dataEvasione || entry.data?.split('T')[0]}
         initialIsEvaso={entry.isEseguito === true}
-        onConfirmOrder={(cart, totaleEuro, note, dataEvasioneDalModulo, isEvasoDalModulo) => {
+        initialPaymentMethod={entry.paymentMethod}
+        onConfirmOrder={(cart, totaleEuro, note, dataEvasioneDalModulo, pagamentoDalModulo, isEvasoDalModulo) => {
           const evasoFinale = isEvasoDalModulo !== undefined ? isEvasoDalModulo : entry.isEseguito;
           onEditHistory(
             rivenditaId, 
@@ -186,7 +192,12 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
             // Se appena evaso, salva oggi. Se era GIA' evaso, preserva la vecchia data di esecuzione!
             evasoFinale ? (entry.dataEsecuzione || new Date().toISOString()) : undefined, 
             cart,
-            dataEvasioneDalModulo // Aggiorna esclusivamente la data di consegna (11° parametro)
+            dataEvasioneDalModulo, // Aggiorna esclusivamente la data di consegna (11° parametro)
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            pagamentoDalModulo
           );
           onClose();
         }}

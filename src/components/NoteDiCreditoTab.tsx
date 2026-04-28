@@ -10,7 +10,8 @@ import {
   CheckCircle,
   Search,
   ArrowRight,
-  AlertOctagon
+  AlertOctagon,
+  Ticket
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
@@ -20,7 +21,7 @@ interface NoteDiCreditoTabProps {
   crmAnagrafiche: SearchResult[];
   stores: SearchResult[];
   giroVisite: SearchResult[];
-  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string) => void;
+  onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
   showToast: (message: string, type?: any) => void;
 }
 
@@ -46,6 +47,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
         // Un ordine è una NdC se ha almeno un item con isCredito: true
         if (h.tipo === 'ORDINE' && h.items && h.items.some((i: any) => i.isCredito)) {
           const creditItems = h.items.filter((i: any) => i.isCredito);
+          const isVoucher = creditItems.some((i: any) => i.isVoucher);
           
           // Calcolo totale credito considerando il moltiplicatore unità
           const totaleCredito = creditItems.reduce((acc: number, item: any) => {
@@ -54,7 +56,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
           }, 0);
           
           const isMismatch = h.isEseguito === true;
-          const ndcObj = { id, riv, data: d, h, totaleCredito, creditItems, originalIndex: h.originalIndex, isMismatch };
+          const ndcObj = { id, riv, data: d, h, totaleCredito, creditItems, originalIndex: h.originalIndex, isMismatch, isVoucher };
           
           if (h.ndcEseguita) {
             cNdc.push(ndcObj);
@@ -102,7 +104,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
       true,      // ndcEseguita
       getTodayLocalISO() // dataEsecuzioneNdC
     );
-    showToast("Nota di Credito archiviata correttamente!", "success");
+    showToast(ndc.isVoucher ? "Voucher archiviato correttamente!" : "Nota di Credito archiviata correttamente!", "success");
   };
 
   return (
@@ -165,12 +167,15 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                 const isUrgent = days > 15;
                 
                 return (
-                  <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : 'bg-white border-slate-200'}`}>
+                  <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
-                          {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
-                        </h3>
+                        <div className="flex items-center gap-1.5">
+                          {ndc.isVoucher ? <Ticket className="w-3.5 h-3.5 text-orange-500" /> : <Receipt className="w-3.5 h-3.5 text-emerald-500" />}
+                          <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
+                            {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
+                          </h3>
+                        </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {ndc.isMismatch ? (
                             <span className="bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
@@ -186,10 +191,12 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="text-[16px] font-black text-emerald-600 tracking-tighter block leading-none">
+                        <span className={`text-[16px] font-black ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} tracking-tighter block leading-none`}>
                           €{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[9px] font-bold text-slate-300 uppercase block mt-1">Storno AM</span>
+                        <span className={`text-[9px] font-bold ${ndc.isVoucher ? 'text-orange-400' : 'text-slate-300'} uppercase block mt-1`}>
+                          {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
+                        </span>
                       </div>
                     </div>
 
@@ -210,7 +217,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                       </div>
                       <button 
                         onClick={() => handleExecute(ndc)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest px-3 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+                        className={`${ndc.isVoucher ? 'bg-orange-600 hover:bg-orange-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-black text-[10px] uppercase tracking-widest px-3 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1.5`}
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         ESEGUI
@@ -238,11 +245,12 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                     {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
                   </span>
                   <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                    <span className="text-emerald-500">€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                    <span>• {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
+                    {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400" /> : <Receipt className="w-3 h-3 text-emerald-400" />}
+                    <span className={ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                    <span>• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} • {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
                   </div>
                 </div>
-                <div className="w-7 h-7 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500">
+                <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center`}>
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
               </div>

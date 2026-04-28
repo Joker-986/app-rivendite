@@ -34,7 +34,7 @@ export interface RivenditaCardProps {
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
-  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string) => void;
+  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
@@ -1321,9 +1321,17 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 {extra.richiestaOrdine && (
                   <div className="mt-4 animate-in fade-in zoom-in-95 duration-300">
                     <OrderModule 
-                      onConfirmOrder={(cart, totaleEuro, note, dataEvasione) => {
-                        handleActivitySave(id, 'ORDINE', note, totaleEuro, cart, dataEvasione);
-                        handleRubricaUpdate(id, 'richiestaOrdine', false); // Chiude il modulo dopo il salvataggio
+                      onConfirmOrder={(cart, totaleEuro, note, dataEvasione, pagamento, isEvaso) => {
+                        // Passaggio di tutti i parametri salvando l'attività nel DB
+                        handleActivitySave(id, 'ORDINE', note, totaleEuro, cart, dataEvasione, undefined, undefined, pagamento);
+                        
+                        // Chiude il modulo dopo il salvataggio
+                        handleRubricaUpdate(id, 'richiestaOrdine', false);
+                        
+                        // FIX: Allinea lo stato della card se l'ordine viene evaso immediatamente dal toggle
+                        if (isEvaso) {
+                          handleRubricaUpdate(id, 'ordineEvaso', true);
+                        }
                       }}
                       onCancel={() => {
                         handleRubricaUpdate(id, 'richiestaOrdine', false);

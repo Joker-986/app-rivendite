@@ -1,17 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { OrderItem } from '../types';
 import { getTodayLocalISO } from '../utils/helpers';
 
 interface OrderModuleProps {
-  onConfirmOrder: (cart: OrderItem[], totaleEuro: number, note: string, dataEvasione: string, isEvaso?: boolean) => void;
+  onConfirmOrder: (cart: OrderItem[], totaleEuro: number, note: string, dataEvasione: string, pagamento: string, isEvaso?: boolean) => void;
   onCancel: () => void;
   onDelete?: () => void;
   initialCart?: OrderItem[];
   initialNote?: string;
   initialDataEvasione?: string;
   initialIsEvaso?: boolean;
+  initialPaymentMethod?: string;
   isEditMode?: boolean;
 }
 
@@ -23,6 +24,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   initialNote,
   initialDataEvasione,
   initialIsEvaso = false,
+  initialPaymentMethod = 'Contanti alla consegna',
   isEditMode = false
 }) => {
   const { products } = useProducts();
@@ -35,12 +37,50 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   const [isEvaso, setIsEvaso] = useState<boolean>(initialIsEvaso);
   const [showNotaCredito, setShowNotaCredito] = useState(false);
   const [notaCredito, setNotaCredito] = useState<number | ''>('');
+  const [showVoucher, setShowVoucher] = useState(false);
+  const [voucherValue, setVoucherValue] = useState<number | ''>('');
+  const [paymentMethod, setPaymentMethod] = useState<'Contanti alla consegna' | 'Bonifico 30 gg'>(
+    (initialPaymentMethod === 'Bonifico 30 gg' ? 'Bonifico 30 gg' : 'Contanti alla consegna') as 'Contanti alla consegna' | 'Bonifico 30 gg'
+  );
+
+  const toggleNotaCredito = () => { setShowNotaCredito(!showNotaCredito); if (!showNotaCredito) { setShowVoucher(false); } };
+  const toggleVoucher = () => { setShowVoucher(!showVoucher); if (!showVoucher) { setShowNotaCredito(false); } };
+
+  const closeNdc = () => setShowNotaCredito(false);
+  const cancelNdc = () => { setNotaCredito(''); setShowNotaCredito(false); };
+  const closeVoucher = () => setShowVoucher(false);
+  const cancelVoucher = () => { setVoucherValue(''); setShowVoucher(false); };
   const [backupData, setBackupData] = useState<string>(initialDataEvasione || getTodayLocalISO());
   const [isOmaggio, setIsOmaggio] = useState<boolean>(false);
   const [isCredito, setIsCredito] = useState<boolean>(false);
   const [isSpacchettatoUI, setIsSpacchettatoUI] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('TUTTE');
 
   const selectedProductObj = useMemo(() => products.find(p => p.id === selectedProductId), [products, selectedProductId]);
+
+  // Estrazione sicura e normalizzata delle categorie (ignora eliminati)
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set<string>();
+    products.forEach(p => {
+      if (p.attivo === false) return;
+      const c = p.categoria?.trim().toUpperCase();
+      if (c) cats.add(c);
+      else cats.add('ALTRO'); // Raggruppamento per prodotti orfani o legacy
+    });
+    return Array.from(cats).sort();
+  }, [products]);
+
+  // Motore di filtraggio dinamico
+  const filteredProducts = useMemo(() => {
+    const activeProducts = products.filter(p => p.attivo !== false);
+    if (selectedCategory === 'TUTTE') return activeProducts;
+
+    return activeProducts.filter(p => {
+      const c = p.categoria?.trim().toUpperCase();
+      if (selectedCategory === 'ALTRO') return !c;
+      return c === selectedCategory;
+    });
+  }, [products, selectedCategory]);
 
   const totaleEuro = useMemo(() => {
     return cart.reduce((acc, item) => item.isOmaggio ? acc : acc + (item.quantita * item.prezzoApplicato), 0);
@@ -88,7 +128,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
 
   const handleConfirm = () => {
     if (cart.length === 0 && !note) return;
-    onConfirmOrder(cart, totaleEuro, note, dataEvasione, isEvaso);
+    onConfirmOrder(cart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
   };
 
   return (
@@ -140,16 +180,38 @@ const OrderModule: React.FC<OrderModuleProps> = ({
           </div>
 
           <div className="space-y-2">
+            
+            {/* FILTRO CATEGORIE */}
+            {uniqueCategories.length > 0 && (
+              <div className="flex gap-2 animate-in fade-in zoom-in-95 duration-200">
+                <select 
+                  value={selectedCategory}
+                  onChange={(e) => { 
+                    setSelectedCategory(e.target.value); 
+                    setSelectedProductId(''); // Fallback Sicurezza anti-ghosting
+                    setQuantita(1);
+                    setIsSpacchettatoUI(false); 
+                  }}
+                  className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-brand-500 outline-none appearance-none w-full transition-colors"
+                >
+                  <option value="TUTTE">Tutte le categorie</option>
+                  {uniqueCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <select 
                 value={selectedProductId}
                 onChange={(e) => { setSelectedProductId(e.target.value); setIsSpacchettatoUI(false); }}
                 className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-500 outline-none appearance-none min-w-0 truncate w-full"
               >
-                <option value="">Seleziona SKU...</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.codice} - {p.descrizione} ({p.prezzoUnita.toFixed(2)}€)
+                <option value="">Seleziona un prodotto...</option>
+                {filteredProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.codice} - {product.descrizione} - €{product.prezzoUnita.toFixed(2)}
                   </option>
                 ))}
               </select>
@@ -181,7 +243,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                 <button 
                   onClick={handleAddToCart}
                   disabled={!selectedProductId}
-                  className="w-10 h-10 bg-brand-600 text-white rounded-xl disabled:opacity-50 disabled:bg-slate-300 flex items-center justify-center shadow-sm active:scale-95 transition-all"
+                  className="w-10 h-10 bg-brand-600 text-white rounded-xl disabled:opacity-50 disabled:bg-slate-300 flex items-center justify-center shadow-sm active:scale-95 transition-all shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -223,7 +285,9 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                       <div className="text-right flex flex-col items-end">
                         <p className="text-[11px] font-black text-slate-800">x{item.quantita}</p>
                         {item.isCredito ? (
-                          <span className="text-[9px] text-purple-600 font-black bg-purple-50 px-1 rounded mt-0.5 border border-purple-100">NOTA CREDITO</span>
+                          <span className={`px-2 py-0.5 ${item.isVoucher ? 'bg-orange-100 text-orange-600' : 'bg-purple-100 text-purple-600'} text-[8px] font-black rounded-full uppercase`}>
+                            {item.isVoucher ? 'One Shot' : 'Nota Credito'}
+                          </span>
                         ) : item.isOmaggio ? (
                           <span className="text-[9px] text-amber-600 font-black bg-amber-50 px-1 rounded mt-0.5 border border-amber-100">SCONTO 100%</span>
                         ) : null}
@@ -255,42 +319,92 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             )}
           </div>
 
-          {/* --- SEZIONE NOTA DI CREDITO A SCOMPARSA --- */}
-          <div className="mb-3">
-            {!showNotaCredito ? (
-              <button 
-                onClick={() => setShowNotaCredito(true)}
-                className="flex items-center gap-1.5 text-[11px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg border border-purple-100 transition-colors w-fit shadow-sm"
-              >
-                <span className="text-lg leading-none mt-[-2px]">+</span> Nota di credito
-              </button>
-            ) : (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2 bg-purple-50 border border-purple-200 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center gap-2 flex-1">
-                  <div className="w-7 h-7 rounded-md bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+          {/* --- SEZIONE PREMIALITÀ (NdC E VOUCHER) --- */}
+          <div className="space-y-3">
+            {/* Pulsanti in linea se nessuno dei due è aperto */}
+            {(!showNotaCredito && !showVoucher) && (
+              <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-300">
+                <button 
+                  onClick={toggleNotaCredito}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg border border-purple-100 transition-colors shadow-sm active:scale-95"
+                >
+                  <span className="text-lg leading-none mt-[-2px]">+</span> Nota di credito
+                </button>
+                <button 
+                  onClick={toggleVoucher}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-2 rounded-lg border border-orange-100 transition-colors shadow-sm active:scale-95"
+                >
+                  <Ticket className="w-3.5 h-3.5" /> ONE SHOT
+                </button>
+              </div>
+            )}
+
+            {/* Input Nota Credito */}
+            {showNotaCredito && (
+              <div className="flex flex-col gap-3 p-3 bg-purple-50 border border-purple-200 rounded-[1.5rem] animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 shrink-0">
                     <span className="font-black text-sm">-</span>
                   </div>
                   <input 
                     type="number"
-                    min="0"
-                    step="0.5"
-                    placeholder="Importo da abbonare..."
+                    placeholder="Importo NdC..."
                     value={notaCredito}
                     onChange={(e) => setNotaCredito(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                    className="flex-1 bg-white border border-purple-200 rounded-md px-2 py-1.5 text-sm font-bold text-purple-700 focus:ring-2 focus:ring-purple-500 outline-none shadow-sm"
+                    className="flex-1 bg-white border border-purple-200 rounded-xl px-3 py-2 text-sm font-black text-purple-700 outline-none shadow-sm"
                     autoFocus
                   />
                 </div>
-                <button 
-                  onClick={() => { setShowNotaCredito(false); setNotaCredito(''); }}
-                  className="text-[11px] font-bold text-slate-500 hover:text-slate-700 px-3 py-1.5 bg-white rounded-md border border-slate-200 shadow-sm"
-                >
-                  Annulla
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={cancelNdc} className="flex-1 py-2 text-[10px] font-black text-slate-400 bg-white border border-slate-200 rounded-lg uppercase">Annulla</button>
+                  <button onClick={closeNdc} className="flex-1 py-2 text-[10px] font-black text-white bg-purple-600 rounded-lg uppercase shadow-sm">Applica</button>
+                </div>
+              </div>
+            )}
+
+            {/* Input One Shot */}
+            {showVoucher && (
+              <div className="flex flex-col gap-3 p-3 bg-orange-50 border border-orange-200 rounded-[1.5rem] animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                    <Ticket className="w-4 h-4" />
+                  </div>
+                  <input 
+                    type="number"
+                    placeholder="Importo Voucher..."
+                    value={voucherValue}
+                    onChange={(e) => setVoucherValue(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    className="flex-1 bg-white border border-orange-200 rounded-xl px-3 py-2 text-sm font-black text-orange-700 outline-none shadow-sm"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={cancelVoucher} className="flex-1 py-2 text-[10px] font-black text-slate-400 bg-white border border-slate-200 rounded-lg uppercase">Annulla</button>
+                  <button onClick={closeVoucher} className="flex-1 py-2 text-[10px] font-black text-white bg-orange-600 rounded-lg uppercase shadow-sm">Applica</button>
+                </div>
               </div>
             )}
           </div>
-          {/* --- FINE SEZIONE NOTA DI CREDITO --- */}
+          {/* --- FINE SEZIONE PREMIALITÀ --- */}
+
+          {/* MODALITÀ DI PAGAMENTO */}
+          <div className="space-y-3 mb-4">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modalità di Pagamento</label>
+            <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+              <button 
+                onClick={() => setPaymentMethod('Contanti alla consegna')}
+                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all ${paymentMethod === 'Contanti alla consegna' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                CONTANTI
+              </button>
+              <button 
+                onClick={() => setPaymentMethod('Bonifico 30 gg')}
+                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all ${paymentMethod === 'Bonifico 30 gg' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                BONIFICO 30 GG
+              </button>
+            </div>
+          </div>
 
           {/* NOTE */}
           <div className="space-y-1.5">
@@ -341,6 +455,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
           <button 
             onClick={() => {
               let finalCart = [...cart];
+              
               if (typeof notaCredito === 'number' && notaCredito > 0) {
                 finalCart.push({
                   id: `credito-manuale-${Date.now()}`,
@@ -354,9 +469,25 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                   isCredito: true
                 });
               }
-              onConfirmOrder(finalCart, totaleEuro, note, dataEvasione, isEvaso);
+
+              if (typeof voucherValue === 'number' && voucherValue > 0) {
+                finalCart.push({
+                  id: `voucher-${Date.now()}`,
+                  productId: 'VOUCHER_AM',
+                  codice: 'VOUCHER',
+                  descrizione: 'Voucher One Shot',
+                  quantita: 1,
+                  unita: 1,
+                  prezzoApplicato: voucherValue,
+                  isOmaggio: true,
+                  isCredito: true,
+                  isVoucher: true
+                });
+              }
+
+              onConfirmOrder(finalCart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
             }}
-            disabled={cart.length === 0 && !note && !notaCredito}
+            disabled={cart.length === 0 && !note && !notaCredito && !voucherValue}
             className="flex-[2] py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-100 disabled:text-slate-300 text-white font-bold text-xs rounded-xl shadow-lg shadow-brand-100 transition-all active:scale-[0.98] flex justify-center items-center gap-2"
           >
             <Check className="w-3.5 h-3.5" />

@@ -44,9 +44,10 @@ export interface OrderItem {
   quantita: number;         // Numero di unità ordinate
   unita: number;            // Moltiplicatore usato
   prezzoApplicato: number;  // Prezzo cristallizzato al momento dell'ordine
-  isOmaggio: boolean;       // Se true, costo 0 per cliente
+  isOmaggio: boolean;
   isCredito?: boolean;
-  isSpacchettato?: boolean; // VERO se l'operatore sta ordinando singoli pezzi di una Stecca
+  isSpacchettato?: boolean;
+  isVoucher?: boolean; // Identificativo per il voucher One Shot
 }
 
 export interface RivenditaHistoryEntry {
@@ -64,6 +65,7 @@ export interface RivenditaHistoryEntry {
   visitaFine?: string;
   ndcEseguita?: boolean;    // Flag archiviazione Nota di Credito
   dataEsecuzioneNdC?: string; // Timestamp chiusura Nota di Credito
+  paymentMethod?: string;
 }
 
 export interface MissionDetail {
