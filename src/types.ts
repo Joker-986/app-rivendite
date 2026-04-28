@@ -30,21 +30,23 @@ export interface Product {
   descrizione: string;
   prezzoUnita: number;
   unita: 'Pezzi' | 'Stecche';
+  pezziPerStecca?: number;
   attivo?: boolean;
   categoria?: string;
 }
 
 // 2. IL CARRELLO (ORDER ITEM)
 export interface OrderItem {
-  id: string;               // ID unico per riga (permette righe doppie dello stesso SKU)
+  id: string;               // ID unico per riga
   productId: string;
   codice: string;
   descrizione: string;
-  quantita: number;         // Numero di unità (es. 1 stecca)
-  unita: number;            // Moltiplicatore usato (es. 10 o 1)
+  quantita: number;         // Numero di unità ordinate
+  unita: number;            // Moltiplicatore usato
   prezzoApplicato: number;  // Prezzo cristallizzato al momento dell'ordine
-  isOmaggio: boolean;       // Se true, costo 0 per cliente, scala budget AM
+  isOmaggio: boolean;       // Se true, costo 0 per cliente
   isCredito?: boolean;
+  isSpacchettato?: boolean; // VERO se l'operatore sta ordinando singoli pezzi di una Stecca
 }
 
 export interface RivenditaHistoryEntry {

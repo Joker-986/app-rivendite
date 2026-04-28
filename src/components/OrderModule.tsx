@@ -38,6 +38,9 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   const [backupData, setBackupData] = useState<string>(initialDataEvasione || getTodayLocalISO());
   const [isOmaggio, setIsOmaggio] = useState<boolean>(false);
   const [isCredito, setIsCredito] = useState<boolean>(false);
+  const [isSpacchettatoUI, setIsSpacchettatoUI] = useState<boolean>(false);
+
+  const selectedProductObj = useMemo(() => products.find(p => p.id === selectedProductId), [products, selectedProductId]);
 
   const totaleEuro = useMemo(() => {
     return cart.reduce((acc, item) => item.isOmaggio ? acc : acc + (item.quantita * item.prezzoApplicato), 0);
@@ -49,6 +52,15 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     const product = products.find(p => p.id === selectedProductId);
     if (!product) return;
 
+    let finalPrice = product.prezzoUnita;
+    let appliedSpacchettato = false;
+
+    if (product.unita === 'Stecche' && isSpacchettatoUI) {
+      const divider = Math.max(1, product.pezziPerStecca || 10);
+      finalPrice = Math.round((product.prezzoUnita / divider) * 100) / 100;
+      appliedSpacchettato = true;
+    }
+
     const newItem: OrderItem = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
       productId: product.id,
@@ -56,9 +68,10 @@ const OrderModule: React.FC<OrderModuleProps> = ({
       descrizione: product.descrizione,
       quantita: quantita,
       unita: 1, 
-      prezzoApplicato: product.prezzoUnita,
+      prezzoApplicato: finalPrice,
       isOmaggio: isOmaggio,
-      isCredito: isCredito
+      isCredito: isCredito,
+      isSpacchettato: appliedSpacchettato
     };
 
     setCart([...cart, newItem]);
@@ -66,6 +79,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     setQuantita(1);
     setIsOmaggio(false);
     setIsCredito(false);
+    setIsSpacchettatoUI(false);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -125,12 +139,11 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             />
           </div>
 
-          {/* SELETTORE PRODOTTI */}
           <div className="space-y-2">
             <div className="flex gap-2">
               <select 
                 value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
+                onChange={(e) => { setSelectedProductId(e.target.value); setIsSpacchettatoUI(false); }}
                 className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-500 outline-none appearance-none min-w-0 truncate w-full"
               >
                 <option value="">Seleziona SKU...</option>
@@ -174,6 +187,23 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                 </button>
               </div>
             </div>
+
+            {selectedProductObj && selectedProductObj.unita === 'Stecche' && (
+              <div className="flex bg-slate-100/80 p-1 rounded-xl mt-2 animate-in fade-in zoom-in-95 duration-200">
+                <button 
+                  onClick={() => setIsSpacchettatoUI(false)}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all shadow-sm ${!isSpacchettatoUI ? 'bg-white text-slate-800 border border-slate-200/50' : 'text-slate-400 bg-transparent shadow-none border-transparent hover:bg-slate-200/50'}`}
+                >
+                  Stecca
+                </button>
+                <button 
+                  onClick={() => setIsSpacchettatoUI(true)}
+                  className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all shadow-sm ${isSpacchettatoUI ? 'bg-white text-brand-600 border border-brand-200/50' : 'text-slate-400 bg-transparent shadow-none border-transparent hover:bg-slate-200/50'}`}
+                >
+                  Pezzo
+                </button>
+              </div>
+            )}
           </div>
 
           {/* CARRELLO COMPATTO - DENSE VIEW */}
@@ -184,7 +214,9 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                 {cart.map(item => (
                   <div key={item.id} className="p-2 flex justify-between items-center">
                     <div className="flex flex-col min-w-0 flex-1 pr-2">
-                      <p className="text-[10px] font-bold text-slate-700 truncate">{item.codice}</p>
+                      <p className="text-[10px] font-bold text-slate-700 truncate">
+                        {item.codice} {item.isSpacchettato && <span className="bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-black ml-1 uppercase tracking-wider">PZ</span>}
+                      </p>
                       <p className="text-[9px] text-slate-400 truncate text-ellipsis overflow-hidden leading-tight">{item.descrizione}</p>
                     </div>
                     <div className="flex items-center gap-2">

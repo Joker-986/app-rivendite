@@ -6,6 +6,7 @@ interface ProductContextType {
   addProduct: (p: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, p: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
+  bulkImportProducts: (newProducts: Omit<Product, 'id'>[]) => void;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -74,8 +75,23 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts(prev => prev.map(prod => prod.id === id ? { ...prod, attivo: false } : prod));
   };
 
+  const bulkImportProducts = (newProducts: Omit<Product, 'id'>[]) => {
+    setProducts(prev => {
+      const next = [...prev];
+      newProducts.forEach(newP => {
+        const existingIndex = next.findIndex(p => p.codice.trim().toUpperCase() === newP.codice.trim().toUpperCase());
+        if (existingIndex >= 0) {
+          next[existingIndex] = { ...next[existingIndex], ...newP };
+        } else {
+          next.push({ ...newP, id: Date.now().toString() + Math.random().toString(36).substring(2, 7), attivo: true });
+        }
+      });
+      return next;
+    });
+  };
+
   return (
-    <ProductContext.Provider value={{ products, addProduct, updateProduct, deleteProduct }}>
+    <ProductContext.Provider value={{ products, addProduct, updateProduct, deleteProduct, bulkImportProducts }}>
       {children}
     </ProductContext.Provider>
   );
