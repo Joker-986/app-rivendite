@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Sparkles, Calendar, BarChart3, Target, TrendingUp, Zap, Rocket, 
-  ShoppingBag, History, ChevronRight, Plus, Trash2, AlertCircle, 
+  ShoppingBag, History, ChevronRight, Plus, Trash2, AlertCircle, Calculator,
   Save, X, Settings2, Info, ArrowRight, Archive, ChevronDown, ChevronUp,
   DollarSign, RefreshCw, Layers, Check, Activity, Clock
 } from 'lucide-react';
@@ -28,11 +28,12 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   handleRubricaUpdate
 }) => {
   const { 
-    salaryConfig, missions, campaigns, 
+    salaryConfig, missions, campaigns, adjustments,
     addMission, updateMission, deleteMission, 
     addCampaign, updateCampaign, deleteCampaign,
     addCampaignPeriod, closeCampaignPeriod,
-    calculateMboBonus, calculateExtraBonus 
+    calculateMboBonus, calculateExtraBonus,
+    setLogista, setAmCorrection
   } = useStrategy();
   
   const { 
@@ -42,6 +43,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const { openConfirm } = useModals();
   
   const [showEditor, setShowEditor] = useState(false);
+  const [showBalance, setShowBalance] = useState(false);
   const [showArchivedMissions, setShowArchivedMissions] = useState(false);
   const [editingMission, setEditingMission] = useState<Partial<Mission> | null>(null);
   const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
@@ -179,8 +181,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       {/* HEADER & MESE */}
-      <div className="flex items-center justify-between px-1">
-        <h2 className="text-xl font-black text-slate-800 tracking-tight">Camera di Regia</h2>
+      <div className="flex items-center justify-end px-1">
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0">
             <button 
@@ -191,6 +192,16 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               <Sparkles className="w-4 h-4" />
             </button>
             
+            <div className="w-px h-5 bg-slate-200 shrink-0"></div>
+
+            <button 
+              onClick={() => setShowBalance(!showBalance)}
+              className={`px-3 h-full transition-colors flex items-center justify-center cursor-pointer ${showBalance ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`}
+              title="Bilancio Magazzino e Logista"
+            >
+              <Calculator className="w-4 h-4" />
+            </button>
+
             <div className="w-px h-5 bg-slate-200 shrink-0"></div>
             
             <button 
@@ -216,6 +227,81 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           </label>
         </div>
       </div>
+
+      {/* --- INIZIO PANNELLO AUTO-BILANCIAMENTO --- */}
+      {showBalance && (
+        <div className="mx-1 mb-4 p-5 bg-emerald-50/30 border border-emerald-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300">
+          
+          <div className="grid grid-cols-2 gap-4 items-start">
+            
+            {/* 1. LOGISTA */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Logista</label>
+              <input 
+                type="number" 
+                value={adjustments?.[meseSelezionato]?.logista || ''}
+                onChange={(e) => setLogista(meseSelezionato, parseFloat(e.target.value) || 0)}
+                className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* 2. MAGAZZINO (Calcolo Sicuro onBlur) */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Magazzino</label>
+              <input 
+                type="number" 
+                defaultValue={(() => {
+                  const currentAdj = adjustments?.[meseSelezionato] || { logista: 0, amCorrection: 0 };
+                  if (currentAdj.amCorrection === 0) return '';
+                  const totalFatturato = missions.find(m => m.tipo === 'FATTURATO' && !m.targetSingolo)?.progressoAttuale || 0;
+                  const baseOrdersOnly = totalFatturato - currentAdj.amCorrection - currentAdj.logista;
+                  return Number((baseOrdersOnly + currentAdj.amCorrection).toFixed(2));
+                })()}
+                onBlur={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (isNaN(val)) {
+                    setAmCorrection(meseSelezionato, 0); // Azzera se svuoti il campo
+                  } else {
+                    const currentAdj = adjustments?.[meseSelezionato] || { logista: 0, amCorrection: 0 };
+                    const totalFatturato = missions.find(m => m.tipo === 'FATTURATO' && !m.targetSingolo)?.progressoAttuale || 0;
+                    const baseOrdersOnly = totalFatturato - currentAdj.amCorrection - currentAdj.logista;
+                    setAmCorrection(meseSelezionato, val - baseOrdersOnly);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur(); // Simula il click fuori premendo Invio
+                }}
+                className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+                placeholder="Digita e premi Invio..."
+              />
+            </div>
+            
+          </div>
+          
+          {/* Badge Informativo */}
+          {(adjustments?.[meseSelezionato]?.amCorrection || 0) !== 0 && (
+            <div className="mt-4 pt-3 border-t border-emerald-100/50 flex justify-between items-center">
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
+                Rettifica applicata: {adjustments[meseSelezionato].amCorrection > 0 ? '+' : ''}{adjustments[meseSelezionato].amCorrection.toFixed(2)}€
+              </span>
+              <button 
+                onClick={() => {
+                  setAmCorrection(meseSelezionato, 0);
+                  // Ricarica visivamente il componente azzerando il campo
+                  const inputs = document.querySelectorAll('input[placeholder="Digita e premi Invio..."]');
+                  inputs.forEach(input => (input as HTMLInputElement).value = '');
+                }} 
+                className="text-[9px] font-black text-red-500 uppercase underline"
+              >
+                Annulla
+              </button>
+            </div>
+          )}
+
+        </div>
+      )}
+      {/* --- FINE PANNELLO AUTO-BILANCIAMENTO --- */}
 
       {/* SIMULATORE STIPENDIO - APPLE CLEAN (Mobile Perfect) */}
       <div className="bg-white border border-slate-200/80 rounded-[2rem] p-5 sm:p-6 shadow-sm overflow-hidden">
@@ -762,6 +848,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           </div>
         </div>
       )}
+
+
 
       {/* MISSIONI MBO (SOLO ATTIVE) */}
       <div className="space-y-4">

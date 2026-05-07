@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail } from '../types';
 
+export interface MonthlyAdjustment { logista: number; amCorrection: number; }
+
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 interface StrategyContextType {
   salaryConfig: SalaryConfig;
   missions: Mission[];
   campaigns: Campaign[];
+  adjustments: Record<string, MonthlyAdjustment>;
   setSalaryConfig: (config: SalaryConfig) => void;
+  setLogista: (mese: string, importo: number) => void;
+  setAmCorrection: (mese: string, delta: number) => void;
   addMission: (mission: Mission) => void;
   updateMission: (id: string, updates: Partial<Mission>) => void;
   deleteMission: (id: string) => void;
@@ -77,11 +82,15 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? (JSON.parse(saved).campaigns || DEFAULT_CAMPAIGNS) : DEFAULT_CAMPAIGNS;
   });
+  const [adjustments, setAdjustments] = useState<Record<string, MonthlyAdjustment>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? (JSON.parse(saved).adjustments || {}) : {};
+  });
 
   // Save to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ salaryConfig, missions, campaigns }));
-  }, [salaryConfig, missions, campaigns]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ salaryConfig, missions, campaigns, adjustments }));
+  }, [salaryConfig, missions, campaigns, adjustments]);
 
   const setSalaryConfig = (config: SalaryConfig) => setSalaryConfigState(config);
 
@@ -129,6 +138,13 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       return c;
     }));
+  };
+
+  const setLogista = (mese: string, importo: number) => {
+    setAdjustments(prev => ({ ...prev, [mese]: { ...(prev[mese] || { logista: 0, amCorrection: 0 }), logista: importo } }));
+  };
+  const setAmCorrection = (mese: string, delta: number) => {
+    setAdjustments(prev => ({ ...prev, [mese]: { ...(prev[mese] || { logista: 0, amCorrection: 0 }), amCorrection: delta } }));
   };
 
   const calculateMboBonus = useCallback(() => {
@@ -269,21 +285,50 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               });
             }
           }
-        });
+        }); // <-- Fine ciclo ordini
+        
+        // APPLICAZIONE CONGUAGLI
+        if (mission.tipo === 'FATTURATO' && !(mission.targetSingolo && mission.targetSingolo > 0)) {
+          const adj = adjustments[meseSelezionato];
+          if (adj) {
+            const extraTotale = adj.logista + adj.amCorrection;
+            if (extraTotale !== 0) {
+              progress += extraTotale;
+              generatedValue += extraTotale;
+              let label = 'Fatturato Logista';
+              if (adj.amCorrection !== 0 && adj.logista !== 0) {
+                label = 'Rettifica Magazzino + Logista';
+              } else if (adj.amCorrection !== 0) {
+                label = 'Rettifica Magazzino';
+              }
+
+              dettagli.push({
+                id: 'conguaglio-allineamento',
+                nome: label,
+                comune: 'Bilancio',
+                valore: extraTotale,
+                data: `${meseSelezionato}-01`
+              });
+            }
+          }
+        }
         
         dettagli.sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
         
         return { ...mission, progressoAttuale: progress, valoreGenerato: generatedValue, dettagliProgresso: dettagli };
       });
     });
-  }, []);
+  }, [adjustments]);
 
   return (
     <StrategyContext.Provider value={{
       salaryConfig,
       missions,
       campaigns,
+      adjustments,
       setSalaryConfig,
+      setLogista,
+      setAmCorrection,
       addMission,
       updateMission,
       deleteMission,

@@ -417,7 +417,7 @@ const WarehouseTab: React.FC = () => {
         <div className="space-y-1">
           <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tight">Nota Informativa</h4>
           <p className="text-xs text-indigo-700 font-medium leading-relaxed">
-            I prodotti inseriti in questo magazzino saranno disponibili per la creazione di missioni "Focus Prodotto" nella Camera di Regia e per la compilazione degli ordini nel CRM. Assicurati che gli SKU siano univoci per evitare conflitti.
+            I prodotti inseriti in questo magazzino saranno disponibili per la creazione di missioni "Focus Prodotto" nella Regia e per la compilazione degli ordini nel CRM. Assicurati che gli SKU siano univoci per evitare conflitti.
           </p>
         </div>
       </div>
