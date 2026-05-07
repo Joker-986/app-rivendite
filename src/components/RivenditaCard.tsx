@@ -50,6 +50,7 @@ export interface RivenditaCardProps {
   handleDeleteHistory: (id: string, index: number) => void;
   startVisita: (id: string) => void;
   endVisita: (id: string, note: string, tornoPiuTardi: boolean) => void;
+  onGoToCalc?: (amount: string) => void;
 }
 
 const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivenditaId: string; openQuickEdit: any }) => {
@@ -294,7 +295,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   handleEditHistory,
   handleDeleteHistory,
   startVisita,
-  endVisita
+  endVisita,
+  onGoToCalc
 }) => {
   const { openShare, openDualShare, openQuickEdit, openRevisitModal, openKpiAssign, setSelectedRivenditaId } = useModals();
   const { missions } = useStrategy();
@@ -1408,6 +1410,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       onCancel={() => {
                         handleRubricaUpdate(id, 'richiestaOrdine', false);
                       }}
+                      onGoToCalc={onGoToCalc}
                     />
                   </div>
                 )}

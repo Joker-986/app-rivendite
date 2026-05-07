@@ -239,11 +239,16 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
                           <ShoppingBag className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-blue-500'}`} />
                           <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
-                            {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'} ${ord.riv['Num. Rivendita']}`}
+                            {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'}`}
                           </h3>
+                          {!ord.riv.isStore && (
+                            <span className="px-1.5 py-0.5 bg-brand-100 text-brand-800 text-[10px] font-black rounded shrink-0">
+                              RIV. {ord.riv['Num. Rivendita']}
+                            </span>
+                          )}
                           {ord.data.codiceLogista && (
                             <div 
                               onClick={(e) => {
@@ -253,7 +258,7 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                                   showToast('Codice Logista copiato!', 'success');
                                 }
                               }}
-                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                               title="Clicca per copiare il Codice Logista"
                             >
                               <Package className="w-2.5 h-2.5 text-blue-400" />
@@ -323,8 +328,13 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-bold text-slate-700 truncate">
-                      {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'} ${ord.riv['Num. Rivendita']}`}
+                      {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'}`}
                     </span>
+                    {!ord.riv.isStore && (
+                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded">
+                        RIV. {ord.riv['Num. Rivendita']}
+                      </span>
+                    )}
                     {ord.data.codiceLogista && (
                       <div 
                         onClick={(e) => {
@@ -334,7 +344,7 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                             showToast('Codice Logista copiato!', 'success');
                           }
                         }}
-                        className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                        className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                         title="Clicca per copiare il Codice Logista"
                       >
                         <Package className="w-2.5 h-2.5 text-blue-400" />

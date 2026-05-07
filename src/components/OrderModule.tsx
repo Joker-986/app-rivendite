@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { OrderItem } from '../types';
 import { getTodayLocalISO } from '../utils/helpers';
@@ -14,6 +14,7 @@ interface OrderModuleProps {
   initialIsEvaso?: boolean;
   initialPaymentMethod?: string;
   isEditMode?: boolean;
+  onGoToCalc?: (amount: string) => void;
 }
 
 const OrderModule: React.FC<OrderModuleProps> = ({ 
@@ -25,7 +26,8 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   initialDataEvasione,
   initialIsEvaso = false,
   initialPaymentMethod = 'Contanti alla consegna',
-  isEditMode = false
+  isEditMode = false,
+  onGoToCalc
 }) => {
   const { products } = useProducts();
 
@@ -133,8 +135,40 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   };
 
   const handleConfirm = () => {
-    if (cart.length === 0 && !note) return;
-    onConfirmOrder(cart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
+    if (cart.length === 0 && !note && !notaCredito && !voucherValue) return;
+    
+    let finalCart = [...cart];
+    
+    if (typeof notaCredito === 'number' && notaCredito > 0) {
+      finalCart.push({
+        id: `credito-manuale-${Date.now()}`,
+        productId: 'SCONTO_AM',
+        codice: 'CREDITO',
+        descrizione: 'Nota di Credito',
+        quantita: 1,
+        unita: 1,
+        prezzoApplicato: notaCredito,
+        isOmaggio: true,
+        isCredito: true
+      });
+    }
+
+    if (typeof voucherValue === 'number' && voucherValue > 0) {
+      finalCart.push({
+        id: `voucher-${Date.now()}`,
+        productId: 'VOUCHER_AM',
+        codice: 'VOUCHER',
+        descrizione: 'Voucher One Shot',
+        quantita: 1,
+        unita: 1,
+        prezzoApplicato: voucherValue,
+        isOmaggio: true,
+        isCredito: true,
+        isVoucher: true
+      });
+    }
+
+    onConfirmOrder(finalCart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
   };
 
   return (
@@ -333,8 +367,24 @@ const OrderModule: React.FC<OrderModuleProps> = ({
               );
             })}
                 <div className="p-2.5 bg-brand-50/20 border border-brand-100 rounded-xl flex justify-between items-center">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Totale Spesa</span>
-                  <span className="text-sm font-black text-brand-700">€{totaleEuro.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Totale Spesa</span>
+                    <span className="text-sm font-black text-brand-700">€{totaleEuro.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {onGoToCalc && (
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(totaleEuro.toFixed(2));
+                        handleConfirm();
+                        onGoToCalc(totaleEuro.toFixed(2));
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition-all active:scale-95"
+                      title="Copia, Salva e Vai al Calcolatore"
+                    >
+                      <Calculator className="w-4 h-4" />
+                      <span className="text-[10px] font-black uppercase">Margine</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -479,40 +529,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             Annulla
           </button>
           <button 
-            onClick={() => {
-              let finalCart = [...cart];
-              
-              if (typeof notaCredito === 'number' && notaCredito > 0) {
-                finalCart.push({
-                  id: `credito-manuale-${Date.now()}`,
-                  productId: 'SCONTO_AM',
-                  codice: 'CREDITO',
-                  descrizione: 'Nota di Credito',
-                  quantita: 1,
-                  unita: 1,
-                  prezzoApplicato: notaCredito,
-                  isOmaggio: true,
-                  isCredito: true
-                });
-              }
-
-              if (typeof voucherValue === 'number' && voucherValue > 0) {
-                finalCart.push({
-                  id: `voucher-${Date.now()}`,
-                  productId: 'VOUCHER_AM',
-                  codice: 'VOUCHER',
-                  descrizione: 'Voucher One Shot',
-                  quantita: 1,
-                  unita: 1,
-                  prezzoApplicato: voucherValue,
-                  isOmaggio: true,
-                  isCredito: true,
-                  isVoucher: true
-                });
-              }
-
-              onConfirmOrder(finalCart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
-            }}
+            onClick={handleConfirm}
             disabled={cart.length === 0 && !note && !notaCredito && !voucherValue}
             className="flex-[2] py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-100 disabled:text-slate-300 text-white font-bold text-xs rounded-xl shadow-lg shadow-brand-100 transition-all active:scale-[0.98] flex justify-center items-center gap-2"
           >

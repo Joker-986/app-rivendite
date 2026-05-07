@@ -1,11 +1,24 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Calculator, Receipt, TrendingDown, Package, Euro, Percent, FileText, Tag } from 'lucide-react';
 
-const CalcolatoreInverso: React.FC = () => {
+interface CalcolatoreInversoProps {
+  initialValue?: string;
+  clearInitialValue?: () => void;
+}
+
+const CalcolatoreInverso: React.FC<CalcolatoreInversoProps> = ({ initialValue, clearInitialValue }) => {
   const [listinoRaw, setListinoRaw] = useState<string>('');
   const [targetRaw, setTargetRaw] = useState<string>('');
   const [mode, setMode] = useState<'by_quantity' | 'by_total'>('by_quantity');
   const [mainValueRaw, setMainValueRaw] = useState<string>('');
+
+  useEffect(() => {
+    if (initialValue && initialValue !== '') {
+      setListinoRaw(initialValue);
+      // Puliamo il valore globale dopo il trasferimento
+      clearInitialValue?.();
+    }
+  }, [initialValue, clearInitialValue]);
 
   const results = useMemo(() => {
     const listino = parseFloat(listinoRaw) || 0;

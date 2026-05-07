@@ -1596,6 +1596,14 @@ export default function App() {
     return calculateOrderStats(rubrica, allRivendite, isDateInRange);
   }, [rubrica, crmAnagrafiche, stores, giroVisite, meseSelezionato, statsPeriod, customRange, activeTab]);
 
+  const [calcTransferValue, setCalcTransferValue] = useState<string>('');
+
+  const handleGoToCalc = (amount: string) => {
+    setCalcTransferValue(amount);
+    setActiveTab('calcolatore'); // Cambia tab al calcolatore
+    setExpandedCardId(null); // Chiude eventuali modali aperti
+  };
+
   const crmStats = useMemo(() => {
     return calculateCrmStats(rubrica, combinedRivendite, isDateInRange);
   }, [crmAnagrafiche, stores, rubrica, meseSelezionato, statsPeriod, customRange, activeTab]);
@@ -1633,7 +1641,8 @@ export default function App() {
     handleEditHistory,
     handleDeleteHistory,
     startVisita,
-    endVisita
+    endVisita,
+    onGoToCalc: handleGoToCalc
   }), [
     activeTab,
     expandedCardId,
@@ -1656,7 +1665,8 @@ export default function App() {
     handleEditHistory,
     handleDeleteHistory,
     startVisita,
-    endVisita
+    endVisita,
+    handleGoToCalc
   ]);
 
   // --- GESTIONE TASTO INDIETRO ANDROID (HARDWARE BACK BUTTON) ---
@@ -2318,7 +2328,7 @@ export default function App() {
             ) : activeTab === 'magazzino' ? (
               <WarehouseTab />
             ) : activeTab === 'calcolatore' ? (
-              <CalcolatoreInverso />
+              <CalcolatoreInverso initialValue={calcTransferValue} clearInitialValue={() => setCalcTransferValue('')} />
             ) : activeTab === 'giro' ? (
               viewMode === 'map' ? (
                 <MapView results={getSortedList} />
@@ -2498,6 +2508,7 @@ export default function App() {
         selectedRivenditaId={selectedRivenditaId}
         startVisita={startVisita}
         endVisita={endVisita}
+        onGoToCalc={handleGoToCalc}
       />
     </div>
   );

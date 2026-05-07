@@ -214,7 +214,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                     showToast('Codice Logista copiato!', 'success');
                   }
                 }}
-                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                 title="Clicca per copiare il Codice Logista"
               >
                 <Package className="w-2.5 h-2.5 text-blue-400" />
@@ -422,7 +422,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                                   showToast('Codice Logista copiato!', 'success');
                                 }
                               }}
-                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                               title="Clicca per copiare il Codice Logista"
                             >
                               <Package className="w-2.5 h-2.5 text-blue-400" />
@@ -537,7 +537,7 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                                     showToast('Codice Logista copiato!', 'success');
                                   }
                                 }}
-                                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                                 title="Clicca per copiare il Codice Logista"
                               >
                                 <Package className="w-2.5 h-2.5 text-blue-400" />

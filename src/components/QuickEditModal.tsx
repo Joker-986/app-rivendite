@@ -13,10 +13,11 @@ interface QuickEditModalProps {
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
   onDeleteHistory: (id: string, index: number) => void;
   targetHistoryIndex?: number;
+  onGoToCalc?: (amount: string) => void;
 }
 
 const QuickEditModal: React.FC<QuickEditModalProps> = ({
-  isOpen, onClose, editType, rivenditaId, extra, onUpdateRubrica, onEditHistory, onDeleteHistory, targetHistoryIndex
+  isOpen, onClose, editType, rivenditaId, extra, onUpdateRubrica, onEditHistory, onDeleteHistory, targetHistoryIndex, onGoToCalc
 }) => {
   const { openConfirm } = useModals();
 
@@ -203,6 +204,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
         }}
         onCancel={handleCloseRequest}
         onDelete={handleDelete}
+        onGoToCalc={onGoToCalc}
       />
     );
   }

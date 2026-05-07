@@ -194,7 +194,8 @@ const ModalContainer: React.FC<{
   selectedRivenditaId?: string | null;
   startVisita: (id: string) => void;
   endVisita: (id: string, note: string, tornoPiuTardi: boolean) => void;
-}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast, missions: propMissions, selectedRivenditaId, startVisita, endVisita }) => {
+  onGoToCalc?: (amount: string) => void;
+}> = ({ rubrica, combinedRivendite, onUpdateRubrica, onEditHistory, onDeleteHistory, showToast, missions: propMissions, selectedRivenditaId, startVisita, endVisita, onGoToCalc }) => {
   const { 
     confirmModal, closeConfirm, 
     shareModal, closeShare, 
@@ -303,6 +304,7 @@ const ModalContainer: React.FC<{
         onEditHistory={onEditHistory}
         onDeleteHistory={onDeleteHistory}
         targetHistoryIndex={quickEditModal.targetIndex}
+        onGoToCalc={onGoToCalc}
       />
 
       {/* 4. REVISIT MODAL GLOBALE */}
