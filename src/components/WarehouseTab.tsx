@@ -3,7 +3,7 @@ import {
   Package, Plus, Trash2, Edit2, Save, X, 
   Search, Filter, ArrowUpDown, MoreVertical,
   ChevronRight, AlertCircle, CheckCircle2,
-  Tag, DollarSign, Layers, Info, Archive, Upload
+  Tag, DollarSign, Layers, Info, Archive, Upload, RefreshCw
 } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { useModals } from '../contexts/ModalContext';
@@ -85,6 +85,15 @@ const WarehouseTab: React.FC = () => {
       isDestructive: true,
       confirmText: 'Sì, Archivia',
       onConfirm: () => deleteProduct(id)
+    });
+  };
+
+  const handleRestore = (product: Product) => {
+    openConfirm({
+      title: 'Ripristina Prodotto',
+      message: `Sei sicuro di voler ripristinare "${product.descrizione}"? Tornerà visibile nel listino ordini.`,
+      confirmText: 'Sì, Ripristina',
+      onConfirm: () => updateProduct(product.id, { ...product, attivo: true })
     });
   };
 
@@ -393,8 +402,24 @@ const WarehouseTab: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-0.5 border-l border-slate-200 pl-1.5 ml-1">
-                  <button onClick={() => startEditing(product)} className="p-2 text-slate-400 hover:text-brand-600 rounded-lg transition-colors"><Edit2 className="w-[18px] h-[18px]" /></button>
-                  <button onClick={() => handleDelete(product.id, product.descrizione)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-colors"><Trash2 className="w-[18px] h-[18px]" /></button>
+                  {product.attivo === false ? (
+                    <button 
+                      onClick={() => handleRestore(product)} 
+                      className="p-2 text-slate-400 hover:text-emerald-600 rounded-lg transition-colors flex items-center justify-center"
+                      title="Ripristina Prodotto"
+                    >
+                      <RefreshCw className="w-[18px] h-[18px]" />
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={() => startEditing(product)} className="p-2 text-slate-400 hover:text-brand-600 rounded-lg transition-colors" title="Modifica">
+                        <Edit2 className="w-[18px] h-[18px]" />
+                      </button>
+                      <button onClick={() => handleDelete(product.id, product.descrizione)} className="p-2 text-slate-400 hover:text-red-600 rounded-lg transition-colors" title="Archivia">
+                        <Trash2 className="w-[18px] h-[18px]" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

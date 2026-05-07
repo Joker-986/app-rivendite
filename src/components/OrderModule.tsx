@@ -106,6 +106,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
       productId: product.id,
       codice: product.codice,
       descrizione: product.descrizione,
+      categoria: product.categoria,
       quantita: quantita,
       unita: 1, 
       prezzoApplicato: finalPrice,
@@ -124,6 +125,11 @@ const OrderModule: React.FC<OrderModuleProps> = ({
 
   const handleRemoveItem = (id: string) => {
     setCart(cart.filter(item => item.id !== id));
+  };
+
+  const updateCartItemQuantity = (id: string, newQty: number) => {
+    if (newQty < 1) return;
+    setCart(prev => prev.map(item => item.id === id ? { ...item, quantita: newQty } : item));
   };
 
   const handleConfirm = () => {
@@ -238,6 +244,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                   min="1"
                   value={quantita}
                   onChange={(e) => setQuantita(parseInt(e.target.value) || 1)}
+                  onFocus={(e) => e.target.select()}
                   className="w-14 h-10 text-center bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-500 outline-none"
                 />
                 <button 
@@ -272,43 +279,62 @@ const OrderModule: React.FC<OrderModuleProps> = ({
           <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Riepilogo Articoli</label>
             {cart.length > 0 ? (
-              <div className="bg-slate-50/50 rounded-2xl border border-slate-100 divide-y divide-slate-100/50">
-                {cart.map(item => (
-                  <div key={item.id} className="p-2 flex justify-between items-center">
-                    <div className="flex flex-col min-w-0 flex-1 pr-2">
-                      <p className="text-[10px] font-bold text-slate-700 truncate">
-                        {item.codice} {item.isSpacchettato && <span className="bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-[4px] text-[8px] font-black ml-1 uppercase tracking-wider">PZ</span>}
-                      </p>
-                      <p className="text-[9px] text-slate-400 truncate text-ellipsis overflow-hidden leading-tight">{item.descrizione}</p>
+              <div className="space-y-2">
+            {cart.map((item) => {
+              // Recupero dinamico della categoria dal catalogo prodotti
+              const originalProduct = products.find(p => p.id === item.productId);
+              const categoryLabel = originalProduct?.categoria || 'VARIE';
+
+              return (
+                <div key={item.id} className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 group">
+                  
+                  <div className="flex-1 min-w-0 pr-3">
+                    {/* Descrizione in alto (Priorità) */}
+                    <div className="text-xs font-bold text-slate-800 leading-tight">
+                      {item.descrizione}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-right flex flex-col items-end">
-                        <p className="text-[11px] font-black text-slate-800">x{item.quantita}</p>
-                        {item.isCredito ? (
-                          <span className={`px-2 py-0.5 ${item.isVoucher ? 'bg-orange-100 text-orange-600' : 'bg-purple-100 text-purple-600'} text-[8px] font-black rounded-full uppercase`}>
-                            {item.isVoucher ? 'One Shot' : 'Nota Credito'}
-                          </span>
-                        ) : item.isOmaggio ? (
-                          <span className="text-[9px] text-amber-600 font-black bg-amber-50 px-1 rounded mt-0.5 border border-amber-100">SCONTO 100%</span>
-                        ) : null}
-                        {(!item.isOmaggio || item.isCredito) && (
-                          <p className={`text-[9px] font-bold ${item.isCredito ? 'text-purple-700' : 'text-brand-600'}`}>
-                            €{(item.prezzoApplicato * item.quantita).toFixed(2)}
-                          </p>
-                        )}
-                      </div>
+                    
+                    {/* Codice e Categoria in basso */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                        {item.codice}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate">
+                        • {categoryLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Input Quantità Pulito e Minimale */}
+                    <input 
+                      type="number" 
+                      value={item.quantita}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => updateCartItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                      className="w-10 h-7 text-center bg-slate-100 hover:bg-slate-200 border-transparent rounded-md text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
+                    />
+
+                    {/* Prezzo e Rimozione */}
+                    <div className="flex flex-col items-end min-w-[50px]">
+                      <span className="text-[11px] font-black text-slate-700">
+                        €{(item.prezzoApplicato * item.quantita).toFixed(2)}
+                      </span>
                       <button 
-                        onClick={() => handleRemoveItem(item.id)}
-                        className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={() => setCart(cart.filter(i => i.id !== item.id))}
+                        className="text-[9px] font-bold text-red-400 uppercase hover:text-red-600 transition-colors mt-0.5"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        Elimina
                       </button>
                     </div>
                   </div>
-                ))}
-                <div className="p-2.5 bg-brand-50/20 flex justify-between items-center">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Totale</span>
-                  <span className="text-xs font-black text-brand-700">€{totaleEuro.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  
+                </div>
+              );
+            })}
+                <div className="p-2.5 bg-brand-50/20 border border-brand-100 rounded-xl flex justify-between items-center">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Totale Spesa</span>
+                  <span className="text-sm font-black text-brand-700">€{totaleEuro.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             ) : (

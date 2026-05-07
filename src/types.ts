@@ -41,6 +41,7 @@ export interface OrderItem {
   productId: string;
   codice: string;
   descrizione: string;
+  categoria?: string;
   quantita: number;         // Numero di unità ordinate
   unita: number;            // Moltiplicatore usato
   prezzoApplicato: number;  // Prezzo cristallizzato al momento dell'ordine

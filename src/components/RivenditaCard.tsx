@@ -348,6 +348,48 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   // Definisce se i dati del CRM devono essere mostrati (vero sia nel CRM che nel Giro)
   const showCrmData = isCrmTab || activeTab === 'giro';
 
+  const [logistaLoading, setLogistaLoading] = useState(false);
+  const [logistaError, setLogistaError] = useState('');
+
+  const generateLogistaCode = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const comune = res['Comune'];
+    const num = res['Num. Rivendita'];
+    if (!comune || !num) {
+      setLogistaError('Comune o Num. Rivendita mancanti.');
+      return;
+    }
+    
+    setLogistaLoading(true);
+    setLogistaError('');
+    try {
+      const response = await fetch('/api/logista', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comune: comune.trim() })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      if (data.results && data.results.length > 0) {
+        // Prende il primo risultato per semplicità nel CRM
+        const istat = data.results[0].istat;
+        const shiftedIstat = istat.substring(1) + istat.charAt(0);
+        const paddedRivendita = num.toString().padStart(3, '0');
+        const finalCode = shiftedIstat + paddedRivendita;
+        
+        handleRubricaUpdate(id, 'codiceLogista', finalCode);
+        showToast('Codice Logista generato e salvato!', 'success');
+      } else {
+        throw new Error('Comune non trovato.');
+      }
+    } catch (err: any) {
+      setLogistaError(err.message || 'Errore di rete.');
+    } finally {
+      setLogistaLoading(false);
+    }
+  };
+
   const handleShare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -383,6 +425,13 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               ) : (
                 <span className="px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider">
                   RIV. {res['Num. Rivendita']}
+                </span>
+              )}
+
+              {extra.codiceLogista && (
+                <span className="px-2 py-1 bg-slate-800 text-slate-100 text-[10px] font-black rounded-md tracking-widest shadow-sm flex items-center gap-1 cursor-copy" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(extra.codiceLogista || ''); showToast('Logista copiato!', 'success'); }} title="Clicca per copiare">
+                  <Package className="w-3 h-3 text-slate-300" />
+                  {extra.codiceLogista}
                 </span>
               )}
               {activeTab === 'search' ? (
@@ -1250,6 +1299,38 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm uppercase font-bold"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-bold text-slate-700">Codice Logista (Autocalcolato)</label>
+                    {!extra.codiceLogista && !res.isStore && (
+                      <button 
+                        onClick={generateLogistaCode}
+                        disabled={logistaLoading}
+                        className="text-[10px] font-black bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1 shrink-0"
+                      >
+                        {logistaLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
+                        GENERA
+                      </button>
+                    )}
+                  </div>
+                  {logistaError && <span className="text-[10px] text-red-500 font-bold block mt-1">{logistaError}</span>}
+                  {extra.codiceLogista ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="text"
+                        value={extra.codiceLogista}
+                        readOnly
+                        className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm font-black tracking-widest text-brand-700 outline-none"
+                      />
+                      <button onClick={() => { navigator.clipboard.writeText(extra.codiceLogista || ''); showToast('Copiato!', 'success'); }} className="h-10 px-3 bg-white border border-slate-300 rounded-lg text-slate-600 hover:text-brand-600 transition-colors shadow-sm shrink-0">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1 italic">Nessun codice salvato. Clicca su Genera per calcolarlo dal Comune ISTAT.</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
