@@ -14,6 +14,7 @@ import WarehouseTab from './components/WarehouseTab';
 import CodiceLogistaTab from './components/CodiceLogistaTab';
 import CalcolatoreInverso from './components/CalcolatoreInverso';
 import SettingsModal from './components/SettingsModal';
+import AnagraficaTab from './components/AnagraficaTab';
 import ModalContainer from './components/ModalContainer';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import { calculateFatturatoPeriodo, calculateOrderStats, calculateCrmStats, calculateVisitStats } from './services/statsService';
@@ -1179,6 +1180,7 @@ export default function App() {
       { id: 'crm', label: 'CRM', count: crmList.length },
       { id: 'store', label: 'Store', count: storeList.length },
       { id: 'magazzino', label: 'Magazzino', count: 0 },
+      { id: 'anagrafica', label: 'Rubrica', count: 0 },
       { id: 'logista', label: 'Cod. Logista', count: 0 }
     ];
     const provs = provincesInCrm.map(prov => ({
@@ -2067,7 +2069,7 @@ export default function App() {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {!['regia', 'statistiche', 'agenda', 'magazzino', 'logista', 'calcolatore', 'rimborsi', 'ordini'].includes(activeTab) && (
+            {!['regia', 'statistiche', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini'].includes(activeTab) && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -2123,7 +2125,7 @@ export default function App() {
             )}
 
               {/* Filtri Comuni */}
-              {!['statistiche', 'regia', 'agenda', 'magazzino', 'logista', 'calcolatore', 'rimborsi', 'ordini'].includes(activeTab) && (
+              {!['statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini'].includes(activeTab) && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2323,6 +2325,8 @@ export default function App() {
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
               />
+            ) : activeTab === 'anagrafica' ? (
+              <AnagraficaTab />
             ) : activeTab === 'logista' ? (
               <CodiceLogistaTab />
             ) : activeTab === 'magazzino' ? (
