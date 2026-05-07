@@ -239,11 +239,27 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <ShoppingBag className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-blue-500'}`} />
                           <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
                             {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'} ${ord.riv['Num. Rivendita']}`}
                           </h3>
+                          {ord.data.codiceLogista && (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(ord.data.codiceLogista || '');
+                                if (typeof showToast === 'function') {
+                                  showToast('Codice Logista copiato!', 'success');
+                                }
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                              title="Clicca per copiare il Codice Logista"
+                            >
+                              <Package className="w-2.5 h-2.5 text-blue-400" />
+                              <span>{ord.data.codiceLogista}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-1">
                            {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
@@ -304,10 +320,28 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                 onClick={() => openQuickEdit('ORDINE', ord.id, ord.data, ord.originalIndex)}
                 className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80 cursor-pointer hover:bg-slate-50 transition-colors"
               >
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-bold text-slate-700 truncate">
-                    {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'} ${ord.riv['Num. Rivendita']}`}
-                  </span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-bold text-slate-700 truncate">
+                      {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'} ${ord.riv['Num. Rivendita']}`}
+                    </span>
+                    {ord.data.codiceLogista && (
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(ord.data.codiceLogista || '');
+                          if (typeof showToast === 'function') {
+                            showToast('Codice Logista copiato!', 'success');
+                          }
+                        }}
+                        className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                        title="Clicca per copiare il Codice Logista"
+                      >
+                        <Package className="w-2.5 h-2.5 text-blue-400" />
+                        <span>{ord.data.codiceLogista}</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                     <span className="text-emerald-600">€{ord.totaleOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>

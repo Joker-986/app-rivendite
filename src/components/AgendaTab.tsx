@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   CalendarClock, UserCheck, ShoppingBag, ChevronRight, Edit3, 
   History, ChevronDown, CheckCircle2, Navigation, Filter, MapPin,
-  AlertOctagon, Zap, CalendarDays, Rocket, Receipt, Ticket
+  AlertOctagon, Zap, CalendarDays, Rocket, Receipt, Ticket, Package
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, handleNavigation, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
@@ -202,9 +202,25 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
     return (
       <div key={group.id} className={`${cardBgClass} rounded-2xl border shadow-sm overflow-hidden p-2.5 mb-3 transition-colors`}>
         <div className="flex justify-between items-center mb-2 gap-2">
-          <div className="min-w-0 flex-1 flex items-center gap-1.5">
+          <div className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
             <h3 className="font-black text-slate-800 text-[13px] truncate">{group.riv.isStore ? group.riv.storeName : `Riv. ${group.riv['Num. Rivendita']}`}</h3>
             <span className="text-[9px] font-bold text-slate-400 uppercase truncate">• {group.riv['Comune']}</span>
+            {group.data.codiceLogista && (
+              <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(group.data.codiceLogista || '');
+                  if (typeof showToast === 'function') {
+                    showToast('Codice Logista copiato!', 'success');
+                  }
+                }}
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                title="Clicca per copiare il Codice Logista"
+              >
+                <Package className="w-2.5 h-2.5 text-blue-400" />
+                <span>{group.data.codiceLogista}</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200/60 shadow-sm shrink-0 h-fit" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => handleNavigation(group.riv['Indirizzo'] + ', ' + group.riv['Comune'])} className="p-1.5 rounded-lg text-brand-600 hover:bg-slate-50 transition-colors active:scale-95" title="Naviga">
@@ -394,9 +410,25 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                   {pendingNdc.map((ndc, i) => (
                     <div key={`pNdc-${i}`} className={`border rounded-2xl p-2.5 mb-3 shadow-sm transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200 shadow-orange-100/50' : 'bg-emerald-50/30 border-emerald-200'}`}>
                       <div className="flex justify-between items-center mb-2 gap-2">
-                        <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                        <div className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
                           <h3 className="font-black text-slate-800 text-[13px] truncate">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</h3>
                           <span className="text-[9px] font-bold text-slate-400 uppercase truncate">• {ndc.riv['Comune']}</span>
+                          {ndc.data.codiceLogista && (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                                if (typeof showToast === 'function') {
+                                  showToast('Codice Logista copiato!', 'success');
+                                }
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                              title="Clicca per copiare il Codice Logista"
+                            >
+                              <Package className="w-2.5 h-2.5 text-blue-400" />
+                              <span>{ndc.data.codiceLogista}</span>
+                            </div>
+                          )}
                         </div>
                         {ndc.isMismatch && (
                           <span className="bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1 shrink-0">
@@ -493,9 +525,27 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rimborsi Archiviati</h4>
                       {completedNdc.map((ndc, i) => (
                         <div key={`cNdc-${i}`} className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 shadow-sm">
-                           <div className="flex flex-col min-w-0">
-                              <span className="text-[11px] font-bold text-slate-700">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</span>
-                              <div className="flex items-center gap-1 text-[9px] text-slate-500 mt-0.5">
+                       <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-700">{ndc.riv.isStore ? ndc.riv.storeName : `Riv. ${ndc.riv['Num. Rivendita']}`}</span>
+                            {ndc.data.codiceLogista && (
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                                  if (typeof showToast === 'function') {
+                                    showToast('Codice Logista copiato!', 'success');
+                                  }
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                                title="Clicca per copiare il Codice Logista"
+                              >
+                                <Package className="w-2.5 h-2.5 text-blue-400" />
+                                <span>{ndc.data.codiceLogista}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-[9px] text-slate-500 mt-0.5">
                                 {ndc.isVoucher ? (
                                   <Ticket className="w-3 h-3 text-orange-500 shrink-0" />
                                 ) : (

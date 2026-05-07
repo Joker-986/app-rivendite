@@ -11,7 +11,8 @@ import {
   Search,
   ArrowRight,
   AlertOctagon,
-  Ticket
+  Ticket,
+  Package
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
@@ -170,11 +171,27 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                   <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           {ndc.isVoucher ? <Ticket className="w-3.5 h-3.5 text-orange-500" /> : <Receipt className="w-3.5 h-3.5 text-emerald-500" />}
                           <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
                             {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
                           </h3>
+                          {ndc.data.codiceLogista && (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                                if (typeof showToast === 'function') {
+                                  showToast('Codice Logista copiato!', 'success');
+                                }
+                              }}
+                              className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                              title="Clicca per copiare il Codice Logista"
+                            >
+                              <Package className="w-2.5 h-2.5 text-blue-400" />
+                              <span>{ndc.data.codiceLogista}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {ndc.isMismatch ? (
@@ -240,10 +257,28 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
           <div className="space-y-2">
             {completedNdc.slice(0, 10).map((ndc, i) => (
               <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80">
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[12px] font-bold text-slate-700 truncate">
-                    {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
-                  </span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-bold text-slate-700 truncate">
+                      {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'} ${ndc.riv['Num. Rivendita']}`}
+                    </span>
+                    {ndc.data.codiceLogista && (
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                          if (typeof showToast === 'function') {
+                            showToast('Codice Logista copiato!', 'success');
+                          }
+                        }}
+                        className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0 ml-auto"
+                        title="Clicca per copiare il Codice Logista"
+                      >
+                        <Package className="w-2.5 h-2.5 text-blue-400" />
+                        <span>{ndc.data.codiceLogista}</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                     {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400" /> : <Receipt className="w-3 h-3 text-emerald-400" />}
                     <span className={ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
