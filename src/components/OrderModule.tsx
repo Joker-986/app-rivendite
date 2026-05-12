@@ -593,17 +593,17 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                         setIsDropdownOpen(false);
                         setProductSearchTerm('');
                       }}
-                      className="p-5 flex flex-col gap-2 active:bg-slate-50 transition-colors"
+                      className="px-4 py-2 flex flex-col active:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
                     >
-                      <div className="flex justify-between items-start">
-                        <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-black rounded uppercase tracking-tighter border border-brand-100">
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className="px-1.5 py-[1px] bg-brand-50 text-brand-700 text-[9px] font-black rounded uppercase tracking-tighter border border-brand-100 leading-none">
                           {product.codice}
                         </span>
-                        <span className="font-black text-slate-900 text-sm">
+                        <span className="font-black text-slate-900 text-[11px] leading-none">
                           €{product.prezzoUnita.toFixed(2)}
                         </span>
                       </div>
-                      <div className="text-xs font-bold text-slate-700 leading-normal uppercase pr-4">
+                      <div className="text-[10px] font-bold text-slate-700 leading-tight uppercase pr-2 line-clamp-2">
                         {product.descrizione}
                       </div>
                     </div>
