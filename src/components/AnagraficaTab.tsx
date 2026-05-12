@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Upload, Search, Phone, Mail, MapPin, Users, MessageCircle, 
-  X, Trash2, Save, UserPlus, Package, Filter, Image as ImageIcon, Edit3, CheckCircle2
+  X, Trash2, Save, UserPlus, Package, Filter, Image as ImageIcon, Edit3, Loader2, Link
 } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 
@@ -43,64 +43,56 @@ const AnagraficaTab: React.FC = () => {
 
   const [isPromoMode, setIsPromoMode] = useState(false);
   const [promoText, setPromoText] = useState(() => localStorage.getItem('tgest_promo_text') || '');
-  const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
-  const [isImageCopied, setIsImageCopied] = useState(false);
+  const [promoImageUrl, setPromoImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('tgest_promo_text', promoText);
   }, [promoText]);
 
-  // Funzione per convertire qualsiasi immagine in PNG e copiarla negli appunti (Requisito Clipboard API)
-  const copyImageToClipboard = async (file: File) => {
-    try {
-      if (!file.type.startsWith('image/')) {
-        alert("Per favore, seleziona un'immagine valida.");
-        return;
-      }
-      
-      let blobToCopy: Blob = file;
-      
-      // Se non è PNG, usiamo Canvas per convertirla al volo (Safari/Chrome Mobile lo pretendono)
-      if (file.type !== 'image/png') {
-        const img = new Image();
-        const url = URL.createObjectURL(file);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        await new Promise((resolve, reject) => {
-          img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx?.drawImage(img, 0, 0);
-            canvas.toBlob((blob) => {
-              if (blob) { blobToCopy = blob; resolve(null); } 
-              else reject(new Error('Canvas toBlob fallito'));
-            }, 'image/png');
-          };
-          img.onerror = () => reject(new Error('Errore caricamento immagine'));
-          img.src = url;
-        });
-      }
-
-      const item = new ClipboardItem({ 'image/png': blobToCopy });
-      await navigator.clipboard.write([item]);
-      
-      setIsImageCopied(true);
-      setTimeout(() => setIsImageCopied(false), 3000);
-      
-    } catch (err) {
-      console.error("Errore Clipboard:", err);
-      alert("Il tuo browser ha bloccato la copia automatica. Dovrai copiare l'immagine manualmente dalla Galleria.");
-    }
-  };
-
-  const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload asincrono su ImgBB con autodistruzione a 30 giorni (2592000 secondi)
+  const handlePromoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPromoImagePreview(url);
-    copyImageToClipboard(file);
-    e.target.value = ''; // Reset input
+
+    setIsUploadingImage(true);
+    
+    // Recupero chiave da ambiente Vite (Render)
+    const apiKey = import.meta.env.VITE_IMGBB_API_KEY;
+
+    if (!apiKey) {
+      alert("Configurazione Mancante: VITE_IMGBB_API_KEY non trovata.");
+      setIsUploadingImage(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('expiration', '2592000'); // 30 giorni
+
+    try {
+      // Endpoint corretto con chiave in Query String come da specifiche
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) throw new Error(`Errore HTTP: ${response.status}`);
+
+      const result = await response.json();
+
+      if (result.success && result.status === 200) {
+        // Percorso esatto per l'URL diretto richiesto dallo scraper di WhatsApp
+        setPromoImageUrl(result.data.url);
+      } else {
+        alert("Errore ImgBB: " + (result.error?.message || "Upload fallito"));
+      }
+    } catch (err) {
+      alert("Errore di connessione: " + (err instanceof Error ? err.message : "Sconosciuto"));
+    } finally {
+      setIsUploadingImage(false);
+      e.target.value = '';
+    }
   };
 
   // Salvataggio automatico
@@ -351,28 +343,35 @@ const AnagraficaTab: React.FC = () => {
                 />
               </div>
               
-              <div className="flex items-center gap-3">
-                <label className="flex-1 px-3 py-2 bg-white border border-emerald-200 text-emerald-700 text-[10px] font-black rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:bg-emerald-50 active:scale-95 transition-all uppercase tracking-widest">
-                  <ImageIcon className="w-3.5 h-3.5" /> 
-                  {promoImagePreview ? 'Cambia Locandina' : 'Allega Locandina'}
-                  <input type="file" accept="image/*" onChange={handlePromoImageSelect} className="hidden" />
-                </label>
-                
-                {promoImagePreview && (
-                  <div className="relative shrink-0">
-                    <img src={promoImagePreview} alt="Preview" className="w-10 h-10 object-cover rounded-lg border border-emerald-200 shadow-sm" />
-                    <button onClick={() => setPromoImagePreview(null)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-md">
-                      <X className="w-2.5 h-2.5" />
+              <div className="flex flex-col gap-2 border-t border-emerald-100 pt-3">
+                <div className="flex items-center gap-3">
+                  <label className={`flex-1 px-3 py-2 border text-[10px] font-black rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm transition-all uppercase tracking-widest ${
+                    isUploadingImage ? 'bg-slate-100 border-slate-200 text-slate-400 pointer-events-none' : 
+                    promoImageUrl ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                  }`}>
+                    {isUploadingImage ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Upload in corso...</>
+                    ) : promoImageUrl ? (
+                      <><ImageIcon className="w-3.5 h-3.5" /> Cambia Foto</>
+                    ) : (
+                      <><ImageIcon className="w-3.5 h-3.5" /> Allega Locandina</>
+                    )}
+                    <input type="file" accept="image/*" onChange={handlePromoImageUpload} className="hidden" disabled={isUploadingImage} />
+                  </label>
+                  
+                  {promoImageUrl && (
+                    <button onClick={() => setPromoImageUrl(null)} className="shrink-0 p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
+                      <X className="w-4 h-4" />
                     </button>
+                  )}
+                </div>
+
+                {promoImageUrl && (
+                  <div className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1.5 rounded-lg w-full uppercase tracking-widest break-all">
+                    <Link className="w-3 h-3 shrink-0" /> Link Diretto: {promoImageUrl}
                   </div>
                 )}
               </div>
-              
-              {isImageCopied && (
-                <div className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg w-fit animate-pulse uppercase tracking-widest">
-                  <CheckCircle2 className="w-3 h-3" /> Immagine in memoria: Apri chat e incolla!
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -413,9 +412,17 @@ const AnagraficaTab: React.FC = () => {
                       e.stopPropagation();
                       const cleanPhone = contact.telefono.replace(/\D/g, '');
                       const baseUrl = `https://wa.me/39${cleanPhone}`;
-                      const finalUrl = (isPromoMode && promoText.trim() !== '') 
-                        ? `${baseUrl}?text=${encodeURIComponent(promoText)}` 
+                      
+                      let message = promoText.trim();
+                      if (isPromoMode && promoImageUrl) {
+                        // Accoda il link diretto alla fine per attivare l'anteprima
+                        message = message ? `${message}\n\n${promoImageUrl}` : promoImageUrl;
+                      }
+                      
+                      const finalUrl = (isPromoMode && message) 
+                        ? `${baseUrl}?text=${encodeURIComponent(message)}` 
                         : baseUrl;
+                        
                       window.open(finalUrl, '_blank');
                     }}
                     className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm ${
