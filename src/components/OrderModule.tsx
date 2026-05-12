@@ -259,59 +259,16 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             <div className="flex gap-2">
             <div className="relative flex-1 min-w-0">
               <div 
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center justify-between h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium cursor-pointer hover:border-brand-300 transition-colors"
+                onClick={() => setIsDropdownOpen(true)}
+                className="flex-1 h-12 px-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between cursor-pointer"
               >
-                <span className="truncate text-slate-700">
+                <span className="text-xs font-bold text-slate-700 truncate">
                   {selectedProductId 
-                    ? (() => {
-                        const p = products.find(p => p.id === selectedProductId);
-                        return p ? `${p.codice} - ${p.descrizione}` : 'Seleziona un prodotto...';
-                      })()
-                    : 'Seleziona un prodotto...'
-                  }
+                    ? products.find(p => p.id === selectedProductId)?.descrizione 
+                    : "Tocca per scegliere un prodotto..."}
                 </span>
-                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                <ChevronDown className="w-4 h-4 text-slate-400" />
               </div>
-
-              {isDropdownOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95">
-                  <div className="p-2 border-b border-slate-100 sticky top-0 bg-slate-50">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input 
-                        type="text"
-                        autoFocus
-                        placeholder="Cerca per codice o nome..."
-                        value={productSearchTerm}
-                        onChange={(e) => setProductSearchTerm(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-brand-500 transition-all"
-                      />
-                    </div>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto p-1">
-                    {searchedProducts.length === 0 ? (
-                      <div className="p-4 text-center text-[10px] text-slate-400 font-bold uppercase">Nessun prodotto trovato</div>
-                    ) : (
-                      searchedProducts.map(product => (
-                        <div 
-                          key={product.id}
-                          onClick={() => { 
-                            setSelectedProductId(product.id); 
-                            setIsSpacchettatoUI(false); 
-                            setIsDropdownOpen(false);
-                            setProductSearchTerm('');
-                          }}
-                          className={`p-2.5 text-xs rounded-lg cursor-pointer transition-colors flex justify-between items-center gap-3 ${selectedProductId === product.id ? 'bg-brand-50 text-brand-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
-                        >
-                          <span className="truncate flex-1">{product.codice} - {product.descrizione}</span>
-                          <span className="font-black shrink-0 text-slate-800">€{product.prezzoUnita.toFixed(2)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
               
               <div className="flex items-center gap-1.5">
@@ -595,6 +552,67 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             <span>{isEditMode ? 'AGGIORNA ORDINE' : 'SALVA BOZZA'}</span>
           </button>
         </div>
+
+        {isDropdownOpen && (
+          <div className="fixed inset-0 z-[999] bg-white flex flex-col animate-in slide-in-from-bottom duration-300">
+            {/* HEADER FISSO: Ricerca e Chiudi */}
+            <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  autoFocus
+                  type="text"
+                  placeholder="Cerca prodotto..."
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-brand-500 shadow-sm"
+                />
+              </div>
+              <button 
+                onClick={() => { setIsDropdownOpen(false); setProductSearchTerm(''); }}
+                className="p-3 bg-slate-200 text-slate-600 rounded-2xl active:scale-95 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* BODY SCORREVOLE: Lista Prodotti Full-Width */}
+            <div className="flex-1 overflow-y-auto bg-white">
+              {searchedProducts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                  <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
+                  <span className="text-xs font-black uppercase tracking-widest">Nessun prodotto trovato</span>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {searchedProducts.map(product => (
+                    <div 
+                      key={product.id}
+                      onClick={() => { 
+                        setSelectedProductId(product.id); 
+                        setIsDropdownOpen(false);
+                        setProductSearchTerm('');
+                      }}
+                      className="p-5 flex flex-col gap-2 active:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-black rounded uppercase tracking-tighter border border-brand-100">
+                          {product.codice}
+                        </span>
+                        <span className="font-black text-slate-900 text-sm">
+                          €{product.prezzoUnita.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-700 leading-normal uppercase pr-4">
+                        {product.descrizione}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
