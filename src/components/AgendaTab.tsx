@@ -17,6 +17,7 @@ interface AgendaTabProps {
   setGiroVisite: React.Dispatch<React.SetStateAction<SearchResult[]>>;
   setRivenditaFilter: (filter: string) => void;
   setActiveTab: (tab: string) => void;
+  onDeepLink: (id: string, isStore: boolean) => void;
   showToast: (message: string, type?: any) => void;
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
 }
@@ -31,7 +32,7 @@ const getLocalMidnightTime = (dateStr: string) => {
 
 const AgendaTab: React.FC<AgendaTabProps> = ({
   rubrica, crmAnagrafiche, stores, giroVisite, 
-  setRivenditaFilter, setActiveTab, onEditHistory, showToast
+  setRivenditaFilter, setActiveTab, onDeepLink, onEditHistory, showToast
 }) => {
   const { openQuickEdit, openRevisitModal } = useModals();
   
@@ -227,8 +228,16 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
               <Navigation className="w-3.5 h-3.5" />
             </button>
             <div className="w-px h-4 bg-slate-300 mx-1"></div>
-            <button onClick={() => { setRivenditaFilter(group.riv.isStore ? group.riv.storeNumber : group.riv['Num. Rivendita']); setActiveTab('crm'); }} className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-50 transition-colors" title="Apri nel CRM">
-              <ChevronRight className="w-3.5 h-3.5" />
+            <button 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                e.preventDefault();
+                onDeepLink(group.id, !!group.riv.isStore); 
+              }} 
+              className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-50 transition-all z-20 relative active:scale-90" 
+              title={group.riv.isStore ? "Apri nello Store" : "Apri nel CRM"}
+            >
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

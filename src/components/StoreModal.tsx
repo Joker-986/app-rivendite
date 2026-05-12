@@ -8,19 +8,10 @@ interface StoreModalProps {
   onCreateStore: (store: Partial<SearchResult>) => void;
 }
 
-const INITIAL_STORE_STATE: Partial<SearchResult> = {
-  'Prov.': '',
-  'Comune': '',
-  'Num. Rivendita': '',
-  'Indirizzo': '',
-  'Tipo Rivendita': '',
-  'Distr. Automatico': '',
-  storeName: '',
-  storeNumber: '',
-  isChain: false,
-  chainCount: 1,
-  rivenditaUfficiale: '',
-  pec: ''
+const INITIAL_STORE_STATE: Partial<SearchResult> & { telefono?: string; email?: string; cap?: string } = {
+  'Prov.': '', 'Comune': '', 'Num. Rivendita': '', 'Indirizzo': '', 'Tipo Rivendita': '', 'Distr. Automatico': '',
+  storeName: '', storeNumber: '', isChain: false, chainCount: 1, rivenditaUfficiale: '', pec: '',
+  telefono: '', email: '', cap: ''
 };
 
 export default function StoreModal({ isOpen, onClose, onCreateStore }: StoreModalProps) {
@@ -32,11 +23,13 @@ export default function StoreModal({ isOpen, onClose, onCreateStore }: StoreModa
     }
   }, [isOpen]);
 
+  useEffect(() => { const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc); }, [onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+    <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-slate-900">Nuovo Store</h3>
@@ -110,6 +103,7 @@ export default function StoreModal({ isOpen, onClose, onCreateStore }: StoreModa
                   value={newStore['Prov.'] || ''} 
                   onChange={(e) => setNewStore({...newStore, 'Prov.': e.target.value.toUpperCase()})} 
                   required 
+                  maxLength={2}
                   placeholder="Es. MI" 
                   className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
                 />
@@ -156,6 +150,21 @@ export default function StoreModal({ isOpen, onClose, onCreateStore }: StoreModa
                   className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-medium" 
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">CAP *</label>
+                <input value={newStore.cap || ''} onChange={(e) => setNewStore({...newStore, cap: e.target.value})} required placeholder="00100" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Telefono</label>
+                <input type="tel" value={newStore.telefono || ''} onChange={(e) => setNewStore({...newStore, telefono: e.target.value})} placeholder="Es. 3331234567" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</label>
+              <input type="email" value={newStore.email || ''} onChange={(e) => setNewStore({...newStore, email: e.target.value})} placeholder="info@store.it" className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm font-bold" />
             </div>
             
             <div className="pt-4 flex gap-3">

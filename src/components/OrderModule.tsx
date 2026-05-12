@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator, Search, ChevronDown } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { OrderItem } from '../types';
 import { getTodayLocalISO } from '../utils/helpers';
@@ -45,6 +45,9 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     (initialPaymentMethod === 'Bonifico 30 gg' ? 'Bonifico 30 gg' : 'Contanti alla consegna') as 'Contanti alla consegna' | 'Bonifico 30 gg'
   );
 
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+
   const toggleNotaCredito = () => { setShowNotaCredito(!showNotaCredito); if (!showNotaCredito) { setShowVoucher(false); } };
   const toggleVoucher = () => { setShowVoucher(!showVoucher); if (!showVoucher) { setShowNotaCredito(false); } };
 
@@ -83,6 +86,15 @@ const OrderModule: React.FC<OrderModuleProps> = ({
       return c === selectedCategory;
     });
   }, [products, selectedCategory]);
+
+  const searchedProducts = useMemo(() => {
+    if (!productSearchTerm) return filteredProducts;
+    const term = productSearchTerm.toLowerCase();
+    return filteredProducts.filter(p => 
+      (p.descrizione && p.descrizione.toLowerCase().includes(term)) ||
+      (p.codice && p.codice.toLowerCase().includes(term))
+    );
+  }, [filteredProducts, productSearchTerm]);
 
   const totaleEuro = useMemo(() => {
     return cart.reduce((acc, item) => item.isOmaggio ? acc : acc + (item.quantita * item.prezzoApplicato), 0);
@@ -231,6 +243,8 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                     setSelectedProductId(''); // Fallback Sicurezza anti-ghosting
                     setQuantita(1);
                     setIsSpacchettatoUI(false); 
+                    setIsDropdownOpen(false);
+                    setProductSearchTerm('');
                   }}
                   className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:ring-2 focus:ring-brand-500 outline-none appearance-none w-full transition-colors"
                 >
@@ -243,18 +257,62 @@ const OrderModule: React.FC<OrderModuleProps> = ({
             )}
 
             <div className="flex gap-2">
-              <select 
-                value={selectedProductId}
-                onChange={(e) => { setSelectedProductId(e.target.value); setIsSpacchettatoUI(false); }}
-                className="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-500 outline-none appearance-none min-w-0 truncate w-full"
+            <div className="relative flex-1 min-w-0">
+              <div 
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center justify-between h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium cursor-pointer hover:border-brand-300 transition-colors"
               >
-                <option value="">Seleziona un prodotto...</option>
-                {filteredProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.codice} - {product.descrizione} - €{product.prezzoUnita.toFixed(2)}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate text-slate-700">
+                  {selectedProductId 
+                    ? (() => {
+                        const p = products.find(p => p.id === selectedProductId);
+                        return p ? `${p.codice} - ${p.descrizione}` : 'Seleziona un prodotto...';
+                      })()
+                    : 'Seleziona un prodotto...'
+                  }
+                </span>
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+              </div>
+
+              {isDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95">
+                  <div className="p-2 border-b border-slate-100 sticky top-0 bg-slate-50">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input 
+                        type="text"
+                        autoFocus
+                        placeholder="Cerca per codice o nome..."
+                        value={productSearchTerm}
+                        onChange={(e) => setProductSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-brand-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-1">
+                    {searchedProducts.length === 0 ? (
+                      <div className="p-4 text-center text-[10px] text-slate-400 font-bold uppercase">Nessun prodotto trovato</div>
+                    ) : (
+                      searchedProducts.map(product => (
+                        <div 
+                          key={product.id}
+                          onClick={() => { 
+                            setSelectedProductId(product.id); 
+                            setIsSpacchettatoUI(false); 
+                            setIsDropdownOpen(false);
+                            setProductSearchTerm('');
+                          }}
+                          className={`p-2.5 text-xs rounded-lg cursor-pointer transition-colors flex justify-between items-center gap-3 ${selectedProductId === product.id ? 'bg-brand-50 text-brand-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
+                        >
+                          <span className="truncate flex-1">{product.codice} - {product.descrizione}</span>
+                          <span className="font-black shrink-0 text-slate-800">€{product.prezzoUnita.toFixed(2)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
               
               <div className="flex items-center gap-1.5">
                 <div className="flex gap-1 shrink-0">

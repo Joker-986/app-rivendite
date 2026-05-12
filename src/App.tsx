@@ -202,6 +202,7 @@ export default function App() {
   }, []);
 
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [absoluteIdFilter, setAbsoluteIdFilter] = useState<string | null>(null);
   const [showCreateStoreModal, setShowCreateStoreModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [fabMenuOpen, setFabMenuOpen] = useState(false);
@@ -1237,6 +1238,7 @@ export default function App() {
     setActiveTab(tab);
     setViewMode('list');
     setRivenditaFilter('');
+    setAbsoluteIdFilter(null); // Reset laser sight
     setComuneFilter('');
     setZonaFilter('');
     if (tab === 'giro') setRubricaSort('none');
@@ -1370,6 +1372,13 @@ export default function App() {
 
   const getCurrentList = useMemo(() => {
     let list: SearchResult[] = [];
+    
+    // LOGICA MIRINO LASER: Se c'è un filtro assoluto, ignora tutto il resto
+    if (absoluteIdFilter) {
+      const allList = [...crmAnagrafiche, ...stores, ...giroVisite, ...ripList];
+      return allList.filter(r => (r.uid === absoluteIdFilter || getRivenditaId(r) === absoluteIdFilter));
+    }
+
     if (activeTab === 'search') return results || [];
     if (activeTab === 'giro') list = giroVisiteList;
     else if (activeTab === 'crm') list = crmList;
@@ -1438,7 +1447,7 @@ export default function App() {
     }
 
     return list;
-  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, zonaFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica]);
+  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, zonaFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica, absoluteIdFilter]);
 
   const getSortedList = useMemo(() => {
     const list = getCurrentList;
@@ -1564,29 +1573,51 @@ export default function App() {
     setStores(prev => prev.map(s => getRivenditaId(s) === id ? { ...s, [field]: value } : s));
   }, []);
 
-  const handleCreateStore = useCallback((newStore: Partial<SearchResult>) => {
-    // Controllo Anti-Doppione: verifica se esiste già in quel Comune con lo stesso Numero
+  const handleCreateStore = useCallback((newStore: any) => {
+    // Controllo Anti-Doppione
     const isDuplicate = stores.some(s => 
       s['Comune']?.toUpperCase() === newStore['Comune']?.toUpperCase() && 
-      (s.storeNumber === newStore.storeNumber || s['Num. Rivendita'] === newStore['Num. Rivendita'])
+      (s.storeNumber === newStore.storeNumber || s['Num. Rivendita'] === newStore.storeNumber)
     );
 
     if (isDuplicate) {
-      showToast(`Errore: Esiste già uno Store n° ${newStore.storeNumber || newStore['Num. Rivendita']} a ${newStore['Comune']?.toUpperCase()}`, 'error');
-      return; // Blocca la creazione
+      showToast(`Errore: Esiste già uno Store n° ${newStore.storeNumber} a ${newStore['Comune']?.toUpperCase()}`, 'error');
+      return; 
     }
 
+    const storeId = `store_${Date.now()}`;
     const storeWithUid: SearchResult = {
-      'Prov.': '',
-      'Comune': '',
-      'Num. Rivendita': '',
-      'Indirizzo': '',
-      ...newStore,
-      uid: `store_${Date.now()}`,
+      'Prov.': newStore['Prov.'],
+      'Comune': newStore['Comune'],
+      'Num. Rivendita': newStore.storeNumber, // Usa univocamente storeNumber per evitare collisioni
+      'Indirizzo': newStore['Indirizzo'],
+      'Tipo Rivendita': newStore['Tipo Rivendita'] || 'STORE',
+      'Distr. Automatico': newStore['Distr. Automatico'] || 'NO',
+      'CAP': newStore.cap, 
+      storeName: newStore.storeName,
+      storeNumber: newStore.storeNumber,
+      isChain: newStore.isChain,
+      chainCount: newStore.chainCount,
+      rivenditaUfficiale: newStore.rivenditaUfficiale,
+      pec: newStore.pec,
+      uid: storeId,
       isStore: true
     } as SearchResult;
 
     setStores(prev => [...prev, storeWithUid]);
+
+    // FIX ARCHITETTURALE: Inizializza subito lo stato in Rubrica per Telefono, Email e CAP
+    setRubrica(prev => ({
+      ...prev,
+      [storeId]: {
+        ...(prev[storeId] || {}),
+        telefono: newStore.telefono || '',
+        mail: newStore.email || '',
+        manualCap: newStore.cap || '',
+        isSavedToRubrica: true
+      }
+    }));
+
     setShowCreateStoreModal(false);
     showToast('Store creato con successo!', 'success');
   }, [stores, showToast]);
@@ -1605,6 +1636,19 @@ export default function App() {
     setActiveTab('calcolatore'); // Cambia tab al calcolatore
     setExpandedCardId(null); // Chiude eventuali modali aperti
   };
+
+  const handleDeepLink = useCallback((id: string, isStore: boolean) => {
+    setActiveTab(isStore ? 'store' : 'crm');
+    setAbsoluteIdFilter(id); // Attiva il puntamento laser
+    setRivenditaFilter('');  // Pulisce i filtri testuali per evitare conflitti
+    setComuneFilter('');
+    setZonaFilter('');
+    setExpandedCardId(null); // TASSATIVO: Assicura che la scheda resti CHIUSA
+    
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
+  }, []);
 
   const crmStats = useMemo(() => {
     return calculateCrmStats(rubrica, combinedRivendite, isDateInRange);
@@ -2133,9 +2177,23 @@ export default function App() {
                       type="text"
                       placeholder="Num. Riv."
                       value={rivenditaFilter}
-                      onChange={(e) => setRivenditaFilter(e.target.value)}
-                      className="w-full h-11 pl-9 pr-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm"
+                      onChange={(e) => { 
+                        setRivenditaFilter(e.target.value); 
+                        setAbsoluteIdFilter(null); // Se l'utente scrive, spegne il mirino laser
+                      }}
+                      className="w-full h-11 pl-9 pr-10 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm"
                     />
+                    {(rivenditaFilter || absoluteIdFilter) && (
+                      <button 
+                        onClick={() => {
+                          setRivenditaFilter('');
+                          setAbsoluteIdFilter(null);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
+                      >
+                        <X className="w-4 h-4 text-slate-400" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="relative flex-[1.5]">
@@ -2271,6 +2329,20 @@ export default function App() {
               </div>
             )}
 
+            {absoluteIdFilter && (
+              <div className="mx-1 mb-4 p-3 bg-brand-50 border border-brand-100 rounded-xl flex items-center justify-between">
+                <span className="text-[10px] font-black text-brand-700 uppercase tracking-tighter">
+                  Puntamento Laser Attivo: Visualizzazione singola entità
+                </span>
+                <button 
+                  onClick={() => setAbsoluteIdFilter(null)}
+                  className="text-[10px] font-black bg-brand-600 text-white px-2 py-1 rounded-lg shadow-sm"
+                >
+                  MOSTRA TUTTI
+                </button>
+              </div>
+            )}
+
             {activeTab === 'regia' ? (
               <StrategyDashboard 
                 rubrica={rubrica}
@@ -2289,6 +2361,7 @@ export default function App() {
                 setGiroVisite={setGiroVisite}
                 setRivenditaFilter={setRivenditaFilter}
                 setActiveTab={setActiveTab}
+                onDeepLink={handleDeepLink}
                 showToast={showToast}
                 onEditHistory={handleEditHistory}
               />
@@ -2359,7 +2432,7 @@ export default function App() {
                     const originalIdx = giroVisite.findIndex(r => getRivenditaId(r) === id);
                     const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
                     return (
-                      <div key={id}>
+                      <div key={id} id={`card-${id}`}>
                         <RivenditaCard 
                           res={{...res, _giroLength: giroVisite.length}} 
                           idx={originalIdx} 
@@ -2386,7 +2459,7 @@ export default function App() {
                   const id = getRivenditaId(res);
                   const extra = rubrica[id] || { stato: '', visitata: '', giornoLevata: '', riferimento: '', telefono: '', pIva: '', mail: '', manualCap: '' };
                   return (
-                    <div key={id}>
+                    <div key={id} id={`card-${id}`}>
                       <RivenditaCard 
                         res={res}
                         idx={idx}

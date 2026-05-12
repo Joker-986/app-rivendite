@@ -107,7 +107,8 @@ const AnagraficaTab: React.FC = () => {
       const term = searchTerm.toLowerCase();
       result = result.filter(c => 
         c.descrizione.toLowerCase().includes(term) ||
-        c.citta.toLowerCase().includes(term)
+        c.citta.toLowerCase().includes(term) ||
+        (c.telefono && c.telefono.includes(term)) // Ricerca per numero di telefono
       );
     }
     if (selectedCity) {
