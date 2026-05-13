@@ -29,8 +29,8 @@ export default function StoreModal({ isOpen, onClose, onCreateStore }: StoreModa
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="p-6">
+      <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-3xl shadow-2xl w-full max-w-md flex flex-col max-h-[90dvh] animate-in zoom-in-95 duration-200">
+        <div className="p-6 flex-1 overflow-y-auto">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-slate-900">Nuovo Store</h3>
             <button 
