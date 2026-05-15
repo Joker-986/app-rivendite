@@ -421,11 +421,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               )}
 
               {res.isStore ? (
-                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
+                <span className="shrink-0 px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
                   SVAPO ({res.storeNumber ? res.storeNumber : 'Da File'})
                 </span>
               ) : (
-                <span className="px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider">
+                <span className="shrink-0 px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider">
                   RIV. {res['Num. Rivendita']}
                 </span>
               )}
@@ -459,11 +459,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 </div>
               )}
               {activeTab === 'search' ? (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                   {res['Stato']}
                 </span>
               ) : (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
                   extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
                   extra.stato === 'Non Attiva' ? 'bg-amber-100 text-amber-700' : 
                   extra.stato === 'RIP' ? 'bg-slate-800 text-slate-100' : 
@@ -474,12 +474,12 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               )}
 
               {extra.ordinante === 'alto' && (
-                <span className="flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
+                <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
                   <TrendingUp className="w-3.5 h-3.5" />
                 </span>
               )}
               {extra.ordinante === 'basso' && (
-                <span className="flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
+                <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
                   <TrendingDown className="w-3.5 h-3.5" />
                 </span>
               )}
@@ -546,16 +546,18 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               )}
             </div>
             
-            <h3 className="font-medium text-slate-900 leading-snug break-words pr-2 line-clamp-2">
+            <h3 className="font-black text-slate-900 leading-tight whitespace-normal break-words pr-2">
               {res.isStore ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold text-brand-700 truncate">{res.storeName || 'Senza Nome'}</span>
-                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight truncate">
+                  <span className="text-sm font-black text-brand-700 whitespace-normal break-words leading-tight">{res.storeName || 'Senza Nome'}</span>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight whitespace-normal break-words leading-tight">
                     {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
                   </span>
                 </span>
               ) : (
-                <>{capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})</>
+                <span className="text-sm font-black text-slate-800 whitespace-normal break-words leading-tight">
+                  {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
+                </span>
               )}
             </h3>
           </div>

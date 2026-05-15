@@ -112,14 +112,30 @@ const AgendaTab: React.FC<AgendaTabProps> = ({
       const futureHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && getLocalMidnightTime(h.data) >= todayTime).sort((a: any, b: any) => getLocalMidnightTime(a.dataEsecuzione || a.data) - getLocalMidnightTime(b.dataEsecuzione || b.data));
       
       // STORICO
-      const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito === true).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-      const pastHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() < todayTime).sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
-      const pastVisits = history.filter((h: any) => h.tipo === 'VISITA').sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      // FIX: Ordinamento per data di evasione/esecuzione effettiva invece che per data di creazione
+      const completedOrders = history.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito === true).sort((a: any, b: any) => {
+        const timeA = new Date(a.dataEsecuzione || a.dataEvasione || a.data).getTime();
+        const timeB = new Date(b.dataEsecuzione || b.dataEvasione || b.data).getTime();
+        return timeB - timeA;
+      });
+      
+      const pastHostess = history.filter((h: any) => h.tipo === 'HOSTESS' && new Date(h.data).getTime() < todayTime).sort((a: any, b: any) => {
+        const timeA = new Date(a.dataEsecuzione || a.data).getTime();
+        const timeB = new Date(b.dataEsecuzione || b.data).getTime();
+        return timeB - timeA;
+      });
+      
+      const pastVisits = history.filter((h: any) => h.tipo === 'VISITA').sort((a: any, b: any) => {
+        const timeA = new Date(a.visitaInizio || a.data).getTime();
+        const timeB = new Date(b.visitaInizio || b.data).getTime();
+        return timeB - timeA;
+      });
 
       let lastHistoryTime = 0;
-      if (completedOrders.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(completedOrders[0].data).getTime());
-      if (pastHostess.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastHostess[0].data).getTime());
-      if (pastVisits.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastVisits[0].data).getTime());
+      // FIX: Anche il tempo di riferimento della Card deve usare la data di esecuzione per portare in cima i negozi lavorati di recente
+      if (completedOrders.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(completedOrders[0].dataEsecuzione || completedOrders[0].dataEvasione || completedOrders[0].data).getTime());
+      if (pastHostess.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastHostess[0].dataEsecuzione || pastHostess[0].data).getTime());
+      if (pastVisits.length > 0) lastHistoryTime = Math.max(lastHistoryTime, new Date(pastVisits[0].visitaInizio || pastVisits[0].data).getTime());
 
       groups.push({
         id, riv, data: d,

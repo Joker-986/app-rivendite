@@ -24,10 +24,11 @@ interface NoteDiCreditoTabProps {
   giroVisite: SearchResult[];
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, ndcEseguita?: boolean, dataEsecuzioneNdC?: string, paymentMethod?: string) => void;
   showToast: (message: string, type?: any) => void;
+  onDeepLink: (id: string, isStore: boolean) => void;
 }
 
 const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
-  rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast
+  rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast, onDeepLink
 }) => {
   // Logica di estrazione ottimizzata O(1) per lookup rivendite
   const { pendingNdc, completedNdc, stats } = useMemo(() => {
@@ -169,11 +170,11 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                 
                 return (
                   <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          {ndc.isVoucher ? <Ticket className="w-3.5 h-3.5 text-orange-500" /> : <Receipt className="w-3.5 h-3.5 text-emerald-500" />}
-                          <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
+                    <div className="flex justify-between items-start mb-2 gap-3">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          {ndc.isVoucher ? <Ticket className="shrink-0 w-3.5 h-3.5 text-orange-500" /> : <Receipt className="shrink-0 w-3.5 h-3.5 text-emerald-500" />}
+                          <h3 className="font-black text-slate-800 text-[14px] leading-tight whitespace-normal break-words">
                             {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'}`}
                           </h3>
                           {!ndc.riv.isStore && (
@@ -193,32 +194,40 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                               className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                               title="Clicca per copiare il Codice Logista"
                             >
-                              <Package className="w-2.5 h-2.5 text-blue-400" />
+                              <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                               <span>{ndc.data.codiceLogista}</span>
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                           {ndc.isMismatch ? (
-                            <span className="bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
-                              <AlertOctagon className="w-3 h-3" /> ⚠️ ORDINE EVASO: RICHIEDI NdC!
+                            <span className="shrink-0 bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
+                              <AlertOctagon className="w-3 h-3 shrink-0" /> ⚠️ ORDINE EVASO: RICHIEDI NdC!
                             </span>
                           ) : (
-                            <div className={`flex items-center gap-1 text-[10px] font-black uppercase ${isUrgent ? 'text-amber-500' : 'text-slate-400'}`}>
-                              <Clock className="w-3 h-3" />
+                            <div className={`shrink-0 flex items-center gap-1 text-[10px] font-black uppercase ${isUrgent ? 'text-amber-500' : 'text-slate-400'}`}>
+                              <Clock className="w-3 h-3 shrink-0" />
                               {days === 0 ? 'Oggi' : `${days} giorni`}
-                              {isUrgent && <AlertCircle className="w-3 h-3" />}
+                              {isUrgent && <AlertCircle className="w-3 h-3 shrink-0" />}
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className={`text-[16px] font-black ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} tracking-tighter block leading-none`}>
-                          €{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-                        </span>
-                        <span className={`text-[9px] font-bold ${ndc.isVoucher ? 'text-orange-400' : 'text-slate-300'} uppercase block mt-1`}>
-                          {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
-                        </span>
+                      <div className="flex items-start gap-2 shrink-0">
+                        <div className="text-right mt-0.5">
+                          <span className={`text-[16px] font-black ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} tracking-tighter block leading-none`}>
+                            €{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className={`text-[9px] font-bold ${ndc.isVoucher ? 'text-orange-400' : 'text-slate-400'} uppercase block mt-1`}>
+                            {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
@@ -263,12 +272,12 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
             {completedNdc.slice(0, 10).map((ndc, i) => (
               <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80">
                 <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-bold text-slate-700 truncate">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12px] font-bold text-slate-700 whitespace-normal break-words leading-tight">
                       {ndc.riv.isStore ? ndc.riv.storeName : `${ndc.riv.Comune || 'Sconosciuto'}`}
                     </span>
                     {!ndc.riv.isStore && (
-                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded">
+                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded shrink-0">
                         RIV. {ndc.riv['Num. Rivendita']}
                       </span>
                     )}
@@ -284,19 +293,27 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                         className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                         title="Clicca per copiare il Codice Logista"
                       >
-                        <Package className="w-2.5 h-2.5 text-blue-400" />
+                        <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                         <span>{ndc.data.codiceLogista}</span>
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                    {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400" /> : <Receipt className="w-3 h-3 text-emerald-400" />}
-                    <span className={ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                    <span>• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} • {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                    {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400 shrink-0" /> : <Receipt className="w-3 h-3 text-emerald-400 shrink-0" />}
+                    <span className={`shrink-0 ${ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}`}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                    <span className="shrink-0">• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} • {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
                   </div>
                 </div>
-                <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center`}>
-                  <CheckCircle2 className="w-4 h-4" />
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center`}>
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}

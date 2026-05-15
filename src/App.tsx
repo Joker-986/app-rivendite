@@ -2373,6 +2373,7 @@ export default function App() {
                 giroVisite={giroVisite}
                 onEditHistory={handleEditHistory}
                 showToast={showToast}
+                onDeepLink={handleDeepLink}
               />
             ) : activeTab === 'ordini' ? (
               <OrdiniTab 
@@ -2382,6 +2383,7 @@ export default function App() {
                 giroVisite={giroVisite}
                 onEditHistory={handleEditHistory}
                 showToast={showToast}
+                onDeepLink={handleDeepLink}
               />
             ) : activeTab === 'statistiche' ? (
               <StatsTab 

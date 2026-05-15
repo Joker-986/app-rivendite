@@ -4,6 +4,7 @@ import {
   CheckCircle2, 
   Clock, 
   History, 
+  ChevronRight,
   AlertCircle,
   TrendingUp,
   AlertOctagon,
@@ -24,6 +25,7 @@ interface OrdiniTabProps {
   giroVisite: SearchResult[];
   onEditHistory: (id: string, index: number, note: string, importo: number, data?: string, ora?: string, stato?: string, isEseguito?: boolean, dataEsecuzione?: string, items?: any[], dataEvasione?: string) => void;
   showToast: (message: string, type?: any) => void;
+  onDeepLink: (id: string, isStore: boolean) => void;
 }
 
 const getLocalMidnightTime = (dateStr: string) => {
@@ -34,7 +36,7 @@ const getLocalMidnightTime = (dateStr: string) => {
 };
 
 const OrdiniTab: React.FC<OrdiniTabProps> = ({
-  rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast
+  rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast, onDeepLink
 }) => {
   const { openQuickEdit } = useModals();
   const [filterPeriod, setFilterPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('all');
@@ -237,11 +239,11 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                     onClick={() => openQuickEdit('ORDINE', ord.id, ord.data, ord.originalIndex)}
                     className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all cursor-pointer ${isOverdue ? 'bg-red-50/50 border-red-200 hover:bg-red-50' : 'bg-white border-blue-200 hover:bg-blue-50/50'}`}
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <ShoppingBag className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-blue-500'}`} />
-                          <h3 className="font-black text-slate-800 text-[14px] leading-tight truncate">
+                    <div className="flex justify-between items-start mb-2 gap-3">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <ShoppingBag className={`shrink-0 w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-blue-500'}`} />
+                          <h3 className="font-black text-slate-800 text-[14px] leading-tight whitespace-normal break-words">
                             {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'}`}
                           </h3>
                           {!ord.riv.isStore && (
@@ -261,24 +263,33 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                               className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                               title="Clicca per copiare il Codice Logista"
                             >
-                              <Package className="w-2.5 h-2.5 text-blue-400" />
+                              <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                               <span>{ord.data.codiceLogista}</span>
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                           {isOverdue && <span className="text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
-                           {isToday && <span className="text-[8px] font-black text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">OGGI</span>}
-                           <span className={`text-[10px] font-bold ${isOverdue ? 'text-red-600' : 'text-slate-500'} flex items-center gap-1`}>
-                             <Clock className="w-3 h-3" />
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                           {isOverdue && <span className="shrink-0 text-[8px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded">SCADUTO</span>}
+                           {isToday && <span className="shrink-0 text-[8px] font-black text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">OGGI</span>}
+                           <span className={`shrink-0 text-[10px] font-bold ${isOverdue ? 'text-red-600' : 'text-slate-500'} flex items-center gap-1`}>
+                             <Clock className="w-3 h-3 shrink-0" />
                              Consegna: {safeFormatDate(ord.h.dataEvasione || ord.h.data, 'short')}
                            </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className={`text-[16px] font-black ${isOverdue ? 'text-red-600' : 'text-blue-600'} tracking-tighter block leading-none`}>
-                          €{ord.totaleOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-                        </span>
+                      <div className="flex items-start gap-2 shrink-0">
+                        <div className="text-right mt-0.5">
+                          <span className={`text-[16px] font-black ${isOverdue ? 'text-red-600' : 'text-blue-600'} tracking-tighter block leading-none`}>
+                            €{ord.totaleOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ord.id, !!ord.riv.isStore); }} 
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0" 
+                          title="Vai alla Scheda"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
@@ -326,12 +337,12 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                 className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80 cursor-pointer hover:bg-slate-50 transition-colors"
               >
                 <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-bold text-slate-700 truncate">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12px] font-bold text-slate-700 whitespace-normal break-words leading-tight">
                       {ord.riv.isStore ? ord.riv.storeName : `${ord.riv.Comune || 'Sconosciuto'}`}
                     </span>
                     {!ord.riv.isStore && (
-                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded">
+                      <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded shrink-0">
                         RIV. {ord.riv['Num. Rivendita']}
                       </span>
                     )}
@@ -347,17 +358,23 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
                         className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
                         title="Clicca per copiare il Codice Logista"
                       >
-                        <Package className="w-2.5 h-2.5 text-blue-400" />
+                        <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                         <span>{ord.data.codiceLogista}</span>
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-600">€{ord.totaleOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                    <span>• {safeFormatDate(ord.h.dataEsecuzione || ord.h.data)}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span className="text-emerald-600 shrink-0">€{ord.totaleOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                    <span className="shrink-0">• {safeFormatDate(ord.h.dataEsecuzione || ord.h.data)}</span>
                   </div>
                 </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ord.id, !!ord.riv.isStore); }} 
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 ml-2 shrink-0"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>

@@ -343,14 +343,29 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                       {item.descrizione}
                     </div>
                     
-                    {/* Codice e Categoria in basso */}
-                    <div className="flex items-center gap-1.5 mt-1">
+                    {/* Codice, Categoria e Badge Stato in basso */}
+                    <div className="flex items-center flex-wrap gap-1.5 mt-1">
                       <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
                         {item.codice}
                       </span>
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide truncate">
                         • {categoryLabel}
                       </span>
+                      {item.isCredito && !item.isVoucher && (
+                        <span className="text-[9px] font-black text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                          NOTA DI CREDITO
+                        </span>
+                      )}
+                      {item.isVoucher && (
+                        <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                          VOUCHER
+                        </span>
+                      )}
+                      {item.isOmaggio && !item.isCredito && !item.isVoucher && (
+                        <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                          OMAGGIO
+                        </span>
+                      )}
                     </div>
                   </div>
 
