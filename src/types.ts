@@ -130,7 +130,7 @@ export interface AMBudget {
 }
 
 export interface RivenditaExtra {
-  stato: 'Attivata' | 'Non Attiva' | 'RIP' | '';
+  stato: 'Attivata' | 'Non Attiva' | 'RIP' | 'Perso' | 'Sospeso' | '';
   visitata: 'Si' | 'Da Rivisitare' | 'No' | '';
   dataVisita?: string;
   oraVisita?: string;
