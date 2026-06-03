@@ -734,6 +734,43 @@ app.post('/api/followup', async (req, res) => {
   }
 });
 
+// --- NUOVA ROTTA AI WAR ROOM: BRIEFING, OFFER SNIPER, ORACOLO ---
+app.post('/api/gemini-chat', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt mancante" });
+    }
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY non configurata." });
+    }
+
+    const ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
+
+    if (response.text) {
+      res.json({ response: response.text });
+    } else {
+      res.status(500).json({ error: "Nessuna risposta ricevuta dall'AI." });
+    }
+  } catch (error: any) {
+    console.error("Errore /api/gemini-chat:", error);
+    res.status(500).json({ error: "Errore durante la generazione dell'AI.", details: error.message });
+  }
+});
+
 // --- NUOVA ROTTA SANDBOX: CODICE ISTAT PAGINE BIANCHE (CORRETTA) ---
 app.post('/api/logista', async (req, res) => {
   const { comune } = req.body;

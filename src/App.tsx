@@ -17,6 +17,7 @@ import CalcolatoreInverso from './components/CalcolatoreInverso';
 import SettingsModal from './components/SettingsModal';
 import AnagraficaTab from './components/AnagraficaTab';
 import ModalContainer from './components/ModalContainer';
+import AiWarRoomTab from './components/AiWarRoomTab';
 import { enrichRivendita, EnrichedDetails } from './services/geminiService';
 import { calculateFatturatoPeriodo, calculateOrderStats, calculateCrmStats, calculateVisitStats } from './services/statsService';
 import packageVersion from './version.json';
@@ -1192,6 +1193,7 @@ export default function App() {
       count: 0
     }));
     const end = [
+      { id: 'warroom', label: 'AI Copilot', count: 0 },
       { id: 'rip', label: 'RIP', count: ripList.length },
       { id: 'regia', label: 'Regia', count: 0 },
       { id: 'statistiche', label: 'Statistiche', count: 0 },
@@ -2115,7 +2117,7 @@ export default function App() {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {!['regia', 'statistiche', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
+            {!['warroom', 'regia', 'statistiche', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -2171,7 +2173,7 @@ export default function App() {
             )}
 
               {/* Filtri Comuni */}
-              {!['statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
+              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2345,7 +2347,13 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'regia' ? (
+            {activeTab === 'warroom' ? (
+              <AiWarRoomTab 
+                rubrica={rubrica} 
+                crmAnagrafiche={crmAnagrafiche} 
+                stores={stores} 
+              />
+            ) : activeTab === 'regia' ? (
               <StrategyDashboard 
                 rubrica={rubrica}
                 meseSelezionato={meseSelezionato}
