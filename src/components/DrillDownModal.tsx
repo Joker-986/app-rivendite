@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, MapPin, Calendar } from 'lucide-react';
+import { X, MapPin, Calendar, Zap } from 'lucide-react';
 import { MissionDetail } from '../types';
 
 interface DrillDownModalProps {
@@ -76,10 +76,16 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                   </div>
                 </div>
                 {item.valore !== undefined && (
-                  <div className="shrink-0 ml-3 text-right">
-                    <p className="text-sm font-black text-brand-600">
-                      {isEuro ? `€${item.valore.toLocaleString('it-IT')}` : `+${item.valore.toLocaleString('it-IT')}`}
-                    </p>
+                  <div className="shrink-0 ml-3 text-right flex flex-col items-end justify-center">
+                    {item.valore === 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-wider">
+                        <Zap className="w-3 h-3" /> Logista
+                      </span>
+                    ) : (
+                      <p className="text-sm font-black text-brand-600">
+                        {isEuro ? `€${item.valore.toLocaleString('it-IT')}` : `+${item.valore.toLocaleString('it-IT')}`}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

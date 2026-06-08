@@ -1377,20 +1377,31 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-200">
+                <div className="pt-2 border-t border-slate-200 flex gap-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRubricaUpdate(id, 'richiestaOrdine', !extra.richiestaOrdine);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
                       extra.richiestaOrdine 
-                        ? 'bg-brand-100 text-brand-700' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-brand-50 hover:text-brand-600'
+                        ? 'bg-brand-100 text-brand-700 shadow-inner' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-brand-50 hover:text-brand-600 shadow-sm'
                     }`}
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    {extra.richiestaOrdine ? 'Annulla Ordine' : 'Compila Ordine'}
+                    {extra.richiestaOrdine ? 'Chiudi' : 'Compila Ordine'}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleActivitySave(id, 'ORDINE_LOGISTA', 'Riordino autonomo su Logista');
+                    }}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm whitespace-nowrap"
+                    title="Segnala riordino autonomo su Logista"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Logista
                   </button>
                 </div>
 

@@ -93,7 +93,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         };
 
         // 2. Accettiamo 'true' (ordini evasi nuovi) e 'undefined' (storico legacy), scartiamo solo 'false' (bozze in corso)
-        const validOrders = extra.history?.filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito !== false) || [];
+        const validOrders = extra.history?.filter((h: any) => (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.isEseguito !== false) || [];
 
         // 3. Ordina dal più recente al più vecchio
         validOrders.sort((a: any, b: any) => {

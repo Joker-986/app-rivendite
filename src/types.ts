@@ -53,7 +53,7 @@ export interface OrderItem {
 
 export interface RivenditaHistoryEntry {
   data: string;
-  tipo: 'VISITA' | 'ORDINE' | 'HOSTESS';
+  tipo: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA';
   note: string;
   importo: number;
   stato?: string;

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, ShoppingBag, UserCheck, CheckCircle2, Trash2, Calendar, Clock, Edit3, Check } from 'lucide-react';
+import { X, ShoppingBag, UserCheck, CheckCircle2, Trash2, Calendar, Clock, Edit3, Check, Zap } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 import OrderModule from './OrderModule';
 
 interface QuickEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  editType: 'VISITA' | 'ORDINE' | 'HOSTESS' | null;
+  editType: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA' | null;
   rivenditaId: string;
   extra: any;
   onUpdateRubrica: (id: string, field: string, value: any) => void;
@@ -213,6 +213,7 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
     VISITA: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', title: 'Modifica Visita' },
     ORDINE: { icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100', title: 'Modifica Ordine' },
     HOSTESS: { icon: UserCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', title: 'Modifica Hostess' },
+    ORDINE_LOGISTA: { icon: Zap, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', title: 'Modifica Riordino Logista' },
   };
   const config = configs[editType];
   const Icon = config.icon;

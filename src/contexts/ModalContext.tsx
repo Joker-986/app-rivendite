@@ -16,7 +16,7 @@ export interface ShareModalState {
 
 export interface QuickEditModalState {
   isOpen: boolean;
-  editType: 'VISITA' | 'ORDINE' | 'HOSTESS' | null;
+  editType: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA' | null;
   rivenditaId: string;
   extra: any;
   targetIndex?: number;
@@ -48,7 +48,7 @@ interface ModalContextType {
 
   // Quick Edit Modal
   quickEditModal: QuickEditModalState;
-  openQuickEdit: (type: 'VISITA' | 'ORDINE' | 'HOSTESS', id: string, extra: any, index?: number) => void;
+  openQuickEdit: (type: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA', id: string, extra: any, index?: number) => void;
   closeQuickEdit: () => void;
 
   // Revisit Modal
@@ -102,7 +102,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setDualShareModal(prev => ({ ...prev, isOpen: false }));
 
   // Funzioni Quick Edit
-  const openQuickEdit = (type: 'VISITA' | 'ORDINE' | 'HOSTESS', id: string, extra: any, index?: number) => {
+  const openQuickEdit = (type: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA', id: string, extra: any, index?: number) => {
     setQuickEditModal({ isOpen: true, editType: type, rivenditaId: id, extra, targetIndex: index });
   };
   const closeQuickEdit = () => setQuickEditModal(prev => ({ ...prev, isOpen: false }));

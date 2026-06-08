@@ -680,7 +680,7 @@ export default function App() {
     });
   }, []);
 
-  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => {
+  const handleActivitySave = useCallback((id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA', notes: string, amount: number = 0, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => {
     setRubrica(prev => {
       const current = prev[id] || {};
       const history = [...(current.history || [])];
@@ -727,7 +727,7 @@ export default function App() {
         items: items,
         budgetAmScalato: budgetScalato > 0 ? budgetScalato : undefined,
         dataEvasione: dataEvasione,
-        isEseguito: type === 'ORDINE' ? false : undefined,
+        isEseguito: type === 'ORDINE' ? false : (type === 'ORDINE_LOGISTA' ? true : undefined),
         visitaInizio: visitaInizio,
         visitaFine: visitaFine,
         paymentMethod: paymentMethod
@@ -742,13 +742,13 @@ export default function App() {
 
       const updates: Partial<RivenditaExtra> = {
         history: history.slice(0, 20),
-        richiestaOrdine: type === 'ORDINE' ? false : current.richiestaOrdine,
-        ordineEvaso: type === 'ORDINE' ? false : current.ordineEvaso,
-        noteOrdine: type === 'ORDINE' ? "" : current.noteOrdine,
-        importoOrdine: type === 'ORDINE' ? 0 : current.importoOrdine
+        richiestaOrdine: (type === 'ORDINE' || type === 'ORDINE_LOGISTA') ? false : current.richiestaOrdine,
+        ordineEvaso: (type === 'ORDINE' || type === 'ORDINE_LOGISTA') ? false : current.ordineEvaso,
+        noteOrdine: (type === 'ORDINE' || type === 'ORDINE_LOGISTA') ? "" : current.noteOrdine,
+        importoOrdine: (type === 'ORDINE' || type === 'ORDINE_LOGISTA') ? 0 : current.importoOrdine
       };
 
-      if (type === 'ORDINE' && current.stato !== 'Attivata') {
+      if ((type === 'ORDINE' || type === 'ORDINE_LOGISTA') && current.stato !== 'Attivata') {
         updates.stato = 'Attivata';
       }
 
@@ -771,7 +771,7 @@ export default function App() {
       return { ...prev, [id]: { ...current, ...updates } };
     });
     
-    showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : 'Attività salvata!', 'success');
+    showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : (type === 'ORDINE_LOGISTA' ? 'Ordine Logista registrato!' : 'Attività salvata!'), 'success');
   }, []);
 
   // PURE FUNCTION per riconciliazione sincrona (FIX PERDITA DATI SYNC)

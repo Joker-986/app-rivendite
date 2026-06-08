@@ -213,14 +213,16 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               if (riv.targetIdoneo?.includes(mission.id)) {
                 let storeTotal = 0;
                 let lastOrderDate = '';
+                let hasLogistaOrder = false;
                 riv.history?.forEach(h => {
-                  if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
+                  if ((h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato)) {
+                    if (h.tipo === 'ORDINE_LOGISTA') hasLogistaOrder = true;
                     storeTotal += (h.importo || 0);
                     lastOrderDate = h.data;
                   }
                 });
                 generatedValue += storeTotal;
-                if (storeTotal >= mission.targetSingolo) {
+                if (storeTotal >= mission.targetSingolo || hasLogistaOrder) {
                   progress += 1;
                   dettagli.push({
                     id: rivId,
@@ -234,7 +236,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             } else {
               // Logica standard: somma globale del fatturato
               riv.history?.forEach(h => {
-                if (h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato)) {
+                if ((h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato)) {
                   const val = (h.importo || 0);
                   progress += val;
                   generatedValue += val;
@@ -251,7 +253,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           } else if (mission.tipo === 'ATTIVAZIONE') {
             // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
             if (riv.targetIdoneo?.includes(mission.id)) {
-              const activationOrder = riv.history?.find(h => h.tipo === 'ORDINE' && h.data.startsWith(meseSelezionato));
+              const activationOrder = riv.history?.find(h => (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato));
               if (activationOrder) {
                 progress += 1;
                 dettagli.push({
