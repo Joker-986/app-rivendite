@@ -69,13 +69,25 @@ export interface RivenditaHistoryEntry {
   paymentMethod?: string;
 }
 
+export interface MissionOrderDetail {
+  id?: string;
+  data: string;
+  importo: number;
+  fonte: 'Logista' | 'Magazzino';
+}
+
 export interface MissionDetail {
   id: string;
   nome: string;
   comune: string;
   valore?: number;
   data?: string;
-  nota?: string;
+  fonte?: 'Logista' | 'Magazzino';
+  totaleLogista?: number;
+  totaleMagazzino?: number;
+  countLogista?: number;
+  countMagazzino?: number;
+  ordini?: MissionOrderDetail[];
 }
 
 export interface Mission {
@@ -89,6 +101,9 @@ export interface Mission {
   progressoAttuale: number;
   valoreGenerato?: number;
   stato?: "ATTIVA" | "ARCHIVIATA";
+  targetCategorie?: string[];
+  targetSkus?: string[];
+  sogliaFinanziaria?: number;
   dettagliProgresso?: MissionDetail[];
 }
 
@@ -166,6 +181,8 @@ export interface RivenditaExtra {
   targetSpecifico?: number;
   carrelloBozza?: OrderItem[]; // Supporto per non perdere dati se si chiude la scheda
   visitaInCorso?: string;
+  showLogistaModule?: boolean;
+  importoLogista?: string | number;
   [key: string]: any;
 }
 

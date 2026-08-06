@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail } from '../types';
+import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail, MissionOrderDetail } from '../types';
 
 export interface MonthlyAdjustment { logista: number; amCorrection: number; }
 
@@ -154,10 +154,23 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .filter(m => m.stato !== 'ARCHIVIATA')
       .reduce((total, mission) => {
       const missionWeight = mission.pesoPercentuale / 100;
-      const completionRatio = mission.target > 0 ? Math.min(1.2, mission.progressoAttuale / mission.target) : 0; // Cap at 120% for performance? Or strictly 100%?
-      // The prompt says (BonusTotale * (pesoPercentuale / 100)) * (Progresso / Target)
-      // We'll use Math.min(1, ...) to avoid over-bonus unless specified, but usually MBO is capped.
-      const earned = (monthlyBonusPool * missionWeight) * Math.min(1, completionRatio);
+      const rawRatio = mission.target > 0 ? (mission.progressoAttuale / mission.target) : 0;
+      
+      let payoutMultiplier = 0;
+      if (mission.tipo === 'FATTURATO') {
+        if (rawRatio >= 0.99) {
+          payoutMultiplier = 1; // Raggiunto 99% o più -> Payout 100%
+        } else if (rawRatio >= 0.80) {
+          payoutMultiplier = 0.5; // Raggiunto tra 80% e 98.9% -> Payout 50%
+        } else {
+          payoutMultiplier = 0; // Sotto l'80% -> Nessun Payout
+        }
+      } else {
+        // Logica lineare standard per altre missioni
+        payoutMultiplier = Math.min(1, rawRatio);
+      }
+      
+      const earned = (monthlyBonusPool * missionWeight) * payoutMultiplier;
       return total + earned;
     }, 0);
   }, [salaryConfig, missions]);
@@ -234,21 +247,57 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 }
               }
             } else {
-              // Logica standard: somma globale del fatturato
+              // Logica standard: somma globale del fatturato raggruppata per rivendita
+              const storeOrders: MissionOrderDetail[] = [];
+              let totLog = 0;
+              let totMag = 0;
+              let cntLog = 0;
+              let cntMag = 0;
+              let lastDate = '';
+
               riv.history?.forEach(h => {
                 if ((h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato)) {
                   const val = (h.importo || 0);
                   progress += val;
                   generatedValue += val;
-                  dettagli.push({
-                    id: rivId,
-                    nome: rivNome,
-                    comune: comune,
-                    valore: val,
-                    data: h.data
+                  const fonte: 'Logista' | 'Magazzino' = h.tipo === 'ORDINE_LOGISTA' ? 'Logista' : 'Magazzino';
+                  
+                  if (fonte === 'Logista') {
+                    totLog += val;
+                    cntLog += 1;
+                  } else {
+                    totMag += val;
+                    cntMag += 1;
+                  }
+
+                  if (!lastDate || new Date(h.data).getTime() > new Date(lastDate).getTime()) {
+                    lastDate = h.data;
+                  }
+
+                  storeOrders.push({
+                    id: h.id || Math.random().toString(36).substring(2, 9),
+                    data: h.data,
+                    importo: val,
+                    fonte: fonte
                   });
                 }
               });
+
+              if (storeOrders.length > 0) {
+                storeOrders.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+                dettagli.push({
+                  id: rivId,
+                  nome: rivNome,
+                  comune: comune,
+                  valore: totLog + totMag,
+                  data: lastDate,
+                  totaleLogista: totLog,
+                  totaleMagazzino: totMag,
+                  countLogista: cntLog,
+                  countMagazzino: cntMag,
+                  ordini: storeOrders
+                });
+              }
             }
           } else if (mission.tipo === 'ATTIVAZIONE') {
             // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
@@ -266,50 +315,69 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             }
           } else if (mission.tipo === 'PRODOTTO') {
-            const productOrder = riv.history?.find(h => {
-              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
-                return h.items.some(item => 
-                  item.codice.toLowerCase() === mission.nome.toLowerCase() || 
-                  mission.nome.toLowerCase().includes(item.codice.toLowerCase())
-                );
-              }
-              return false;
-            });
+            if (riv.targetIdoneo?.includes(mission.id)) {
+              let storeProductTotal = 0;
+              let lastOrderDate = '';
 
-            if (productOrder) {
-              progress += 1;
-              dettagli.push({
-                id: rivId,
-                nome: rivNome,
-                comune: comune,
-                valore: 1,
-                data: productOrder.data
+              riv.history?.forEach(h => {
+                if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
+                  h.items.forEach(item => {
+                    const matchCategory = mission.targetCategorie?.includes(item.categoria || '');
+                    const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
+                    
+                    if (matchCategory || matchSku) {
+                      storeProductTotal += (item.prezzoApplicato * item.quantita);
+                      lastOrderDate = h.data;
+                    }
+                  });
+                }
               });
+
+              const threshold = mission.sogliaFinanziaria || 0;
+              // Supera il target se ha raggiunto la soglia in euro (o se non c'è soglia basta > 0)
+              if (storeProductTotal > 0 && storeProductTotal >= threshold) {
+                progress += 1;
+                dettagli.push({
+                  id: rivId,
+                  nome: rivNome,
+                  comune: comune,
+                  valore: storeProductTotal,
+                  data: lastOrderDate
+                });
+              }
             }
           }
         }); // <-- Fine ciclo ordini
         
-        // APPLICAZIONE CONGUAGLI
+        // APPLICAZIONE CONGUAGLI SEPARATI (MAGAZZINO & LOGISTA)
         if (mission.tipo === 'FATTURATO' && !(mission.targetSingolo && mission.targetSingolo > 0)) {
           const adj = adjustments[meseSelezionato];
           if (adj) {
-            const extraTotale = adj.logista + adj.amCorrection;
-            if (extraTotale !== 0) {
-              progress += extraTotale;
-              generatedValue += extraTotale;
-              let label = 'Fatturato Logista';
-              if (adj.amCorrection !== 0 && adj.logista !== 0) {
-                label = 'Rettifica Magazzino + Logista';
-              } else if (adj.amCorrection !== 0) {
-                label = 'Rettifica Magazzino';
-              }
-
+            // 1. Conguaglio Magazzino
+            if (adj.amCorrection && adj.amCorrection !== 0) {
+              progress += adj.amCorrection;
+              generatedValue += adj.amCorrection;
               dettagli.push({
-                id: 'conguaglio-allineamento',
-                nome: label,
+                id: 'conguaglio-magazzino',
+                nome: 'Rettifica Magazzino',
                 comune: 'Bilancio',
-                valore: extraTotale,
-                data: `${meseSelezionato}-01`
+                valore: adj.amCorrection,
+                data: `${meseSelezionato}-01`,
+                fonte: 'Magazzino'
+              });
+            }
+
+            // 2. Conguaglio Logista
+            if (adj.logista && adj.logista !== 0) {
+              progress += adj.logista;
+              generatedValue += adj.logista;
+              dettagli.push({
+                id: 'conguaglio-logista',
+                nome: 'Rettifica Logista',
+                comune: 'Bilancio',
+                valore: adj.logista,
+                data: `${meseSelezionato}-01`,
+                fonte: 'Logista'
               });
             }
           }

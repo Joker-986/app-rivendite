@@ -308,12 +308,12 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
             </div>
           )}
 
-          {editType === 'ORDINE' && (
+          {editType === 'ORDINE_LOGISTA' && (
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valore Ordine (€)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valore Ordine Logista (€)</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">€</span>
-                <input type="number" inputMode="decimal" value={importo || ''} onChange={(e) => setImporto(Number(e.target.value))} className="w-full h-14 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-inner" placeholder="0.00" />
+                <input type="number" inputMode="decimal" value={importo || ''} onChange={(e) => setImporto(Number(e.target.value))} className="w-full h-14 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-inner" placeholder="0.00" />
               </div>
             </div>
           )}
@@ -322,20 +322,6 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/> Note e Dettagli</label>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 resize-none transition-all" placeholder="Aggiungi dettagli o articoli..." />
           </div>
-
-          {editType === 'ORDINE' && (
-            <div className="pt-2">
-              <label className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${isEvaso ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
-                <input type="checkbox" checked={isEvaso} onChange={(e) => setIsEvaso(e.target.checked)} className="hidden" />
-                <div className="flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-colors ${isEvaso ? 'bg-emerald-500 border-emerald-600 shadow-inner' : 'bg-slate-100 border-slate-300'}`}>
-                    {isEvaso && <Check className="w-4 h-4 text-white" />}
-                  </div>
-                  <span className={`text-sm font-black ${isEvaso ? 'text-emerald-800' : 'text-slate-600'}`}>Segna come Evaso / Completato</span>
-                </div>
-              </label>
-            </div>
-          )}
         </div>
 
         {/* Footer */}

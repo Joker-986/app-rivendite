@@ -718,7 +718,7 @@ export default function App() {
         budgetScalato = items.reduce((acc, item) => (item.isOmaggio || item.isCredito) ? acc + (item.quantita * item.prezzoApplicato) : acc, 0);
       }
 
-      // FIX BUG: Creiamo sempre un nuovo record per mantenere lo storico completo
+      // FIX BUG: Creiamo sempre un nuovo record per mantenere lo storico completo con dataEsecuzione corretta
       const newEntry: RivenditaHistoryEntry = {
         data: isoDateStr,
         tipo: type,
@@ -727,6 +727,7 @@ export default function App() {
         items: items,
         budgetAmScalato: budgetScalato > 0 ? budgetScalato : undefined,
         dataEvasione: dataEvasione,
+        dataEsecuzione: type === 'ORDINE_LOGISTA' ? isoDateStr : undefined,
         isEseguito: type === 'ORDINE' ? false : (type === 'ORDINE_LOGISTA' ? true : undefined),
         visitaInizio: visitaInizio,
         visitaFine: visitaFine,
@@ -774,7 +775,7 @@ export default function App() {
     showToast(type === 'ORDINE' ? 'Ordine evaso con successo!' : (type === 'ORDINE_LOGISTA' ? 'Ordine Logista registrato!' : 'Attività salvata!'), 'success');
   }, []);
 
-  // PURE FUNCTION per riconciliazione sincrona (FIX PERDITA DATI SYNC)
+  // PURE FUNCTION per riconciliazione sincrona (FIX PERDITA DATI SYNC & SALTO SCHEDA CRM)
   const getReconciledRivendita = (current: any, history: any[]) => {
     const sorted = [...history].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
     const lastVisita = sorted.find(h => h.tipo === 'VISITA');
@@ -794,15 +795,13 @@ export default function App() {
 
       newLastDataVisita = lastDateStr;
       newLastOraVisita = lastTimeStr;
+      newDataVisita = lastDateStr;
+      newOraVisita = lastTimeStr;
 
       if (lastDateStr === oggiStr) {
         nuovoStatoVisitata = current.visitata === 'Da Rivisitare' ? 'Da Rivisitare' : 'Si';
-        newDataVisita = lastDateStr;
-        newOraVisita = lastTimeStr;
       } else {
-        nuovoStatoVisitata = 'No'; 
-        newDataVisita = '';
-        newOraVisita = '';
+        nuovoStatoVisitata = 'No';
       }
     } else {
       nuovoStatoVisitata = 'No';

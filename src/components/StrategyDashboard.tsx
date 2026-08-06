@@ -229,78 +229,101 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       </div>
 
       {/* --- INIZIO PANNELLO AUTO-BILANCIAMENTO --- */}
-      {showBalance && (
-        <div className="mx-1 mb-4 p-5 bg-emerald-50/30 border border-emerald-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300">
-          
-          <div className="grid grid-cols-2 gap-4 items-start">
-            
-            {/* 1. LOGISTA */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Logista</label>
-              <input 
-                type="number" 
-                value={adjustments?.[meseSelezionato]?.logista || ''}
-                onChange={(e) => setLogista(meseSelezionato, parseFloat(e.target.value) || 0)}
-                className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
-                placeholder="0.00"
-              />
-            </div>
+      {showBalance && (() => {
+        const currentAdj = adjustments?.[meseSelezionato] || { logista: 0, amCorrection: 0 };
+        let appMagazzinoTotal = 0;
+        let appLogistaTotal = 0;
+        
+        Object.values(rubrica).forEach(riv => {
+          riv.history?.forEach(h => {
+            if (h.data.startsWith(meseSelezionato)) {
+              if (h.tipo === 'ORDINE') appMagazzinoTotal += (h.importo || 0);
+              if (h.tipo === 'ORDINE_LOGISTA') appLogistaTotal += (h.importo || 0);
+            }
+          });
+        });
 
-            {/* 2. MAGAZZINO (Calcolo Sicuro onBlur) */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Magazzino</label>
-              <input 
-                type="number" 
-                defaultValue={(() => {
-                  const currentAdj = adjustments?.[meseSelezionato] || { logista: 0, amCorrection: 0 };
-                  if (currentAdj.amCorrection === 0) return '';
-                  const totalFatturato = missions.find(m => m.tipo === 'FATTURATO' && !m.targetSingolo)?.progressoAttuale || 0;
-                  const baseOrdersOnly = totalFatturato - currentAdj.amCorrection - currentAdj.logista;
-                  return Number((baseOrdersOnly + currentAdj.amCorrection).toFixed(2));
-                })()}
-                onBlur={(e) => {
-                  const val = parseFloat(e.target.value);
-                  if (isNaN(val)) {
-                    setAmCorrection(meseSelezionato, 0); // Azzera se svuoti il campo
-                  } else {
-                    const currentAdj = adjustments?.[meseSelezionato] || { logista: 0, amCorrection: 0 };
-                    const totalFatturato = missions.find(m => m.tipo === 'FATTURATO' && !m.targetSingolo)?.progressoAttuale || 0;
-                    const baseOrdersOnly = totalFatturato - currentAdj.amCorrection - currentAdj.logista;
-                    setAmCorrection(meseSelezionato, val - baseOrdersOnly);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur(); // Simula il click fuori premendo Invio
-                }}
-                className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
-                placeholder="Digita e premi Invio..."
-              />
+        const logistaDelta = currentAdj.logista || 0;
+        const magazzinoDelta = currentAdj.amCorrection || 0;
+        const hasAdjustments = logistaDelta !== 0 || magazzinoDelta !== 0;
+
+        return (
+          <div className="mx-1 mb-4 p-5 bg-emerald-50/30 border border-emerald-100 rounded-[2rem] animate-in slide-in-from-top-2 duration-300">
+            <div className="grid grid-cols-2 gap-4 items-start">
+              
+              {/* 1. LOGISTA */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Logista (AM)</label>
+                <input 
+                  key={`logista-${meseSelezionato}-${logistaDelta}`}
+                  type="number" 
+                  defaultValue={appLogistaTotal + logistaDelta > 0 ? Number((appLogistaTotal + logistaDelta).toFixed(2)) : ''}
+                  onBlur={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (isNaN(val)) {
+                      setLogista(meseSelezionato, 0);
+                    } else {
+                      setLogista(meseSelezionato, val - appLogistaTotal);
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                  className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+                  placeholder="Digita e Invio..."
+                />
+              </div>
+
+              {/* 2. MAGAZZINO */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-emerald-700/60 uppercase ml-1 block truncate">Fatturato Magazzino (AM)</label>
+                <input 
+                  key={`magazzino-${meseSelezionato}-${magazzinoDelta}`}
+                  type="number" 
+                  defaultValue={appMagazzinoTotal + magazzinoDelta > 0 ? Number((appMagazzinoTotal + magazzinoDelta).toFixed(2)) : ''}
+                  onBlur={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (isNaN(val)) {
+                      setAmCorrection(meseSelezionato, 0);
+                    } else {
+                      setAmCorrection(meseSelezionato, val - appMagazzinoTotal);
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                  className="w-full h-11 px-4 bg-white border border-emerald-200/50 rounded-2xl text-sm font-bold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-400 transition-all"
+                  placeholder="Digita e Invio..."
+                />
+              </div>
+              
             </div>
             
+            {/* Badge Informativo */}
+            {hasAdjustments && (
+              <div className="mt-4 pt-3 border-t border-emerald-100/50 flex justify-between items-center">
+                <div className="flex flex-col gap-0.5">
+                  {magazzinoDelta !== 0 && (
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">
+                      Rettifica Magazzino: {magazzinoDelta > 0 ? '+' : ''}{magazzinoDelta.toFixed(2)}€
+                    </span>
+                  )}
+                  {logistaDelta !== 0 && (
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">
+                      Rettifica Logista: {logistaDelta > 0 ? '+' : ''}{logistaDelta.toFixed(2)}€
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => {
+                    setAmCorrection(meseSelezionato, 0);
+                    setLogista(meseSelezionato, 0);
+                  }} 
+                  className="text-[9px] font-black text-red-500 uppercase underline"
+                >
+                  Annulla Tutto
+                </button>
+              </div>
+            )}
           </div>
-          
-          {/* Badge Informativo */}
-          {(adjustments?.[meseSelezionato]?.amCorrection || 0) !== 0 && (
-            <div className="mt-4 pt-3 border-t border-emerald-100/50 flex justify-between items-center">
-              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
-                Rettifica applicata: {adjustments[meseSelezionato].amCorrection > 0 ? '+' : ''}{adjustments[meseSelezionato].amCorrection.toFixed(2)}€
-              </span>
-              <button 
-                onClick={() => {
-                  setAmCorrection(meseSelezionato, 0);
-                  // Ricarica visivamente il componente azzerando il campo
-                  const inputs = document.querySelectorAll('input[placeholder="Digita e premi Invio..."]');
-                  inputs.forEach(input => (input as HTMLInputElement).value = '');
-                }} 
-                className="text-[9px] font-black text-red-500 uppercase underline"
-              >
-                Annulla
-              </button>
-            </div>
-          )}
-
-        </div>
-      )}
+        );
+      })()}
       {/* --- FINE PANNELLO AUTO-BILANCIAMENTO --- */}
 
       {/* SIMULATORE STIPENDIO - APPLE CLEAN (Mobile Perfect) */}
@@ -397,7 +420,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     <div>
                       <p className="text-xs font-bold text-slate-800">{m.nome}</p>
                       <p className="text-[9px] text-slate-500 font-bold uppercase">
-                        {m.pesoPercentuale}% • Target: {m.target} {m.sku && `• SKU: ${m.sku}`}
+                        {m.pesoPercentuale}% • Target: {m.target} {(m.targetCategorie?.length || m.targetSkus?.length) ? `• Focus Multiplo (Soglia: €${m.sogliaFinanziaria || 0})` : m.sku ? `• SKU: ${m.sku}` : ''}
                       </p>
                     </div>
                   </div>
@@ -506,7 +529,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           {/* MODAL EDITING MISSION */}
           {editingMission && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEditingMission(null)}>
-              <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-4 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-4 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-black uppercase tracking-widest text-brand-400">{editingMission.id ? 'Modifica Missione' : 'Nuova Missione'}</h4>
                   <button onClick={() => setEditingMission(null)} className="text-slate-400 hover:text-white p-2"><X className="w-5 h-5" /></button>
@@ -573,49 +596,101 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                       <>
                         <div>
                           <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
-                            Seleziona Prodotto (SKU)
+                            1. Seleziona Categorie Focus
                           </label>
                           <select 
-                            value={editingMission.sku || ''} 
+                            value="" 
+                            onChange={e => {
+                              const cat = e.target.value;
+                              if (!cat) return;
+                              const current = editingMission.targetCategorie || [];
+                              if (!current.includes(cat)) {
+                                const next = [...current, cat];
+                                setEditingMission({...editingMission, targetCategorie: next, nome: `Focus ${next.join(', ')}`});
+                              }
+                            }}
+                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white mb-2"
+                          >
+                            <option value="">+ Aggiungi una categoria...</option>
+                            {Array.from(new Set(products.map(p => p.categoria).filter(Boolean))).map(cat => (
+                              <option key={cat as string} value={cat as string}>{cat as string}</option>
+                            ))}
+                          </select>
+                          
+                          {(editingMission.targetCategorie || []).length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2 mb-4">
+                              {(editingMission.targetCategorie || []).map(cat => (
+                                <div key={cat} className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-500/20 text-brand-300 border border-brand-500/30 rounded-lg text-xs font-bold">
+                                  <span>{cat}</span>
+                                  <button onClick={() => {
+                                    const next = (editingMission.targetCategorie || []).filter(c => c !== cat);
+                                    setEditingMission({...editingMission, targetCategorie: next, nome: next.length > 0 ? `Focus ${next.join(', ')}` : editingMission.nome});
+                                  }} className="ml-1.5 text-brand-400 hover:text-white transition-colors">&times;</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                            2. Includi SKU Eccezioni / Bundle (Opzionale)
+                          </label>
+                          <select 
+                            value="" 
                             onChange={e => {
                               const sku = e.target.value;
-                              const prod = products.find(p => p.codice === sku);
-                              setEditingMission({
-                                ...editingMission, 
-                                sku,
-                                nome: prod ? `Focus ${prod.descrizione}` : editingMission.nome
-                              });
+                              if (!sku) return;
+                              const current = editingMission.targetSkus || [];
+                              if (!current.includes(sku)) {
+                                setEditingMission({...editingMission, targetSkus: [...current, sku]});
+                              }
                             }}
-                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white"
+                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white mb-2"
                           >
-                            <option value="">Seleziona SKU...</option>
+                            <option value="">+ Aggiungi uno SKU specifico...</option>
                             {products.map(p => (
                               <option key={p.id} value={p.codice}>{p.codice} - {p.descrizione}</option>
                             ))}
                           </select>
+                          
+                          {(editingMission.targetSkus || []).length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {(editingMission.targetSkus || []).map(sku => (
+                                <div key={sku} className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-bold">
+                                  <span>{sku}</span>
+                                  <button onClick={() => {
+                                    setEditingMission({...editingMission, targetSkus: (editingMission.targetSkus || []).filter(s => s !== sku)});
+                                  }} className="ml-1.5 text-purple-400 hover:text-white transition-colors">&times;</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
                         <div>
                           <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
-                            Payout per Negozio (€)
+                            Soglia Minima (€)
                           </label>
                           <div className="relative">
                             <input 
                               type="number" 
-                              placeholder="Es: 50" 
-                              value={editingMission.targetSingolo || ''} 
-                              onChange={e => setEditingMission({...editingMission, targetSingolo: Number(e.target.value)})}
+                              placeholder="Es: 48" 
+                              value={editingMission.sogliaFinanziaria || ''} 
+                              onChange={e => setEditingMission({...editingMission, sogliaFinanziaria: Number(e.target.value)})}
                               className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 text-xs font-bold">€</span>
                           </div>
                         </div>
+
                         <div>
                           <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
-                            Num. Negozi
+                            Num. Negozi Target (Globale)
                           </label>
                           <input 
                             type="number" 
-                            placeholder="Inserisci valore numerico"
+                            placeholder="Es: 10"
                             value={editingMission.target || ''} 
                             onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
@@ -672,7 +747,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           {/* MODAL EDITING CAMPAIGN */}
           {editingCampaign && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEditingCampaign(null)}>
-              <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-4 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <div className="p-5 bg-slate-900 rounded-3xl text-white space-y-4 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-black uppercase tracking-widest text-purple-400">{editingCampaign.id ? 'Modifica Campagna' : 'Nuova Campagna'}</h4>
                   <button onClick={() => setEditingCampaign(null)} className="text-slate-400 hover:text-white p-2"><X className="w-5 h-5" /></button>
@@ -862,9 +937,22 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
         <div className="grid grid-cols-1 gap-3">
           {activeMissions.map(mission => {
-            const percentage = mission.target > 0 ? Math.min(100, Math.round((mission.progressoAttuale / mission.target) * 100)) : 0;
+            const rawRatio = mission.target > 0 ? (mission.progressoAttuale / mission.target) : 0;
+            const percentage = Math.min(100, Math.round(rawRatio * 100)); // Mantiene la barra visiva fluida
             const potentialValue = maxMboBonus * (mission.pesoPercentuale / 100);
-            const earnedValue = potentialValue * (percentage / 100);
+            
+            let earnedValue = 0;
+            if (mission.tipo === 'FATTURATO') {
+              if (rawRatio >= 0.99) {
+                earnedValue = potentialValue;
+              } else if (rawRatio >= 0.80) {
+                earnedValue = potentialValue * 0.5;
+              } else {
+                earnedValue = 0;
+              }
+            } else {
+              earnedValue = potentialValue * Math.min(1, rawRatio);
+            }
 
             return (
               <div 
@@ -898,12 +986,71 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : mission.tipo === 'FATTURATO' ? 'bg-blue-500' : mission.tipo === 'ATTIVAZIONE' ? 'bg-amber-500' : 'bg-purple-500'}`}
-                    style={{ width: `${percentage}%` }}
-                  ></div>
-                </div>
+                {/* Barra di progresso dinamica (Bicolore per Fatturato) */}
+                {mission.tipo === 'FATTURATO' ? (() => {
+                  const dProg = mission.dettagliProgresso || [];
+                  const tLog = dProg.reduce((acc, d) => {
+                    if (d.totaleLogista !== undefined) return acc + d.totaleLogista;
+                    if (d.fonte === 'Logista') return acc + (d.valore || 0);
+                    return acc;
+                  }, 0);
+                  const tMag = dProg.reduce((acc, d) => {
+                    if (d.totaleMagazzino !== undefined) return acc + d.totaleMagazzino;
+                    if (d.fonte === 'Magazzino' || (!d.fonte && d.totaleLogista === undefined)) return acc + (d.valore || 0);
+                    return acc;
+                  }, 0);
+                  
+                  const tTot = tLog + tMag;
+                  const widthLogista = tTot > 0 ? (tLog / tTot) * percentage : 0;
+                  const widthMagazzino = tTot > 0 ? (tMag / tTot) * percentage : 0;
+
+                  return (
+                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div className="h-full bg-blue-500 transition-all duration-1000 ease-out" style={{ width: `${widthMagazzino}%` }}></div>
+                      <div className="h-full bg-orange-500 transition-all duration-1000 ease-out" style={{ width: `${widthLogista}%` }}></div>
+                    </div>
+                  );
+                })() : (
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : mission.tipo === 'ATTIVAZIONE' ? 'bg-amber-500' : 'bg-purple-500'}`}
+                      style={{ width: `${percentage}%` }}
+                    ></div>
+                  </div>
+                )}
+
+                {/* Ripartizione Visiva Logista vs Magazzino per Missione Fatturato */}
+                {mission.tipo === 'FATTURATO' && mission.dettagliProgresso && mission.dettagliProgresso.length > 0 && (() => {
+                  const totLogista = mission.dettagliProgresso.reduce((acc, d) => {
+                    if (d.totaleLogista !== undefined) return acc + d.totaleLogista;
+                    if (d.fonte === 'Logista') return acc + (d.valore || 0);
+                    return acc;
+                  }, 0);
+
+                  const totMagazzino = mission.dettagliProgresso.reduce((acc, d) => {
+                    if (d.totaleMagazzino !== undefined) return acc + d.totaleMagazzino;
+                    if (d.fonte === 'Magazzino' || (!d.fonte && d.totaleLogista === undefined)) return acc + (d.valore || 0);
+                    return acc;
+                  }, 0);
+
+                  const totaleFatturato = totLogista + totMagazzino;
+                  
+                  const pctLogista = totaleFatturato > 0 ? Math.round((totLogista / totaleFatturato) * 100) : 0;
+                  const pctMagazzino = totaleFatturato > 0 ? (100 - pctLogista) : 0;
+
+                  return (
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px] font-bold">
+                      <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-2 flex justify-between items-center">
+                        <span className="text-blue-700 font-extrabold">Magazzino:</span>
+                        <span className="text-slate-700">€{totMagazzino.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctMagazzino}%)</span>
+                      </div>
+                      <div className="bg-orange-50/60 border border-orange-100 rounded-xl p-2 flex justify-between items-center">
+                        <span className="text-orange-700 font-extrabold">Logista:</span>
+                        <span className="text-slate-700">€{totLogista.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctLogista}%)</span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="flex justify-between items-center mt-2">
                   <p className="text-[9px] font-bold text-slate-400 flex items-center gap-2">
@@ -914,11 +1061,41 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                       </span>
                     )}
                   </p>
-                  {percentage === 100 && (
-                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> COMPLETATA
-                    </span>
-                  )}
+                  
+                  {/* Badge Motivazionale / Completamento */}
+                  {(() => {
+                    if (mission.tipo === 'FATTURATO' && mission.target > 0) {
+                      const ratio = mission.progressoAttuale / mission.target;
+                      if (ratio >= 0.99) {
+                        return (
+                          <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            <Sparkles className="w-3 h-3" /> COMPLETATA
+                          </span>
+                        );
+                      } else if (ratio >= 0.80) {
+                        const missing = (mission.target * 0.99) - mission.progressoAttuale;
+                        return (
+                          <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded">
+                            <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 100%
+                          </span>
+                        );
+                      } else {
+                        const missing = (mission.target * 0.80) - mission.progressoAttuale;
+                        return (
+                          <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                            <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 50%
+                          </span>
+                        );
+                      }
+                    } else if (percentage === 100) {
+                      return (
+                        <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          <Sparkles className="w-3 h-3" /> COMPLETATA
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             );

@@ -1,6 +1,6 @@
 {
-  "name": "TgesT Enterprise",
-  "description": "TgesT - Sales Management & CRM for Tabacchi and Stores.",
+  "name": "TgesT Enterprise 2",
+  "description": "TgesT - Sales Management \u0026 CRM for Tabacchi and Stores.",
   "requestFramePermissions": [
     "geolocation"
   ],

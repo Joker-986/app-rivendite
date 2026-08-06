@@ -34,7 +34,7 @@ export interface RivenditaCardProps {
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
-  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => void;
+  handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
   addToCrm: (res: SearchResult) => void;
@@ -58,14 +58,14 @@ const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivend
     if (!data?.history || data.history.length === 0) return null;
     const orders = data.history
       .map((h: any, idx: number) => ({ ...h, realIdx: idx }))
-      .filter((h: any) => h.tipo === 'ORDINE')
+      .filter((h: any) => h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA')
       .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
     return orders[0];
   }, [data?.history]);
 
   if (!lastOrderInfo) return null;
 
-  const isEvaso = lastOrderInfo.isEseguito === true;
+  const isEvaso = lastOrderInfo.isEseguito === true || lastOrderInfo.tipo === 'ORDINE_LOGISTA';
 
   // Colori dinamici
   const bgClass = isEvaso ? "bg-emerald-50 border-emerald-200 hover:bg-emerald-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100";
@@ -77,8 +77,7 @@ const LastOrderTile = ({ data, rivenditaId, openQuickEdit }: { data: any; rivend
   return (
     <div 
       onClick={() => {
-        const idx = data.history.findIndex((h: any) => h.tipo === 'ORDINE');
-        openQuickEdit('ORDINE', rivenditaId, data, idx);
+        openQuickEdit(lastOrderInfo.tipo, rivenditaId, data, lastOrderInfo.realIdx);
       }} 
       className={`mt-1 p-3 border rounded-xl flex items-start gap-2 shadow-inner cursor-pointer transition-colors active:scale-[0.98] ${bgClass}`}
     >
@@ -174,13 +173,14 @@ const TimelineItem: React.FC<{
   showToast: (msg: string, type?: any) => void;
   onOpenModal: () => void;
 }> = ({ entry, index, onEdit, showToast, onOpenModal }) => {
-  const configs = {
+  const configs: any = {
     VISITA: { icon: <CheckCircle2 className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Visita' },
     ORDINE: { icon: <ClipboardList className="w-3 h-3" />, color: 'bg-blue-100 text-blue-600', label: 'Ordine' },
-    HOSTESS: { icon: <UserCheck className="w-3 h-3" />, color: 'bg-purple-100 text-purple-600', label: 'Hostess' }
+    HOSTESS: { icon: <UserCheck className="w-3 h-3" />, color: 'bg-purple-100 text-purple-600', label: 'Hostess' },
+    ORDINE_LOGISTA: { icon: <Zap className="w-3 h-3" />, color: 'bg-emerald-100 text-emerald-600', label: 'Logista' }
   };
   const config = configs[entry.tipo] || configs.VISITA;
-  const targetDateStr = entry.tipo === 'ORDINE' ? (entry.dataEsecuzione || entry.dataEvasione || entry.data) : (entry.visitaInizio || entry.data);
+  const targetDateStr = (entry.tipo === 'ORDINE' || entry.tipo === 'ORDINE_LOGISTA') ? (entry.dataEsecuzione || entry.dataEvasione || entry.data) : (entry.visitaInizio || entry.data);
   let displayTime = safeFormatDate(targetDateStr);
   if (entry.ora) displayTime += ` • ${entry.ora}`;
 
@@ -205,8 +205,8 @@ const TimelineItem: React.FC<{
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{config.label}</span>
-            {entry.tipo === 'ORDINE' && (
-              entry.isEseguito ? (
+            {(entry.tipo === 'ORDINE' || entry.tipo === 'ORDINE_LOGISTA') && (
+              (entry.isEseguito || entry.tipo === 'ORDINE_LOGISTA') ? (
                 <span className="bg-emerald-50 text-emerald-600 text-[9px] font-bold px-2 py-0.5 rounded">ESEGUITO</span>
               ) : (
                 <span className="bg-amber-50 text-amber-600 text-[9px] font-bold px-2 py-0.5 rounded">BOZZA</span>
@@ -228,18 +228,18 @@ const TimelineItem: React.FC<{
           {entry.note}
         </p>
 
-        {entry.tipo === 'ORDINE' && (
+        {(entry.tipo === 'ORDINE' || entry.tipo === 'ORDINE_LOGISTA') && (
           <div className="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
             <div className="flex flex-col">
               {entry.importo > 0 && (
                 <span className="text-xs font-black text-brand-600">Valore: €{entry.importo.toLocaleString('it-IT')}</span>
               )}
-              {entry.dataEvasione && (
+              {entry.dataEvasione && entry.tipo !== 'ORDINE_LOGISTA' && (
                 <span className="text-[9px] text-slate-400 font-bold uppercase">Consegna: {safeFormatDate(entry.dataEvasione)}</span>
               )}
             </div>
             
-            {!entry.isEseguito ? (
+            {(!entry.isEseguito && entry.tipo !== 'ORDINE_LOGISTA') ? (
               <button 
                 onClick={() => {
                   const targetDateStr = entry.dataEvasione || entry.data;
@@ -254,7 +254,7 @@ const TimelineItem: React.FC<{
               </button>
             ) : (
               <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                ESEGUITO IL {new Date(entry.dataEsecuzione || '').toLocaleDateString('it-IT')}
+                ESEGUI IL {safeFormatDate(entry.dataEsecuzione || entry.data)}
               </span>
             )}
           </div>
@@ -530,12 +530,30 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                     }
 
                     if (mission.tipo === 'PRODOTTO') {
-                      // Placeholder visivo in attesa dell'implementazione del POS (Carrello)
-                      const isCompleted = extra.kpiProdottoCompletato;
+                      const currentMonthStr = new Date().toISOString().substring(0, 7);
+                      let sum = 0;
+                      
+                      (extra.history || []).forEach(h => {
+                        if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(currentMonthStr) && h.isEseguito === true) {
+                          h.items.forEach(item => {
+                            const matchCat = mission.targetCategorie?.includes(item.categoria || '');
+                            const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
+                            if (matchCat || matchSku) {
+                              sum += (item.prezzoApplicato * item.quantita);
+                            }
+                          });
+                        }
+                      });
+
+                      const threshold = mission.sogliaFinanziaria || 0;
+                      const isCompleted = threshold > 0 ? sum >= threshold : sum > 0;
+                      
+                      let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
+
                       return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
                           <Package className="w-2.5 h-2.5" />
-                          {isCompleted ? 'Piazzato ✓' : (extra.kpiProdottoNome || mission.nome)}
+                          {statusText}
                         </div>
                       );
                     }
@@ -1395,15 +1413,53 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleActivitySave(id, 'ORDINE_LOGISTA', 'Riordino autonomo su Logista');
+                      handleRubricaUpdate(id, 'showLogistaModule', !extra.showLogistaModule);
                     }}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm whitespace-nowrap"
-                    title="Segnala riordino autonomo su Logista"
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-sm whitespace-nowrap ${
+                      extra.showLogistaModule
+                        ? 'bg-emerald-100 text-emerald-800 shadow-inner'
+                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                    title="Inserisci fatturato indiretto Logista"
                   >
-                    <Zap className="w-4 h-4" />
-                    Logista
+                    <Zap className="w-4 h-4"/>
+                    {extra.showLogistaModule ? 'Chiudi' : 'Logista'}
                   </button>
                 </div>
+
+                {extra.showLogistaModule && (
+                  <div className="mt-4 p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl shadow-sm space-y-3 animate-in fade-in zoom-in-95 duration-300">
+                    <div className="flex items-center gap-2 mb-1 pb-2 border-b border-emerald-100">
+                      <Zap className="w-4 h-4 text-emerald-600"/>
+                      <span className="text-xs font-bold text-emerald-800 uppercase tracking-tight">Fatturato Indiretto Logista</span>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest block">Importo in €</label>
+                        <input
+                          type="number"
+                          placeholder="Es. 1500"
+                          value={extra.importoLogista || ''}
+                          onChange={(e) => handleRubricaUpdate(id, 'importoLogista', e.target.value)}
+                          className="w-full h-10 px-3 bg-white border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold text-emerald-700"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          const importo = parseFloat(String(extra.importoLogista)) || 0;
+                          if (importo > 0) {
+                            handleActivitySave(id, 'ORDINE_LOGISTA', 'Riordino autonomo su Logista', importo);
+                            handleRubricaUpdate(id, 'showLogistaModule', false);
+                            handleRubricaUpdate(id, 'importoLogista', '');
+                          }
+                        }}
+                        className="w-full py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-emerald-700 active:scale-95 transition-all"
+                      >
+                        Salva Importo Logista
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {extra.richiestaOrdine && (
                   <div className="mt-4 animate-in fade-in zoom-in-95 duration-300">
