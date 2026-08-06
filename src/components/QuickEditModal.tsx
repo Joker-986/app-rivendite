@@ -186,14 +186,14 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
             actualIndex, 
             note, 
             totaleEuro, 
-            data, // Mantiene la data di creazione originale intatta (NON usare dataEvasione qui)
-            ora,  // Mantiene l'ora di creazione originale
+            dataEvasioneDalModulo, // Usa la data inserita dall'utente come data evento principale
+            ora,  // Mantiene l'ora per la timeline
             entry.stato, 
             evasoFinale, 
-            // Se appena evaso, salva oggi. Se era GIA' evaso, preserva la vecchia data di esecuzione!
-            evasoFinale ? (entry.dataEsecuzione || new Date().toISOString()) : undefined, 
+            // Usa la data dell'ordine anche come data di esecuzione per rispettare la retroattività
+            evasoFinale ? `${dataEvasioneDalModulo}T${ora}:00.000Z` : undefined, 
             cart,
-            dataEvasioneDalModulo, // Aggiorna esclusivamente la data di consegna (11° parametro)
+            dataEvasioneDalModulo, 
             undefined,
             undefined,
             undefined,

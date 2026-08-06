@@ -12,10 +12,11 @@ import {
   ArrowRight,
   AlertOctagon,
   Ticket,
-  Package
+  Package,
+  Calendar
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
-import { getRivenditaId, safeFormatDate, getTodayLocalISO } from '../utils/helpers';
+import { getRivenditaId, safeFormatDate } from '../utils/helpers';
 
 interface NoteDiCreditoTabProps {
   rubrica: RubricaData;
@@ -30,11 +31,44 @@ interface NoteDiCreditoTabProps {
 const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
   rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast, onDeepLink
 }) => {
+  const [filterPeriod, setFilterPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('mese');
+  const [customRange, setCustomRange] = useState({ start: '', end: '' });
+
   // Logica di estrazione ottimizzata O(1) per lookup rivendite
   const { pendingNdc, completedNdc, stats } = useMemo(() => {
     const pNdc: any[] = [];
     const cNdc: any[] = [];
     const allRiv = [...crmAnagrafiche, ...stores, ...giroVisite];
+
+    const isDateInFilter = (dateStr?: string) => {
+      if (!dateStr) return false;
+      if (filterPeriod === 'all') return true;
+      const d = new Date(dateStr);
+      const ora = new Date();
+
+      if (filterPeriod === 'oggi') return d.toDateString() === ora.toDateString();
+      if (filterPeriod === '7g') {
+        const weekAgo = new Date();
+        weekAgo.setDate(ora.getDate() - 7);
+        return d >= weekAgo;
+      }
+      if (filterPeriod === 'mese') {
+        const startOfMonth = new Date(ora.getFullYear(), ora.getMonth(), 1);
+        return d >= startOfMonth;
+      }
+      if (filterPeriod === 'mese_prec') {
+        const startOfPrevMonth = new Date(ora.getFullYear(), ora.getMonth() - 1, 1);
+        const endOfPrevMonth = new Date(ora.getFullYear(), ora.getMonth(), 0, 23, 59, 59, 999);
+        return d >= startOfPrevMonth && d <= endOfPrevMonth;
+      }
+      if (filterPeriod === 'custom' && customRange.start && customRange.end) {
+        const start = new Date(customRange.start);
+        const end = new Date(customRange.end);
+        end.setHours(23, 59, 59, 999);
+        return d >= start && d <= end;
+      }
+      return false;
+    };
     
     const rivenditeMap = new Map();
     allRiv.forEach(r => rivenditeMap.set(String(getRivenditaId(r)), r));
@@ -61,9 +95,9 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
           const ndcObj = { id, riv, data: d, h, totaleCredito, creditItems, originalIndex: h.originalIndex, isMismatch, isVoucher };
           
           if (h.ndcEseguita) {
-            cNdc.push(ndcObj);
+            if (isDateInFilter(h.dataEsecuzioneNdC || h.data)) cNdc.push(ndcObj);
           } else {
-            pNdc.push(ndcObj);
+            if (isDateInFilter(h.data)) pNdc.push(ndcObj);
           }
         }
       });
@@ -77,7 +111,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
        completedNdc: cNdc.sort((a, b) => new Date(b.h.dataEsecuzioneNdC || b.h.data).getTime() - new Date(a.h.dataEsecuzioneNdC || a.h.data).getTime()),
        stats: { totalPending, totalCompleted }
     };
-  }, [rubrica, crmAnagrafiche, stores, giroVisite]);
+  }, [rubrica, crmAnagrafiche, stores, giroVisite, filterPeriod, customRange]);
 
   const getDaysWait = (dateStr: string) => {
     const start = new Date(dateStr);
@@ -87,8 +121,6 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
   };
 
   const handleExecute = (ndc: any) => {
-    // Payload sicuro con 9 undefined (secondo la firma di handleEditHistory in App.tsx)
-    // Firma: (id, index, newNote, newImporto, newData?, newOra?, newStato?, isEseguito?, dataEsecuzione?, newItems?, newDataEvasione?, visitaInizio?, visitaFine?, ndcEseguita?, dataEsecuzioneNdC?)
     onEditHistory(
       ndc.id, 
       ndc.originalIndex, 
@@ -104,7 +136,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
       undefined, // visitaInizio
       undefined, // visitaFine
       true,      // ndcEseguita
-      getTodayLocalISO() // dataEsecuzioneNdC
+      ndc.h.data // Usa la data in cui il credito è stato emesso, NON forzare oggi
     );
     showToast(ndc.isVoucher ? "Voucher archiviato correttamente!" : "Nota di Credito archiviata correttamente!", "success");
   };
@@ -113,6 +145,52 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       {/* Dashboard container */}
       <div className="bg-white border-b border-slate-200 px-4 py-4 shrink-0">
+        {/* INIZIO FILTRO PERIODO */}
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-600" /> Filtra Rimborsi
+            </h2>
+            <button
+              onClick={() => setFilterPeriod(filterPeriod === 'custom' ? 'all' : 'custom')}
+              className={`p-1.5 rounded-lg border transition-all shadow-sm ${filterPeriod === 'custom' ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-slate-100 text-emerald-600 border-slate-200'}`}
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+            {['all', 'oggi', '7g', 'mese', 'mese_prec'].map((p) => {
+              let label = p;
+              if (p === 'all') label = 'Tutti';
+              if (p === 'oggi') label = 'Oggi';
+              if (p === '7g') label = '7g';
+              if (p === 'mese') label = new Date().toLocaleDateString('it-IT', { month: 'short' });
+              if (p === 'mese_prec') {
+                const prev = new Date();
+                prev.setMonth(prev.getMonth() - 1);
+                label = prev.toLocaleDateString('it-IT', { month: 'short' });
+              }
+              return (
+                <button 
+                  key={p} 
+                  onClick={() => setFilterPeriod(p as any)} 
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${filterPeriod === p ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {filterPeriod === 'custom' && (
+            <div className="flex gap-2 animate-in fade-in zoom-in-95">
+              <input type="date" value={customRange.start} onChange={(e) => setCustomRange(prev => ({...prev, start: e.target.value}))} className="flex-1 h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500" />
+              <input type="date" value={customRange.end} onChange={(e) => setCustomRange(prev => ({...prev, end: e.target.value}))} className="flex-1 h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-1 focus:ring-emerald-500" />
+            </div>
+          )}
+        </div>
+        {/* FINE FILTRO PERIODO */}
+
         {/* Cruscotto Finanziario */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 shadow-sm">
@@ -263,13 +341,15 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
 
         {/* Sezione Archiviati */}
         <section className="pt-4 border-t border-slate-200">
-          <div className="flex items-center gap-2 mb-3 px-1">
-            <History className="w-3.5 h-3.5 text-slate-400" />
-            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Rimborsi Archiviati</h2>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <History className="w-3.5 h-3.5 text-slate-400" />
+              <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Rimborsi Archiviati ({completedNdc.length})</h2>
+            </div>
           </div>
 
           <div className="space-y-2">
-            {completedNdc.slice(0, 10).map((ndc, i) => (
+            {completedNdc.map((ndc, i) => (
               <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80">
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -317,12 +397,6 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                 </div>
               </div>
             ))}
-            
-            {completedNdc.length > 10 && (
-              <button className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">
-                Carica altri rimborsi...
-              </button>
-            )}
 
             {completedNdc.length === 0 && (
               <div className="p-4 border border-dashed border-slate-200 rounded-xl text-center text-[10px] font-bold text-slate-300 uppercase italic">

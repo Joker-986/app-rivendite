@@ -39,7 +39,7 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
   rubrica, crmAnagrafiche, stores, giroVisite, onEditHistory, showToast, onDeepLink
 }) => {
   const { openQuickEdit } = useModals();
-  const [filterPeriod, setFilterPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('all');
+  const [filterPeriod, setFilterPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('mese');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
 
   const { pendingOrders, completedOrders, stats } = useMemo(() => {
@@ -324,13 +324,15 @@ const OrdiniTab: React.FC<OrdiniTabProps> = ({
         </section>
 
         <section className="pt-4 border-t border-slate-200">
-          <div className="flex items-center gap-2 mb-3 px-1">
-            <History className="w-3.5 h-3.5 text-slate-400" />
-            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Ordini Archiviati (Ultimi 15)</h2>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <History className="w-3.5 h-3.5 text-slate-400" />
+              <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Ordini Archiviati ({completedOrders.length})</h2>
+            </div>
           </div>
 
           <div className="space-y-2">
-            {completedOrders.slice(0, 15).map((ord, i) => (
+            {completedOrders.map((ord, i) => (
               <div 
                 key={`completed-${i}`} 
                 onClick={() => openQuickEdit('ORDINE', ord.id, ord.data, ord.originalIndex)}

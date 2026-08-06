@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator, Search, ChevronDown } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator, Search, ChevronDown, Edit3 } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { OrderItem } from '../types';
 import { getTodayLocalISO } from '../utils/helpers';
@@ -47,6 +47,8 @@ const OrderModule: React.FC<OrderModuleProps> = ({
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState<number>(0);
 
   const toggleNotaCredito = () => { setShowNotaCredito(!showNotaCredito); if (!showNotaCredito) { setShowVoucher(false); } };
   const toggleVoucher = () => { setShowVoucher(!showVoucher); if (!showVoucher) { setShowNotaCredito(false); } };
@@ -144,6 +146,10 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   const updateCartItemQuantity = (id: string, newQty: number) => {
     if (newQty < 1) return;
     setCart(prev => prev.map(item => item.id === id ? { ...item, quantita: newQty } : item));
+  };
+
+  const updateCartItemPrice = (id: string, newPrice: number) => {
+    setCart(prev => prev.map(item => item.id === id ? { ...item, prezzoApplicato: newPrice } : item));
   };
 
   const handleConfirm = () => {
@@ -379,11 +385,41 @@ const OrderModule: React.FC<OrderModuleProps> = ({
                       className="w-10 h-7 text-center bg-slate-100 hover:bg-slate-200 border-transparent rounded-md text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all"
                     />
 
-                    {/* Prezzo e Rimozione */}
-                    <div className="flex flex-col items-end min-w-[50px]">
-                      <span className="text-[11px] font-black text-slate-700">
-                        €{(item.prezzoApplicato * item.quantita).toFixed(2)}
-                      </span>
+                    {/* Prezzo Editabile in Sicurezza e Rimozione */}
+                    <div className="flex flex-col items-end min-w-[60px]">
+                      {editingPriceId === item.id ? (
+                        <div className="flex items-center gap-1 animate-in zoom-in-95 duration-200">
+                          <input
+                            type="number"
+                            step="0.01"
+                            autoFocus
+                            value={tempPrice === 0 ? '' : tempPrice}
+                            onChange={(e) => setTempPrice(parseFloat(e.target.value) || 0)}
+                            onBlur={() => {
+                              updateCartItemPrice(item.id, tempPrice);
+                              setEditingPriceId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateCartItemPrice(item.id, tempPrice);
+                                setEditingPriceId(null);
+                              }
+                            }}
+                            className="w-14 h-6 text-right text-[11px] font-black text-brand-600 bg-brand-50 border border-brand-200 rounded outline-none px-1 focus:ring-2 focus:ring-brand-400"
+                            placeholder="Prezzo..."
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 group/price cursor-pointer" onClick={() => { setTempPrice(item.prezzoApplicato); setEditingPriceId(item.id); }}>
+                          <span className="text-[11px] font-black text-slate-700">
+                            €{(item.prezzoApplicato * item.quantita).toFixed(2)}
+                          </span>
+                          <button className="text-slate-300 group-hover/price:text-brand-500 transition-colors" title="Modifica prezzo unitario">
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                      
                       <button 
                         onClick={() => setCart(cart.filter(i => i.id !== item.id))}
                         className="text-[9px] font-bold text-red-400 uppercase hover:text-red-600 transition-colors mt-0.5"
@@ -533,16 +569,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
               <input 
                 type="checkbox" 
                 checked={isEvaso} 
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setIsEvaso(checked);
-                  if (checked) {
-                    setBackupData(dataEvasione); // Salva la data prevista
-                    setDataEvasione(getTodayLocalISO()); // Usa la funzione locale
-                  } else {
-                    setDataEvasione(backupData); // Ripristina la data prevista
-                  }
-                }} 
+                onChange={(e) => setIsEvaso(e.target.checked)} 
                 className="sr-only peer" 
               />
               <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
