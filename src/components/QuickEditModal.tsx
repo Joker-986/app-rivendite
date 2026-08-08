@@ -110,8 +110,6 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
     return Math.max(0, Math.round((end - start) / 60000));
   }, [data, oraInizio, ora]);
 
-  if (!isOpen || !editType || actualIndex < 0) return null;
-
   // FUNZIONE PARACADUTE
   const handleCloseRequest = () => {
     const hasChanges = 
@@ -145,7 +143,9 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
     return () => {
       (window as any).formParachute = null;
     };
-  });
+  }, [isOpen, data, oraInizio, ora, note, importo, isEvaso, items, dataEvasione, paymentMethod, initialState]);
+
+  if (!isOpen || !editType || actualIndex < 0) return null;
 
   const handleSave = () => {
     let newStato = undefined;

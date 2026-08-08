@@ -3,7 +3,7 @@ import {
   Sparkles, Calendar, BarChart3, Target, TrendingUp, Zap, Rocket, 
   ShoppingBag, History, ChevronRight, Plus, Trash2, AlertCircle, Calculator,
   Save, X, Settings2, Info, ArrowRight, Archive, ChevronDown, ChevronUp,
-  DollarSign, RefreshCw, Layers, Check, Activity, Clock
+  DollarSign, RefreshCw, Layers, Check, Activity, Clock, CheckCircle2
 } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
@@ -177,6 +177,124 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     }
     setEditingCampaign(null);
   };
+
+  // --- CALCOLO RUN RATE GIORNALIERO ---
+  const calculateRunRate = () => {
+    const fatturatoMission = missions.find(m => m.id === 'm1');
+    if (!fatturatoMission || fatturatoMission.target <= 0) return null;
+
+    const target100 = fatturatoMission.target;
+    const target80 = fatturatoMission.target * 0.8;
+    const current = fatturatoMission.progressoAttuale;
+
+    const gap100 = Math.max(0, target100 - current);
+    const gap80 = Math.max(0, target80 - current);
+
+    // Funzione per calcolare la Pasquetta (Lunedi dell'Angelo) per un dato anno
+    const getPasquetta = (year: number) => {
+      const a = year % 19;
+      const b = Math.floor(year / 100);
+      const c = year % 100;
+      const d = Math.floor(b / 4);
+      const e = b % 4;
+      const f = Math.floor((b + 8) / 25);
+      const g = Math.floor((b - f + 1) / 3);
+      const h = (19 * a + b - d - g + 15) % 30;
+      const i = Math.floor(c / 4);
+      const k = c % 4;
+      const l = (32 + 2 * e + 2 * i - h - k) % 7;
+      const m = Math.floor((a + 11 * h + 22 * l) / 451);
+      const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // Mese 0-based
+      const day = ((h + l - 7 * m + 114) % 31) + 1;
+      
+      const pasqua = new Date(year, month, day);
+      const pasquetta = new Date(pasqua);
+      pasquetta.setDate(pasqua.getDate() + 1);
+      return pasquetta;
+    };
+
+    // Festività a data fissa (Mese 0-based: 0=Gennaio, 11=Dicembre)
+    const fixedHolidays = [
+      { m: 0, d: 1 },   // Capodanno
+      { m: 0, d: 6 },   // Epifania
+      { m: 3, d: 25 },  // Liberazione (Aprile)
+      { m: 4, d: 1 },   // Lavoratori (Maggio)
+      { m: 5, d: 2 },   // Repubblica (Giugno)
+      { m: 7, d: 15 },  // Ferragosto (Agosto)
+      { m: 10, d: 1 },  // Ognissanti (Novembre)
+      { m: 11, d: 8 },  // Immacolata
+      { m: 11, d: 25 }, // Natale
+      { m: 11, d: 26 }  // Santo Stefano
+    ];
+
+    const isHoliday = (date: Date) => {
+      const day = date.getDate();
+      const month = date.getMonth();
+      const year = date.getFullYear();
+
+      // Check festività fisse
+      for (const h of fixedHolidays) {
+        if (h.m === month && h.d === day) return true;
+      }
+
+      // Check Pasquetta
+      const pasquetta = getPasquetta(year);
+      if (pasquetta.getDate() === day && pasquetta.getMonth() === month) return true;
+
+      return false;
+    };
+
+    const getRemainingWorkingDays = () => {
+      const today = new Date();
+      // Usiamo il mese selezionato per determinare il periodo di calcolo
+      const [selYear, selMonth] = meseSelezionato.split('-').map(Number);
+      
+      let startDate = new Date();
+      // Se stiamo guardando un mese futuro o passato, il Run Rate si azzera
+      if (selYear !== today.getFullYear() || (selMonth - 1) !== today.getMonth()) {
+        return 0; // Mostriamo il Run Rate solo per il mese corrente
+      }
+      // Altrimenti calcoliamo da oggi fino alla fine del mese corrente
+      
+      const endDate = new Date(selYear, selMonth, 0); // Ultimo giorno del mese
+
+      // Se il mese è già finito, o oggi è l'ultimo giorno lavorativo, gestiamo i casi limite
+      if (startDate > endDate) return 0;
+
+      let workingDays = 0;
+      let currentDate = new Date(startDate);
+      // Impostiamo l'ora a mezzanotte per evitare problemi di fusi orari
+      currentDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+
+      while (currentDate <= endDate) {
+        const dayOfWeek = currentDate.getDay(); // 0 = Domenica, 6 = Sabato
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isHoliday(currentDate)) {
+          workingDays++;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return workingDays;
+    };
+
+    const workingDaysLeft = getRemainingWorkingDays();
+
+    // Se non ci sono giorni lavorativi o si guarda un altro mese, disabilita il calcolo
+    if (workingDaysLeft <= 0) return null;
+
+    const dailyTarget100 = gap100 / workingDaysLeft;
+    const dailyTarget80 = gap80 / workingDaysLeft;
+
+    return {
+      workingDaysLeft,
+      dailyTarget100,
+      dailyTarget80,
+      is100Reached: current >= target100,
+      is80Reached: current >= target80
+    };
+  };
+
+  const runRateData = calculateRunRate();
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -1052,7 +1170,41 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   );
                 })()}
 
-                <div className="flex justify-between items-center mt-2">
+                {/* WIDGET OBIETTIVO GIORNALIERO INTEGRATO */}
+                {mission.id === 'm1' && runRateData && (
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                     <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" /> Obiettivo Giornaliero
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full">
+                          {runRateData.workingDaysLeft} gg lavorativi rimasti
+                        </span>
+                     </div>
+                     <div className="grid grid-cols-2 gap-2">
+                       {/* Box 80% */}
+                       <div className={`px-3 py-2 rounded-xl flex justify-between items-center border ${runRateData.is80Reached ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Per l'80%</span>
+                         {runRateData.is80Reached ? (
+                           <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Fatto</span>
+                         ) : (
+                           <span className="text-sm font-black text-slate-700">€{runRateData.dailyTarget80.toLocaleString('it-IT', { maximumFractionDigits: 0 })}<span className="text-[9px] text-slate-400 font-bold ml-0.5">/gg</span></span>
+                         )}
+                       </div>
+                       {/* Box 100% */}
+                       <div className={`px-3 py-2 rounded-xl flex justify-between items-center border ${runRateData.is100Reached ? 'bg-emerald-50 border-emerald-100' : 'bg-brand-50 border-brand-200 shadow-sm'}`}>
+                         <span className="text-[9px] font-black text-brand-500 uppercase tracking-widest">Per il 100%</span>
+                         {runRateData.is100Reached ? (
+                           <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Fatto</span>
+                         ) : (
+                           <span className="text-sm font-black text-brand-700">€{runRateData.dailyTarget100.toLocaleString('it-IT', { maximumFractionDigits: 0 })}<span className="text-[9px] text-brand-500/70 font-bold ml-0.5">/gg</span></span>
+                         )}
+                       </div>
+                     </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center mt-3">
                   <p className="text-[9px] font-bold text-slate-400 flex items-center gap-2">
                     <span>{mission.progressoAttuale.toLocaleString('it-IT')} / {mission.target.toLocaleString('it-IT')}</span>
                     {mission.valoreGenerato !== undefined && mission.valoreGenerato > 0 && (

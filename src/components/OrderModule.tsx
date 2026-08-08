@@ -209,7 +209,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     }
   };
 
-  // Collega il paracadute globale per il tasto indietro hardware (solo se è un Nuovo Ordine standalone)
+  // Collega il paracadute globale con dipendenze stabilizzate
   useEffect(() => {
     if (!isEditMode) {
       (window as any).formParachute = { isActive: true, requestClose: handleSafeCancel };
@@ -217,7 +217,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     return () => {
       if (!isEditMode) (window as any).formParachute = null;
     };
-  });
+  }, [isEditMode, cart, note, notaCredito, voucherValue]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in duration-300">
