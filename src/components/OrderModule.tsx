@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Plus, Trash2, X, Check, Calendar, Gift, FileText, Ticket, Calculator, Search, ChevronDown, Edit3 } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
+import { useModals } from '../contexts/ModalContext';
 import { OrderItem } from '../types';
 import { getTodayLocalISO } from '../utils/helpers';
 
@@ -30,6 +31,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   onGoToCalc
 }) => {
   const { products } = useProducts();
+  const { openConfirm } = useModals();
 
   const [cart, setCart] = useState<OrderItem[]>(initialCart || []);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -189,6 +191,34 @@ const OrderModule: React.FC<OrderModuleProps> = ({
     onConfirmOrder(finalCart, totaleEuro, note, dataEvasione, paymentMethod, isEvaso);
   };
 
+  const handleSafeCancel = () => {
+    if (isEditMode) {
+      onCancel(); // Se siamo in modifica, lascia gestire tutto al QuickEditModal
+    } else {
+      const hasChanges = cart.length > 0 || note.trim().length > 0 || notaCredito !== '' || voucherValue !== '';
+      if (hasChanges) {
+        openConfirm({
+          title: 'Annulla Ordine',
+          message: 'Hai inserito dei dati. Sei sicuro di voler chiudere perdendo l\'ordine in corso?',
+          isDestructive: true,
+          onConfirm: () => onCancel()
+        });
+      } else {
+        onCancel();
+      }
+    }
+  };
+
+  // Collega il paracadute globale per il tasto indietro hardware (solo se è un Nuovo Ordine standalone)
+  useEffect(() => {
+    if (!isEditMode) {
+      (window as any).formParachute = { isActive: true, requestClose: handleSafeCancel };
+    }
+    return () => {
+      if (!isEditMode) (window as any).formParachute = null;
+    };
+  });
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="bg-white w-full max-w-[500px] rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-300">
@@ -208,7 +238,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
               </button>
             )}
             <button 
-              onClick={onCancel}
+              onClick={handleSafeCancel}
               className="w-7 h-7 flex items-center justify-center hover:bg-slate-50 rounded-full transition-colors"
             >
               <X className="w-3.5 h-3.5 text-slate-400" />
@@ -580,7 +610,7 @@ const OrderModule: React.FC<OrderModuleProps> = ({
         {/* FOOTER AZIONI */}
         <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
           <button 
-            onClick={onCancel}
+            onClick={handleSafeCancel}
             className="flex-1 py-3 text-slate-400 font-bold text-xs hover:bg-slate-50 rounded-xl transition-all"
           >
             Annulla

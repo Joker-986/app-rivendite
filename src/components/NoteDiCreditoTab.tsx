@@ -13,7 +13,8 @@ import {
   AlertOctagon,
   Ticket,
   Package,
-  Calendar
+  Calendar,
+  Edit3
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate } from '../utils/helpers';
@@ -33,6 +34,8 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
 }) => {
   const [filterPeriod, setFilterPeriod] = useState<'oggi' | '7g' | 'mese' | 'mese_prec' | 'all' | 'custom'>('mese');
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
+  const [execDates, setExecDates] = useState<Record<string, string>>({});
+  const [dateModal, setDateModal] = useState<{isOpen: boolean, type: 'PENDING'|'ARCHIVED', tempDate: string, ndc: any}>({isOpen: false, type: 'PENDING', tempDate: '', ndc: null});
 
   // Logica di estrazione ottimizzata O(1) per lookup rivendite
   const { pendingNdc, completedNdc, stats } = useMemo(() => {
@@ -121,24 +124,31 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
   };
 
   const handleExecute = (ndc: any) => {
+    const selectedDate = execDates[ndc.id] || new Date().toISOString().split('T')[0];
+    const executionTimestamp = `${selectedDate}T12:00:00.000Z`;
+    
     onEditHistory(
-      ndc.id, 
-      ndc.originalIndex, 
-      ndc.h.note, 
-      ndc.h.importo, 
-      undefined, // newData
-      undefined, // newOra
-      undefined, // newStato
-      undefined, // isEseguito
-      undefined, // dataEsecuzione
-      undefined, // newItems
-      undefined, // newDataEvasione
-      undefined, // visitaInizio
-      undefined, // visitaFine
-      true,      // ndcEseguita
-      ndc.h.data // Usa la data in cui il credito è stato emesso, NON forzare oggi
+      ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo, 
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      true, executionTimestamp
     );
     showToast(ndc.isVoucher ? "Voucher archiviato correttamente!" : "Nota di Credito archiviata correttamente!", "success");
+  };
+
+  const handleConfirmDate = () => {
+    if (!dateModal.tempDate || !dateModal.ndc) return;
+    if (dateModal.type === 'PENDING') {
+       setExecDates(prev => ({ ...prev, [dateModal.ndc.id]: dateModal.tempDate }));
+    } else {
+       const ndc = dateModal.ndc;
+       onEditHistory(
+         ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo,
+         undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+         true, `${dateModal.tempDate}T12:00:00.000Z`
+       );
+       showToast("Data rimborso aggiornata!", "success");
+    }
+    setDateModal({ isOpen: false, type: 'PENDING', tempDate: '', ndc: null });
   };
 
   return (
@@ -320,9 +330,15 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100">
-                      <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase tracking-wide">
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                        ORDINE DEL {safeFormatDate(ndc.h.data, 'short')}
+                      <div className="flex items-center gap-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Emissione:</label>
+                        <div 
+                          onClick={(e) => { e.stopPropagation(); setDateModal({ isOpen: true, type: 'PENDING', tempDate: execDates[ndc.id] || new Date().toISOString().split('T')[0], ndc }); }}
+                          className="h-7 px-3 flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md cursor-pointer transition-colors shadow-sm"
+                        >
+                          <span className="text-[10px] font-black text-slate-700">{safeFormatDate(execDates[ndc.id] || new Date().toISOString().split('T')[0])}</span>
+                          <Edit3 className="w-3 h-3 text-slate-400" />
+                        </div>
                       </div>
                       <button 
                         onClick={() => handleExecute(ndc)}
@@ -381,7 +397,15 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                     {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400 shrink-0" /> : <Receipt className="w-3 h-3 text-emerald-400 shrink-0" />}
                     <span className={`shrink-0 ${ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}`}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                    <span className="shrink-0">• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} • {safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
+                    <span className="shrink-0">• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} •</span>
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); setDateModal({ isOpen: true, type: 'ARCHIVED', tempDate: (ndc.h.dataEsecuzioneNdC || ndc.h.data || '').split('T')[0], ndc }); }}
+                      className="flex items-center gap-1 cursor-pointer group/date px-1.5 py-0.5 rounded hover:bg-slate-200 transition-colors"
+                      title="Modifica data di emissione"
+                    >
+                      <span className="text-slate-600">{safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
+                      <Edit3 className="w-3 h-3 text-slate-400 group-hover/date:text-emerald-500 transition-colors" />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -406,6 +430,38 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
           </div>
         </section>
       </div>
+
+      {/* MODALE CUSTOM PER SELEZIONE DATA */}
+      {dateModal.isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setDateModal(prev => ({ ...prev, isOpen: false })); }}>
+          <div className="bg-white w-full max-w-xs rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-emerald-50">
+               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
+                 <Calendar className="w-5 h-5" />
+               </div>
+               <div>
+                 <h3 className="font-black text-slate-800 leading-tight">Data Emissione</h3>
+                 <p className="text-[10px] font-bold text-slate-500 uppercase">Imposta data effettiva</p>
+               </div>
+            </div>
+            <div className="p-6">
+               <input 
+                 type="date"
+                 value={dateModal.tempDate}
+                 onChange={(e) => setDateModal(prev => ({ ...prev, tempDate: e.target.value }))}
+                 className="w-full h-14 px-4 bg-slate-50 border border-slate-200 rounded-2xl text-base font-black text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500 text-center shadow-inner"
+               />
+               <p className="text-[9px] font-bold text-slate-400 text-center mt-3 uppercase tracking-wider">La modifica sarà applicata solo alla conferma.</p>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+               <button onClick={(e) => { e.stopPropagation(); setDateModal(prev => ({ ...prev, isOpen: false })); }} className="flex-1 py-3 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-all active:scale-95">Annulla</button>
+               <button onClick={(e) => { e.stopPropagation(); handleConfirmDate(); }} className="flex-[2] py-3 text-xs font-bold text-white bg-emerald-600 rounded-xl shadow-md shadow-emerald-100 hover:bg-emerald-700 transition-all flex justify-center items-center gap-2 active:scale-95">
+                 <CheckCircle2 className="w-4 h-4" /> Conferma
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

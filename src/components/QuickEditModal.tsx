@@ -137,6 +137,16 @@ const QuickEditModal: React.FC<QuickEditModalProps> = ({
     }
   };
 
+  // Registra il paracadute a livello globale per intercettare il tasto indietro hardware
+  useEffect(() => {
+    if (isOpen) {
+      (window as any).formParachute = { isActive: true, requestClose: handleCloseRequest };
+    }
+    return () => {
+      (window as any).formParachute = null;
+    };
+  });
+
   const handleSave = () => {
     let newStato = undefined;
     if (editType === 'ORDINE') {

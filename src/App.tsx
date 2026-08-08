@@ -1739,19 +1739,27 @@ export default function App() {
     const handlePopState = () => {
       const s = uiStateRef.current;
 
-      // 1. Chiusura Popup e Modali (Priorità Massima)
-      if (
-        s.expandedCardId || s.showSettingsModal || s.showCreateStoreModal || 
-        s.revisitModalId || 
-        s.showGuideModal || s.confirmModalOpen || 
-        s.shareModalOpen || s.showChangelog || s.fabMenuOpen
-      ) {
+      const parachute = (window as any).formParachute;
+
+      // 1. PRIORITÀ MASSIMA: Chiudi prima i dialoghi di avviso o le guide in sovraimpressione
+      if (s.confirmModalOpen || s.shareModalOpen || s.showGuideModal || s.showChangelog) {
+        window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
+        closeConfirm(); closeShare(); setShowGuideModal(false); setShowChangelog(false);
+        return;
+      }
+
+      // 2. PRIORITÀ MEDIA (PARACADUTE SALVADATI): Se stiamo compilando un ordine, delega la chiusura al componente
+      if (parachute && parachute.isActive && typeof parachute.requestClose === 'function') {
+        window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
+        parachute.requestClose(); // Innesca la logica di sicurezza del form
+        return;
+      }
+
+      // 3. PRIORITÀ NORMALE: Chiusura delle schermate di base (Schede, Modali standard, FAB)
+      if (s.expandedCardId || s.showSettingsModal || s.showCreateStoreModal || s.revisitModalId || s.fabMenuOpen) {
         window.history.pushState({ isApp: true }, ''); // Ripristina la trappola
         setExpandedCardId(null); setShowSettingsModal(false); setShowCreateStoreModal(false);
-        closeRevisitModal(); 
-        setShowGuideModal(false); 
-        closeConfirm(); closeShare();
-        setShowChangelog(false); setFabMenuOpen(false);
+        closeRevisitModal(); setFabMenuOpen(false);
         return;
       }
 
