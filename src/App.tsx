@@ -144,6 +144,7 @@ export default function App() {
   };
   const [rivenditaFilter, setRivenditaFilter] = useState('');
   const [comuneFilter, setComuneFilter] = useState('');
+  const [storeSearchTerm, setStoreSearchTerm] = useState('');
   const [giroVisite, setGiroVisite] = useState<SearchResult[]>(() => loadFromStorage('giroVisite', []));
   const [crmAnagrafiche, setCrmAnagrafiche] = useState<SearchResult[]>(() => loadFromStorage('crmAnagrafiche', []));
   const [stores, setStores] = useState<SearchResult[]>(() => loadFromStorage('stores', []));
@@ -1156,15 +1157,21 @@ export default function App() {
     return stato !== 'RIP';
   }), [allCrmList, rubrica, activeTab, expandedCardId]);
 
-  const ripList = useMemo(() => allCrmList.filter(res => {
+  const ripList = useMemo(() => [...allCrmList, ...stores].filter(res => {
     const id = getRivenditaId(res);
     const stato = rubrica[id]?.stato;
     // Mantiene la scheda visibile nei RIP durante la modifica, anche se si toglie RIP
     if (activeTab === 'rip' && expandedCardId === id) return true;
     return stato === 'RIP';
-  }), [allCrmList, rubrica, activeTab, expandedCardId]);
+  }), [allCrmList, stores, rubrica, activeTab, expandedCardId]);
 
-  const storeList = useMemo(() => stores, [stores]);
+  const storeList = useMemo(() => stores.filter(res => {
+    const id = getRivenditaId(res);
+    const stato = rubrica[id]?.stato;
+    // Mantiene la scheda visibile nello Store durante la modifica, anche se si seleziona RIP
+    if (activeTab === 'store' && expandedCardId === id) return true;
+    return stato !== 'RIP';
+  }), [stores, rubrica, activeTab, expandedCardId]);
 
   // Province dinamiche dal CRM e dagli Store
   const provincesInCrm = useMemo(() => Array.from(new Set([
@@ -1386,7 +1393,17 @@ export default function App() {
     if (activeTab === 'search') return results || [];
     if (activeTab === 'giro') list = giroVisiteList;
     else if (activeTab === 'crm') list = crmList;
-    else if (activeTab === 'store') list = storeList;
+    else if (activeTab === 'store') {
+      list = storeList;
+      if (storeSearchTerm.trim()) {
+        const term = storeSearchTerm.toLowerCase().trim();
+        list = list.filter(res => 
+          (res.storeName?.toLowerCase() || '').includes(term) ||
+          (res.storeNumber?.toLowerCase() || '').includes(term) ||
+          (res['Comune']?.toLowerCase() || '').includes(term)
+        );
+      }
+    }
     else if (activeTab === 'rip') list = ripList;
     else if (activeTab.startsWith('prov_')) {
       const prov = activeTab.replace('prov_', '');
@@ -1451,7 +1468,7 @@ export default function App() {
     }
 
     return list;
-  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, zonaFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica, absoluteIdFilter]);
+  }, [activeTab, results, giroVisiteList, crmList, storeList, ripList, rivenditaFilter, comuneFilter, capFilter, zonaFilter, rubricaFilterStato, filterVisitata, filterOrdine, rubrica, absoluteIdFilter, storeSearchTerm]);
 
   const getSortedList = useMemo(() => {
     const list = getCurrentList;
@@ -2136,14 +2153,34 @@ export default function App() {
                    `${activeTab.replace('prov_', '')} (${getCurrentList.length})`}
                 </h2>
                 {activeTab === 'store' && (
-                  <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0">
-                    <button
-                      onClick={() => setShowCreateStoreModal(true)}
-                      className="px-4 h-full transition-colors flex items-center justify-center gap-1.5 text-brand-600 hover:text-brand-700 hover:bg-brand-50 font-bold text-xs"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Aggiungi Store
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 max-w-[160px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Nome, num, comune..."
+                        value={storeSearchTerm}
+                        onChange={(e) => setStoreSearchTerm(e.target.value)}
+                        className="w-full h-10 pl-8 pr-8 bg-white border border-slate-200/80 rounded-[1.25rem] focus:ring-2 focus:ring-brand-500 outline-none text-xs font-bold shadow-sm transition-shadow"
+                      />
+                      {storeSearchTerm && (
+                        <button 
+                          onClick={() => setStoreSearchTerm('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full p-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0">
+                      <button
+                        onClick={() => setShowCreateStoreModal(true)}
+                        className="px-3 h-full transition-colors flex items-center justify-center gap-1.5 text-brand-600 hover:text-brand-700 hover:bg-brand-50 font-bold text-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Aggiungi
+                      </button>
+                    </div>
                   </div>
                 )}
                 {activeTab === 'crm' && (
