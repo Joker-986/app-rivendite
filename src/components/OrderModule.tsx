@@ -31,7 +31,12 @@ const OrderModule: React.FC<OrderModuleProps> = ({
   onGoToCalc
 }) => {
   const { products } = useProducts();
-  const { openConfirm } = useModals();
+  const { openConfirm, setSwipeDisabled } = useModals();
+
+  useEffect(() => {
+    setSwipeDisabled(true);
+    return () => setSwipeDisabled(false);
+  }, [setSwipeDisabled]);
 
   const [cart, setCart] = useState<OrderItem[]>(initialCart || []);
   const [selectedProductId, setSelectedProductId] = useState<string>('');

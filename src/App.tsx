@@ -37,7 +37,8 @@ export default function App() {
     openQuickEdit,
     revisitModalId, openRevisitModal, closeRevisitModal,
     openKpiAssign,
-    selectedRivenditaId
+    selectedRivenditaId,
+    isSwipeDisabled
   } = useModals();
   const [session, setSession] = useState<{ viewState: string; cookies: string; submitName: string } | null>(null);
   
@@ -1909,6 +1910,7 @@ export default function App() {
             (window as any).touchStartY = e.touches[0].clientY;
           }}
           onTouchEnd={(e) => {
+            if (isSwipeDisabled) return; // Blocco Sicurezza Swipe
             const touchEndX = e.changedTouches[0].clientX;
             const touchEndY = e.changedTouches[0].clientY;
             const deltaX = (window as any).touchStartX - touchEndX;

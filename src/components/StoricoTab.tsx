@@ -149,66 +149,74 @@ const StoricoTab: React.FC<StoricoTabProps> = ({
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden pb-24 pt-2">
       
       {/* HEADER DASHBOARD */}
-      <div className="bg-white border-b border-slate-200 px-4 py-4 shrink-0 space-y-4 shadow-sm relative z-10">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-brand-600" /> Analitica Storico
-          </h2>
-          
-          <select 
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as any)}
-            className="text-[10px] font-black text-slate-700 bg-slate-100 rounded-md px-2 py-1 outline-none border border-slate-200 cursor-pointer"
-          >
-            <option value="rischio">Ordina per: Rischio</option>
-            <option value="recenti">Ordina per: Più Recenti</option>
-            <option value="lontani">Ordina per: Più Lontani</option>
-            <option value="fatturato">Ordina per: Media Fatturato</option>
-          </select>
-        </div>
-
+      <div className="bg-white border-b border-slate-200 px-4 py-3 shrink-0 space-y-3 shadow-sm relative z-10">
+        
+        {/* FILTRI TIPO CLIENTE */}
         <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
           <button 
             onClick={() => setFilterMode('attivi')} 
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black rounded-lg transition-all ${filterMode === 'attivi' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <Wallet className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">REALI ({categoriesData.attivi.length})</span>
+            <Wallet className="w-3.5 h-3.5 shrink-0" /> 
+            <span className="truncate">REALI ({categoriesData.attivi.length})</span>
           </button>
           
           <button 
             onClick={() => setFilterMode('mancanti')} 
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black rounded-lg transition-all relative ${filterMode === 'mancanti' ? 'bg-amber-100 text-amber-700 shadow-sm border border-amber-200' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <SearchX className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">MANCANTI ({categoriesData.mancanti.length})</span>
-            {categoriesData.mancanti.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-white"></span>}
+            <SearchX className="w-3.5 h-3.5 shrink-0" /> 
+            <span className="truncate">MANCANTI</span>
+            {/* BADGE NUMERICO INVECE DEL PALLINO FLUTTUANTE */}
+            {categoriesData.mancanti.length > 0 ? (
+              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${filterMode === 'mancanti' ? 'bg-red-500 text-white animate-pulse' : 'bg-red-100 text-red-600'}`}>
+                {categoriesData.mancanti.length}
+              </span>
+            ) : (
+              <span className="truncate">({categoriesData.mancanti.length})</span>
+            )}
           </button>
 
           <button 
             onClick={() => setFilterMode('persi')} 
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] font-black rounded-lg transition-all ${filterMode === 'persi' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <Ghost className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">FANTASMI ({categoriesData.persi.length})</span>
+            <Ghost className="w-3.5 h-3.5 shrink-0" /> 
+            <span className="truncate">FANTASMI ({categoriesData.persi.length})</span>
           </button>
         </div>
 
-        {/* BARRA DI RICERCA */}
-        <div className="relative mt-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cerca comune o num. rivendita..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-10 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-shadow shadow-inner"
-          />
-          {searchTerm && (
-            <button 
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+        {/* SEARCH & SORT INLINE */}
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cerca comune o num..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-10 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-500 transition-shadow shadow-inner"
+            />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          
+          <select 
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as any)}
+            className="h-10 text-[10px] font-black text-slate-700 bg-white rounded-xl px-2 outline-none border border-slate-200 cursor-pointer shadow-sm shrink-0"
+          >
+            <option value="rischio">Ordina: Rischio</option>
+            <option value="recenti">Ordina: Più Recenti</option>
+            <option value="lontani">Ordina: Più Lontani</option>
+            <option value="fatturato">Ordina: Fatturato</option>
+          </select>
         </div>
       </div>
 
