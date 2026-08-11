@@ -93,23 +93,23 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2.5 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
                         {item.comune && (
-                          <span className="flex items-center gap-0.5 text-[10px] text-slate-400 font-semibold">
-                            <MapPin className="w-3 h-3 text-slate-300" /> {item.comune}
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold shrink-0">
+                            <MapPin className="w-3 h-3 text-slate-300 shrink-0" /> {item.comune}
                           </span>
                         )}
 
                         {/* Micro Badges Fonte */}
                         {(item.totaleLogista !== undefined || item.totaleMagazzino !== undefined) && (
-                          <div className="flex items-center gap-1.5 ml-1">
+                          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                             {(item.totaleMagazzino || 0) > 0 && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-100/80">
+                              <span className="shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-100/80">
                                 Mag: €{(item.totaleMagazzino || 0).toLocaleString('it-IT')}
                               </span>
                             )}
                             {(item.totaleLogista !== undefined && (item.totaleLogista || 0) > 0) && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 text-[9px] font-bold border border-orange-100/80">
+                              <span className="shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-orange-50 text-orange-700 text-[9px] font-bold border border-orange-100/80">
                                 Log: €{(item.totaleLogista || 0).toLocaleString('it-IT')}
                               </span>
                             )}

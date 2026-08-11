@@ -14,7 +14,9 @@ import {
   Ticket,
   Package,
   Calendar,
-  Edit3
+  Edit3,
+  Eye,
+  X
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate } from '../utils/helpers';
@@ -36,6 +38,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
   const [customRange, setCustomRange] = useState({ start: '', end: '' });
   const [execDates, setExecDates] = useState<Record<string, string>>({});
   const [dateModal, setDateModal] = useState<{isOpen: boolean, type: 'PENDING'|'ARCHIVED', tempDate: string, ndc: any}>({isOpen: false, type: 'PENDING', tempDate: '', ndc: null});
+  const [orderModal, setOrderModal] = useState<{isOpen: boolean, ndc: any | null}>({isOpen: false, ndc: null});
 
   // Logica di estrazione ottimizzata O(1) per lookup rivendite
   const { pendingNdc, completedNdc, stats } = useMemo(() => {
@@ -300,9 +303,23 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                             </div>
                           )}
                         </div>
+                        {/* INIEZIONE LABEL DATI */}
+                        <div className="flex flex-wrap items-center gap-1 mt-1 text-[10px] text-slate-400 font-medium">
+                          <span className="flex items-center gap-1">
+                            <History className="w-2.5 h-2.5" /> Ord. {safeFormatDate(ndc.h.data)}
+                          </span>
+                          {ndc.h.dataEvasione && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className={`flex items-center gap-1 ${ndc.h.isEseguito ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                <CheckCircle2 className="w-2.5 h-2.5" /> {ndc.h.isEseguito ? 'Evaso' : 'Previsto'} {safeFormatDate(ndc.h.dataEvasione)}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-start gap-2 shrink-0">
-                        <div className="text-right mt-0.5">
+                      <div className="flex items-start gap-1.5 shrink-0">
+                        <div className="text-right mt-0.5 mr-1">
                           <span className={`text-[16px] font-black ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} tracking-tighter block leading-none`}>
                             €{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                           </span>
@@ -310,6 +327,13 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                             {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
                           </span>
                         </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOrderModal({ isOpen: true, ndc }); }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0"
+                          title="Vedi Ordine Completo"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button 
                           onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
                           className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0"
@@ -407,14 +431,33 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                       <Edit3 className="w-3 h-3 text-slate-400 group-hover/date:text-emerald-500 transition-colors" />
                     </div>
                   </div>
+                  {/* INIEZIONE LABEL DATI */}
+                  <div className="flex flex-wrap items-center gap-1 mt-1 text-[9px] text-slate-400 font-medium">
+                    <span>Ord. {safeFormatDate(ndc.h.data)}</span>
+                    {ndc.h.dataEvasione && (
+                      <>
+                        <span>•</span>
+                        <span className={ndc.h.isEseguito ? 'text-emerald-500' : 'text-amber-500'}>
+                          Ev. {safeFormatDate(ndc.h.dataEvasione)}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center`}>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center mr-1`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setOrderModal({ isOpen: true, ndc }); }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90 border border-transparent bg-slate-100/50"
+                    title="Vedi Ordine Completo"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
                   <button 
                     onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -458,6 +501,73 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                <button onClick={(e) => { e.stopPropagation(); handleConfirmDate(); }} className="flex-[2] py-3 text-xs font-bold text-white bg-emerald-600 rounded-xl shadow-md shadow-emerald-100 hover:bg-emerald-700 transition-all flex justify-center items-center gap-2 active:scale-95">
                  <CheckCircle2 className="w-4 h-4" /> Conferma
                </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODALE DETTAGLIO ORDINE COMPLETO */}
+      {orderModal.isOpen && orderModal.ndc && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setOrderModal({ isOpen: false, ndc: null }); }}>
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-800 p-4 flex justify-between items-start shrink-0">
+              <div className="min-w-0 pr-4">
+                <h3 className="text-white font-black text-lg leading-tight whitespace-normal break-words">
+                  Carrello Ordine Originale
+                </h3>
+                <p className="text-slate-400 text-xs font-bold uppercase mt-1">
+                  {orderModal.ndc.riv.isStore ? orderModal.ndc.riv.storeName : orderModal.ndc.riv.Comune} 
+                  {!orderModal.ndc.riv.isStore && ` • RIV. ${orderModal.ndc.riv['Num. Rivendita']}`}
+                </p>
+              </div>
+              <button onClick={() => setOrderModal({ isOpen: false, ndc: null })} className="p-1.5 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-3 bg-slate-100 flex items-center justify-between border-b border-slate-200 shrink-0 text-xs font-bold text-slate-600">
+               <div className="flex items-center gap-1"><History className="w-3.5 h-3.5"/> Data: <span className="text-slate-800 ml-1">{safeFormatDate(orderModal.ndc.h.data)}</span></div>
+               <div>Totale Netto: <span className="text-emerald-600 font-black ml-1">€{Number(orderModal.ndc.h.importo).toLocaleString('it-IT', {minimumFractionDigits: 2})}</span></div>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 flex-1 bg-slate-50">
+               {orderModal.ndc.h.items && orderModal.ndc.h.items.length > 0 ? (
+                 orderModal.ndc.h.items.map((item: any, idx: number) => (
+                   <div key={idx} className={`flex justify-between items-center bg-white border border-slate-200 rounded-lg p-2.5 shadow-sm ${item.isCredito ? 'border-orange-200 bg-orange-50/30' : item.isOmaggio ? 'border-emerald-200 bg-emerald-50/30' : ''}`}>
+                     <div className="flex flex-col min-w-0 pr-2 gap-1">
+                       {/* Badge Categoria */}
+                       {item.categoria && item.categoria !== 'VARIE' && !item.isCredito && (
+                         <div className="flex">
+                           <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-slate-200/80 text-slate-500 px-1.5 py-0.5 rounded">
+                             {item.categoria}
+                           </span>
+                         </div>
+                       )}
+                       <span className="font-bold text-slate-700 text-xs truncate leading-tight">{item.descrizione || item.codice}</span>
+                       
+                       {/* Logica Esclusiva Badge */}
+                       {(item.isCredito || item.isOmaggio) && (
+                         <div className="flex gap-2">
+                           {item.isCredito ? (
+                             <span className="text-[9px] font-black bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded uppercase">
+                               {item.isVoucher ? 'VOUCHER' : 'SCONTO / CREDITO'}
+                             </span>
+                           ) : (
+                             <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded uppercase">
+                               OMAGGIO
+                             </span>
+                           )}
+                         </div>
+                       )}
+                     </div>
+                     <div className="text-right shrink-0">
+                       <div className="text-xs font-black text-slate-800">x{item.quantita}</div>
+                       <div className="text-[10px] font-bold text-slate-400">€{Number(item.prezzoApplicato).toLocaleString('it-IT', {minimumFractionDigits: 2})}</div>
+                     </div>
+                   </div>
+                 ))
+               ) : (
+                 <p className="text-xs font-bold text-slate-400 text-center py-4">Nessun dettaglio articoli presente in questo storico.</p>
+               )}
             </div>
           </div>
         </div>
