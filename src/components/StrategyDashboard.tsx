@@ -179,13 +179,12 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   };
 
   // --- CALCOLO RUN RATE GIORNALIERO ---
-  const calculateRunRate = () => {
-    const fatturatoMission = missions.find(m => m.id === 'm1');
-    if (!fatturatoMission || fatturatoMission.target <= 0) return null;
+  const calculateRunRate = (mission: Mission) => {
+    if (!mission || mission.target <= 0) return null;
 
-    const target100 = fatturatoMission.target;
-    const target80 = fatturatoMission.target * 0.8;
-    const current = fatturatoMission.progressoAttuale;
+    const target100 = mission.target;
+    const target80 = mission.target * 0.8;
+    const current = mission.progressoAttuale;
 
     const gap100 = Math.max(0, target100 - current);
     const gap80 = Math.max(0, target80 - current);
@@ -293,8 +292,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       is80Reached: current >= target80
     };
   };
-
-  const runRateData = calculateRunRate();
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -532,8 +529,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               {activeMissions.map(m => (
                 <div key={m.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.tipo === 'FATTURATO' ? 'bg-blue-100 text-blue-600' : m.tipo === 'ATTIVAZIONE' ? 'bg-emerald-100 text-emerald-600' : 'bg-purple-100 text-purple-600'}`}>
-                      {m.tipo === 'FATTURATO' ? <TrendingUp className="w-4 h-4" /> : m.tipo === 'ATTIVAZIONE' ? <Zap className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.tipo === 'FATTURATO' ? 'bg-blue-100 text-blue-600' : (m.tipo === 'ATTIVAZIONE' || m.tipo === 'ORDINANTI') ? 'bg-emerald-100 text-emerald-600' : 'bg-purple-100 text-purple-600'}`}>
+                      {m.tipo === 'FATTURATO' ? <TrendingUp className="w-4 h-4" /> : m.tipo === 'ATTIVAZIONE' ? <Zap className="w-4 h-4" /> : m.tipo === 'ORDINANTI' ? <RefreshCw className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-800">{m.nome}</p>
@@ -681,6 +678,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                       >
                         <option value="FATTURATO">Minimo Fatturato</option>
                         <option value="ATTIVAZIONE">Attivazione</option>
+                        <option value="ORDINANTI">Ordinanti</option>
                         <option value="PRODOTTO">Prodotto</option>
                       </select>
                     )}
@@ -1069,7 +1067,11 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 earnedValue = 0;
               }
             } else {
-              earnedValue = potentialValue * Math.min(1, rawRatio);
+              if (rawRatio >= 1) {
+                earnedValue = potentialValue;
+              } else {
+                earnedValue = 0;
+              }
             }
 
             return (
@@ -1090,8 +1092,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               >
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${mission.tipo === 'FATTURATO' ? 'bg-blue-50 text-blue-600' : mission.tipo === 'ATTIVAZIONE' ? 'bg-emerald-50 text-emerald-600' : 'bg-purple-50 text-purple-600'}`}>
-                      {mission.tipo === 'FATTURATO' ? <TrendingUp className="w-5 h-5" /> : mission.tipo === 'ATTIVAZIONE' ? <Zap className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${mission.tipo === 'FATTURATO' ? 'bg-blue-50 text-blue-600' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-emerald-50 text-emerald-600' : 'bg-purple-50 text-purple-600'}`}>
+                      {mission.tipo === 'FATTURATO' ? <TrendingUp className="w-5 h-5" /> : mission.tipo === 'ATTIVAZIONE' ? <Zap className="w-5 h-5" /> : mission.tipo === 'ORDINANTI' ? <RefreshCw className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
                     </div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm">{mission.nome}</h4>
@@ -1131,7 +1133,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 })() : (
                   <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
                     <div 
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : mission.tipo === 'ATTIVAZIONE' ? 'bg-amber-500' : 'bg-purple-500'}`}
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-amber-500' : 'bg-purple-500'}`}
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -1171,7 +1173,15 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 })()}
 
                 {/* WIDGET OBIETTIVO GIORNALIERO INTEGRATO */}
-                {mission.id === 'm1' && runRateData && (
+                {(mission.id === 'm1' || mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') && (() => {
+                  const runRateData = calculateRunRate(mission);
+                  if (!runRateData) return null;
+                  const isCurrency = mission.tipo === 'FATTURATO';
+                  // Se è valuta mostriamo l'euro, se sono pratiche mostriamo un decimale
+                  const formatVal = (val: number) => isCurrency 
+                    ? `€${val.toLocaleString('it-IT', { maximumFractionDigits: 0 })}` 
+                    : val.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                  return (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                      <div className="flex justify-between items-center mb-2">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -1181,28 +1191,29 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                           {runRateData.workingDaysLeft} gg lavorativi rimasti
                         </span>
                      </div>
-                     <div className="grid grid-cols-2 gap-2">
-                       {/* Box 80% */}
-                       <div className={`px-3 py-2 rounded-xl flex justify-between items-center border ${runRateData.is80Reached ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
-                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Per l'80%</span>
-                         {runRateData.is80Reached ? (
-                           <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Fatto</span>
-                         ) : (
-                           <span className="text-sm font-black text-slate-700">€{runRateData.dailyTarget80.toLocaleString('it-IT', { maximumFractionDigits: 0 })}<span className="text-[9px] text-slate-400 font-bold ml-0.5">/gg</span></span>
-                         )}
-                       </div>
-                       {/* Box 100% */}
+                     <div className={`grid gap-2 ${isCurrency ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                       {isCurrency && (
+                         <div className={`px-3 py-2 rounded-xl flex justify-between items-center border ${runRateData.is80Reached ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200 shadow-sm'}`}>
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Per l'80%</span>
+                           {runRateData.is80Reached ? (
+                             <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Fatto</span>
+                           ) : (
+                             <span className="text-sm font-black text-slate-700">{formatVal(runRateData.dailyTarget80)}<span className="text-[9px] text-slate-400 font-bold ml-0.5">/gg</span></span>
+                           )}
+                         </div>
+                       )}
                        <div className={`px-3 py-2 rounded-xl flex justify-between items-center border ${runRateData.is100Reached ? 'bg-emerald-50 border-emerald-100' : 'bg-brand-50 border-brand-200 shadow-sm'}`}>
                          <span className="text-[9px] font-black text-brand-500 uppercase tracking-widest">Per il 100%</span>
                          {runRateData.is100Reached ? (
                            <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Fatto</span>
                          ) : (
-                           <span className="text-sm font-black text-brand-700">€{runRateData.dailyTarget100.toLocaleString('it-IT', { maximumFractionDigits: 0 })}<span className="text-[9px] text-brand-500/70 font-bold ml-0.5">/gg</span></span>
+                           <span className="text-sm font-black text-brand-700">{formatVal(runRateData.dailyTarget100)}<span className="text-[9px] text-brand-500/70 font-bold ml-0.5">/gg</span></span>
                          )}
                        </div>
                      </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 <div className="flex justify-between items-center mt-3">
                   <p className="text-[9px] font-bold text-slate-400 flex items-center gap-2">

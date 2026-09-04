@@ -93,7 +93,7 @@ export interface MissionDetail {
 export interface Mission {
   id: string;
   nome: string;
-  tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'PRODOTTO';
+  tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'ORDINANTI' | 'PRODOTTO';
   sku?: string;
   target: number;
   targetSingolo?: number;

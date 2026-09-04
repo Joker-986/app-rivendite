@@ -166,8 +166,12 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           payoutMultiplier = 0; // Sotto l'80% -> Nessun Payout
         }
       } else {
-        // Logica lineare standard per altre missioni
-        payoutMultiplier = Math.min(1, rawRatio);
+        // Logica a sbarramento per le altre missioni (es. Attivazioni, Ordinanti, Prodotto)
+        if (rawRatio >= 1) {
+          payoutMultiplier = 1; // Solo 100%
+        } else {
+          payoutMultiplier = 0; // Altrimenti 0
+        }
       }
       
       const earned = (monthlyBonusPool * missionWeight) * payoutMultiplier;
@@ -299,7 +303,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 });
               }
             }
-          } else if (mission.tipo === 'ATTIVAZIONE') {
+          } else if (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') {
             // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
             if (riv.targetIdoneo?.includes(mission.id)) {
               const activationOrder = riv.history?.find(h => (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato));
