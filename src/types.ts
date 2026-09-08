@@ -52,6 +52,7 @@ export interface OrderItem {
 }
 
 export interface RivenditaHistoryEntry {
+  id?: string;
   data: string;
   tipo: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA';
   note: string;

@@ -251,7 +251,7 @@ const ModalContainer: React.FC<{
                 {confirmModal.isDestructive ? <Trash2 className="w-8 h-8 text-red-600" /> : <AlertCircle className="w-8 h-8 text-brand-600" />}
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">{confirmModal.title}</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">{confirmModal.message}</p>
+              <p className="text-slate-500 text-sm leading-relaxed whitespace-pre-wrap text-left">{confirmModal.message}</p>
             </div>
             <div className="p-4 bg-slate-50 flex gap-3">
               <button onClick={closeConfirm} className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl text-sm">Annulla</button>

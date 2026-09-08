@@ -3,7 +3,7 @@ import {
   Sparkles, Calendar, BarChart3, Target, TrendingUp, Zap, Rocket, 
   ShoppingBag, History, ChevronRight, Plus, Trash2, AlertCircle, Calculator,
   Save, X, Settings2, Info, ArrowRight, Archive, ChevronDown, ChevronUp,
-  DollarSign, RefreshCw, Layers, Check, Activity, Clock, CheckCircle2
+  DollarSign, RefreshCw, Layers, Check, Activity, Clock, CheckCircle2, Upload
 } from 'lucide-react';
 import { useModals } from '../contexts/ModalContext';
 import { useStrategy } from '../contexts/StrategyContext';
@@ -50,6 +50,118 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const [massAssignMission, setMassAssignMission] = useState<Mission | null>(null);
   const [assignSearchTerm, setAssignSearchTerm] = useState('');
   const [drillDownMission, setDrillDownMission] = useState<{nome: string, dettagli: any[]} | null>(null);
+
+  // --- STATI IMPORT EXCEL LOGISTA ---
+  const [excelState, setExcelState] = useState<{
+    rows: any[];
+    columns: string[];
+    isOpen: boolean;
+    mapping: { vendorCol: string; vendorName: string; codeCol: string; targetCol: string; displayCol: string; };
+  }>({
+    rows: [], columns: [], isOpen: false,
+    mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' }
+  });
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const XLSX = await import('xlsx');
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet);
+
+      if (rows.length > 0) {
+        const columns = Object.keys(rows[0]);
+        setExcelState(prev => ({
+          ...prev, rows, columns, isOpen: true,
+          mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' }
+        }));
+      }
+    } catch (err) {
+      alert("Errore durante la lettura dell'Excel. Formato non supportato.");
+    }
+    e.target.value = '';
+  };
+
+  const processExcelData = () => {
+    const { rows, mapping } = excelState;
+    if (!mapping.vendorCol || !mapping.vendorName || !mapping.codeCol || !mapping.targetCol || !mapping.displayCol) {
+      alert("Compila tutti i campi di mappatura prima di procedere.");
+      return;
+    }
+
+    let foundCount = 0;
+    let missingCount = 0;
+    let missingList: string[] = [];
+
+    rows.forEach((row: any) => {
+      const rowVendor = String(row[mapping.vendorCol] || '').trim().toUpperCase();
+      const targetVendor = mapping.vendorName.trim().toUpperCase();
+
+      if (rowVendor === targetVendor) {
+        const targetVal = parseFloat(row[mapping.targetCol]);
+        if (!isNaN(targetVal) && targetVal > 0) {
+          const excelCode = String(row[mapping.codeCol] || '').trim();
+          const displayVal = String(row[mapping.displayCol] || '').trim();
+
+          if (excelCode) {
+            let matchedId = null;
+            // Match tramite codiceLogista presente in rubrica
+            for (const r of combinedRivendite) {
+              const id = getRivenditaId(r);
+              const rExtra = rubrica[id];
+              if (rExtra && String(rExtra.codiceLogista || '').trim() === excelCode) {
+                matchedId = id;
+                break;
+              }
+            }
+
+            if (matchedId) {
+              const extra = rubrica[matchedId];
+              const history = extra.history || [];
+              const hasOrder = history.some((h: any) => 
+                (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && 
+                h.data.startsWith(meseSelezionato)
+              );
+
+              if (!hasOrder) {
+                const newEntry = {
+                  data: `${meseSelezionato}-01T12:00:00.000Z`,
+                  tipo: 'ORDINE_LOGISTA',
+                  note: 'Import Excel AM',
+                  importo: 0,
+                  isEseguito: true
+                };
+                handleRubricaUpdate(matchedId, 'history', [...history, newEntry]);
+                if (extra.stato !== 'Attivata') {
+                  handleRubricaUpdate(matchedId, 'stato', 'Attivata');
+                }
+              }
+              foundCount++;
+            } else {
+              missingCount++;
+              missingList.push(displayVal || excelCode);
+            }
+          }
+        }
+      }
+    });
+
+    setExcelState(prev => ({ ...prev, isOpen: false }));
+    
+    const missingText = missingCount > 0 
+      ? `I mancanti sono:\n${missingList.slice(0, 15).map(m => `• ${m}`).join('\n')}${missingCount > 15 ? '\n• ...e altri' : ''}` 
+      : 'Tutti gli ordinanti erano già presenti!';
+
+    openConfirm({
+      title: 'Sincronizzazione Logista Completata',
+      message: `✅ Trovati e aggiornati: ${foundCount} ordinanti.\n⚠️ Non trovati nel CRM: ${missingCount}.\n\n${missingText}`,
+      onConfirm: () => {}
+    });
+  };
 
   const handleGlobalCleanup = () => {
     openConfirm({
@@ -349,7 +461,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         let appMagazzinoTotal = 0;
         let appLogistaTotal = 0;
         
-        Object.values(rubrica).forEach(riv => {
+        Object.values(rubrica).forEach((riv: RivenditaExtra) => {
           riv.history?.forEach(h => {
             if (h.data.startsWith(meseSelezionato)) {
               if (h.tipo === 'ORDINE') appMagazzinoTotal += (h.importo || 0);
@@ -1100,7 +1212,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Peso: {mission.pesoPercentuale}% • Max €{potentialValue.toLocaleString('it-IT')}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-1">
                     <p className="text-lg font-black text-slate-800">{percentage}%</p>
                     <p className="text-[10px] font-bold text-brand-600">+€{earnedValue.toLocaleString('it-IT')}</p>
                   </div>
@@ -1225,40 +1337,48 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     )}
                   </p>
                   
-                  {/* Badge Motivazionale / Completamento */}
-                  {(() => {
-                    if (mission.tipo === 'FATTURATO' && mission.target > 0) {
-                      const ratio = mission.progressoAttuale / mission.target;
-                      if (ratio >= 0.99) {
+                  {/* Badge Motivazionale / Completamento e Azioni Extra */}
+                  <div className="flex items-center gap-2">
+                    {(mission.tipo === 'ORDINANTI' || mission.tipo === 'ATTIVAZIONE') && (
+                       <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Importa Ordinanti da Excel">
+                         <Upload className="w-3 h-3" /> EXCEL
+                         <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
+                       </label>
+                    )}
+                    {(() => {
+                      if (mission.tipo === 'FATTURATO' && mission.target > 0) {
+                        const ratio = mission.progressoAttuale / mission.target;
+                        if (ratio >= 0.99) {
+                          return (
+                            <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              <Sparkles className="w-3 h-3" /> COMPLETATA
+                            </span>
+                          );
+                        } else if (ratio >= 0.80) {
+                          const missing = (mission.target * 0.99) - mission.progressoAttuale;
+                          return (
+                            <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded">
+                              <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 100%
+                            </span>
+                          );
+                        } else {
+                          const missing = (mission.target * 0.80) - mission.progressoAttuale;
+                          return (
+                            <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 50%
+                            </span>
+                          );
+                        }
+                      } else if (percentage === 100) {
                         return (
                           <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
                             <Sparkles className="w-3 h-3" /> COMPLETATA
                           </span>
                         );
-                      } else if (ratio >= 0.80) {
-                        const missing = (mission.target * 0.99) - mission.progressoAttuale;
-                        return (
-                          <span className="text-[9px] font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded">
-                            <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 100%
-                          </span>
-                        );
-                      } else {
-                        const missing = (mission.target * 0.80) - mission.progressoAttuale;
-                        return (
-                          <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
-                            <Target className="w-3 h-3" /> Manca €{missing.toLocaleString('it-IT', { maximumFractionDigits: 0 })} al 50%
-                          </span>
-                        );
                       }
-                    } else if (percentage === 100) {
-                      return (
-                        <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
-                          <Sparkles className="w-3 h-3" /> COMPLETATA
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
+                      return null;
+                    })()}
+                  </div>
                 </div>
               </div>
             );
@@ -1412,6 +1532,64 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {excelState.isOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setExcelState(prev => ({ ...prev, isOpen: false }))}>
+          <div className="p-5 bg-white rounded-3xl space-y-4 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">Mappatura Excel</h4>
+              <button onClick={() => setExcelState(prev => ({ ...prev, isOpen: false }))} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">1. Colonna Venditore</label>
+                <select value={excelState.mapping.vendorCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, vendorCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
+                  <option value="">Seleziona colonna...</option>
+                  {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">Seleziona il tuo nome</label>
+                <select value={excelState.mapping.vendorName} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, vendorName: e.target.value}}))} disabled={!excelState.mapping.vendorCol} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-brand-700 disabled:opacity-50">
+                  <option value="">{excelState.mapping.vendorCol ? 'Scegli venditore...' : 'Prima scegli la colonna...'}</option>
+                  {excelState.mapping.vendorCol && Array.from(new Set(excelState.rows.map(r => String(r[excelState.mapping.vendorCol] || '').trim()).filter(Boolean))).sort().map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">2. Colonna Codice Logista</label>
+                <select value={excelState.mapping.codeCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, codeCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
+                  <option value="">Seleziona colonna...</option>
+                  {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">3. Colonna Target (Fatturato &gt; 0)</label>
+                <select value={excelState.mapping.targetCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, targetCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
+                  <option value="">Seleziona colonna...</option>
+                  {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase">4. Colonna Display (Per i mancanti)</label>
+                <select value={excelState.mapping.displayCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, displayCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
+                  <option value="">Seleziona colonna...</option>
+                  {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <button onClick={processExcelData} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black text-sm transition-all mt-4 shadow-md">
+                ELABORA E AGGIORNA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <DrillDownModal 
         isOpen={!!drillDownMission} 
         onClose={() => setDrillDownMission(null)} 

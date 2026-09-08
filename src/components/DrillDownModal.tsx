@@ -17,7 +17,8 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
 
   const totaleElementi = dettagli.length;
   const totaleValore = dettagli.reduce((acc, curr) => acc + (curr.valore || 0), 0);
-  const isEuro = totaleValore > totaleElementi && totaleValore > 50; 
+  const isCounterOnly = dettagli.length > 0 && dettagli.every(d => d.valore === 1);
+  const isEuro = !isCounterOnly;
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
@@ -40,8 +41,8 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-3xl shrink-0">
           <div>
             <h2 className="text-lg font-black text-slate-800 leading-tight">{missionName}</h2>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">
-              {totaleElementi} {totaleElementi === 1 ? 'Rivendita' : 'Rivendite'} • Totale €{totaleValore.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <p className="text-xs font-medium text-slate-500 mt-0.5 whitespace-pre-wrap">
+              {totaleElementi} {totaleElementi === 1 ? 'Rivendita' : 'Rivendite'} {isEuro && `• Totale €${totaleValore.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               {highlightedIds.length > 0 && (
                 <span className="text-emerald-600 font-bold ml-1.5">• Selezionate: {highlightedIds.length}</span>
               )}
