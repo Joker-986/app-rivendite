@@ -402,10 +402,23 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   return (
     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
       <div className="flex flex-col w-full relative gap-1.5 mb-1">
-        {/* LIVELLO 1: Codice Logista + Stato + Menu Kebab */}
-        <div className="flex justify-between items-center w-full">
+        {/* LIVELLO 1 DIFFERENZIATO: Store (SVAPO) vs Tabaccheria (Logista) */}
+        <div className="flex justify-between items-start w-full">
           <div className="flex items-center gap-2 flex-1">
-            {!res.isStore && (
+            {res.isStore ? (
+              <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const copyText = `SVAPO(${res.storeNumber || res['Num. Rivendita']})`;
+                  navigator.clipboard.writeText(copyText);
+                  showToast('Copiato!', 'success');
+                }}
+                className="inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm bg-indigo-900 text-white border-transparent hover:bg-indigo-800"
+                title="Clicca per copiare il codice store"
+              >
+                <span>SVAPO({res.storeNumber || res['Num. Rivendita']})</span>
+              </div>
+            ) : (
               <div 
                 onClick={(e) => {
                   e.stopPropagation();
@@ -496,7 +509,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           </div>
         </div>
 
-        {/* LIVELLO 2 FUSO: Nome Rivendita/Store + Etichette Missioni in Flex Wrap */}
+        {/* LIVELLO 2: Nome e Missioni */}
         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
           {activeTab === 'giro' && (
             <div 
@@ -513,28 +526,28 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </div>
           )}
           
-          <h3 className="font-black text-slate-900 truncate">
+          <div className="font-black text-slate-900 truncate flex shrink-0">
             {res.isStore ? (
-              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-indigo-900 text-white text-[10px] font-black rounded-md tracking-wider shadow-sm">
-                STORE {res.storeNumber || res.storeName || ''}
+              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-indigo-900 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
+                {res.storeName || res['Riferimento'] || 'STORE SENZA NOME'}
               </span>
             ) : (
               <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-800 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
                 {toTitleCase(res['Comune'] || 'Riv.')} {res['Num. Rivendita']}
               </span>
             )}
-          </h3>
+          </div>
 
           {/* Etichette Missioni / Ordinante affiancate al nome */}
           {(extra.ordinante || (extra.targetIdoneo && extra.targetIdoneo.length > 0)) && (
             <>
               {extra.ordinante === 'alto' && (
-                <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
+                <span className="shrink-0 inline-flex items-center justify-center bg-emerald-100 text-emerald-700 px-2 py-1 leading-none rounded-md shadow-sm" title="Alto Ordinante">
                   <TrendingUp className="w-3.5 h-3.5" />
                 </span>
               )}
               {extra.ordinante === 'basso' && (
-                <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
+                <span className="shrink-0 inline-flex items-center justify-center bg-red-100 text-red-700 px-2 py-1 leading-none rounded-md shadow-sm" title="Basso Ordinante">
                   <TrendingDown className="w-3.5 h-3.5" />
                 </span>
               )}
@@ -570,7 +583,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       const mancante = Math.max(0, sbarramento - fattoMese);
                       const isCompleted = mancante <= 0;
                       return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                        <div key={missionId} className={`inline-flex items-center gap-1 px-2 py-1 leading-none text-[10px] font-black uppercase tracking-wider shadow-sm rounded-md border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
                           <Target className="w-2.5 h-2.5" />
                           {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
                         </div>
@@ -584,7 +597,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       const textLabel = isCompleted ? (isOrd ? 'Ordine OK ✓' : 'Attivata ✓') : (isOrd ? 'Manca Ordine' : 'Da Attivare');
                       
                       return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        <div key={missionId} className={`inline-flex items-center gap-1 px-2 py-1 leading-none text-[10px] font-black uppercase tracking-wider shadow-sm rounded-md border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                           {icon}
                           {textLabel}
                         </div>
@@ -613,7 +626,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                       let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
 
                       return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
+                        <div key={missionId} className={`inline-flex items-center gap-1 px-2 py-1 leading-none text-[10px] font-black uppercase tracking-wider shadow-sm rounded-md border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
                           <Package className="w-2.5 h-2.5" />
                           {statusText}
                         </div>
