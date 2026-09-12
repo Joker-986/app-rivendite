@@ -401,7 +401,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
   return (
     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
-      <div className="flex flex-col w-full relative gap-2 mb-1">
+      <div className="flex flex-col w-full relative gap-1.5 mb-1">
         {/* LIVELLO 1: Codice Logista + Stato + Menu Kebab */}
         <div className="flex justify-between items-center w-full">
           <div className="flex items-center gap-2 flex-1">
@@ -416,7 +416,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                     generateLogistaCode(e);
                   }
                 }}
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm ${
+                className={`inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm ${
                   extra.codiceLogista 
                     ? 'bg-slate-900 text-white border-transparent hover:bg-slate-700' 
                     : 'bg-white text-slate-400 border border-dashed border-slate-300 hover:border-brand-400 hover:text-brand-600'
@@ -436,11 +436,11 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             
             {/* STATO BADGE */}
             {activeTab === 'search' ? (
-              <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              <span className={`shrink-0 flex items-center px-2 py-1 leading-none text-[10px] font-black rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                 {res['Stato']}
               </span>
             ) : (
-              <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
+              <span className={`shrink-0 flex items-center px-2 py-1 leading-none text-[10px] font-black rounded-md uppercase tracking-wider shadow-sm ${
                 extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
                 extra.stato === 'Non Attiva' ? 'bg-amber-100 text-amber-700' : 
                 extra.stato === 'RIP' ? 'bg-slate-800 text-slate-100' : 
@@ -454,7 +454,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           <div className="relative shrink-0" onMouseLeave={() => setIsMenuOpen(false)}>
             <button 
               onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
-              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors -my-1"
             >
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -496,8 +496,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
           </div>
         </div>
 
-        {/* LIVELLO 2: Nome Rivendita/Store a Pillola e Input Posizione Giro */}
-        <div className="flex items-center gap-2">
+        {/* LIVELLO 2 FUSO: Nome Rivendita/Store + Etichette Missioni in Flex Wrap */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
           {activeTab === 'giro' && (
             <div 
               className="flex items-center bg-slate-100 border border-slate-200 rounded-md overflow-hidden h-6 shadow-sm focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 transition-all shrink-0" 
@@ -513,122 +513,119 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </div>
           )}
           
-          <h3 className="font-black text-slate-900 leading-tight truncate">
+          <h3 className="font-black text-slate-900 truncate">
             {res.isStore ? (
-              <span className="shrink-0 px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
+              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-indigo-900 text-white text-[10px] font-black rounded-md tracking-wider shadow-sm">
                 STORE {res.storeNumber || res.storeName || ''}
               </span>
             ) : (
-              <span className="shrink-0 px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider uppercase">
+              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-800 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
                 {toTitleCase(res['Comune'] || 'Riv.')} {res['Num. Rivendita']}
               </span>
             )}
           </h3>
-        </div>
 
-        {/* LIVELLO 3: Label in orizzontale (flex-wrap) */}
-        {(extra.ordinante || (extra.targetIdoneo && extra.targetIdoneo.length > 0)) && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-            {extra.ordinante === 'alto' && (
-              <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
-                <TrendingUp className="w-3.5 h-3.5" />
-              </span>
-            )}
-            {extra.ordinante === 'basso' && (
-              <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
-                <TrendingDown className="w-3.5 h-3.5" />
-              </span>
-            )}
+          {/* Etichette Missioni / Ordinante affiancate al nome */}
+          {(extra.ordinante || (extra.targetIdoneo && extra.targetIdoneo.length > 0)) && (
+            <>
+              {extra.ordinante === 'alto' && (
+                <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </span>
+              )}
+              {extra.ordinante === 'basso' && (
+                <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
+                  <TrendingDown className="w-3.5 h-3.5" />
+                </span>
+              )}
 
-            {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
-              <div 
-                className="flex flex-wrap gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRivenditaId(id);
-                  openKpiAssign();
-                }}
-              >
-                {extra.targetIdoneo.map(missionId => {
-                  const mission = missions.find(m => m.id === missionId);
-                  if (!mission) return null;
+              {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
+                <div 
+                  className="flex flex-wrap gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRivenditaId(id);
+                    openKpiAssign();
+                  }}
+                >
+                  {extra.targetIdoneo.map(missionId => {
+                    const mission = missions.find(m => m.id === missionId);
+                    if (!mission) return null;
 
-                  const currentMonthStr = new Date().toISOString().substring(0, 7);
-                  
-                  // Calcola i soldi reali spesi (per missioni Fatturato)
-                  const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
-                    if (curr.tipo === 'ORDINE' && curr.data.startsWith(currentMonthStr)) {
-                      return acc + (Number(curr.importo) || 0);
-                    }
-                    return acc;
-                  }, 0);
-
-                  // Calcola se c'è un ordine a prescindere dall'importo (per Ordinanti/Attivazione) compreso Logista
-                  const hasOrderThisMonth = (extra.history || []).some((curr: any) => 
-                    (curr.tipo === 'ORDINE' || curr.tipo === 'ORDINE_LOGISTA') && curr.data.startsWith(currentMonthStr)
-                  );
-
-                  if (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) > 0) {
-                    const sbarramento = Number(mission.targetSingolo);
-                    const mancante = Math.max(0, sbarramento - fattoMese);
-                    const isCompleted = mancante <= 0;
-                    return (
-                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
-                        <Target className="w-2.5 h-2.5" />
-                        {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
-                      </div>
-                    );
-                  }
-
-                  if (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) <= 0)) {
-                    // Usa la presenza dell'ordine, non l'importo monetario
-                    const isCompleted = hasOrderThisMonth; 
-                    const isOrd = mission.tipo === 'ORDINANTI';
-                    const icon = mission.tipo === 'FATTURATO' ? <Target className="w-2.5 h-2.5" /> : (isOrd ? <RefreshCw className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />);
-                    const textLabel = isCompleted ? (isOrd ? 'Ordine OK ✓' : 'Attivata ✓') : (isOrd ? 'Manca Ordine' : 'Da Attivare');
-                    
-                    return (
-                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                        {icon}
-                        {textLabel}
-                      </div>
-                    );
-                  }
-
-                  if (mission.tipo === 'PRODOTTO') {
                     const currentMonthStr = new Date().toISOString().substring(0, 7);
-                    let sum = 0;
                     
-                    (extra.history || []).forEach(h => {
-                      if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(currentMonthStr) && h.isEseguito === true) {
-                        h.items.forEach(item => {
-                          const matchCat = mission.targetCategorie?.includes(item.categoria || '');
-                          const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
-                          if (matchCat || matchSku) {
-                            sum += (item.prezzoApplicato * item.quantita);
-                          }
-                        });
+                    const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
+                      if (curr.tipo === 'ORDINE' && curr.data.startsWith(currentMonthStr)) {
+                        return acc + (Number(curr.importo) || 0);
                       }
-                    });
+                      return acc;
+                    }, 0);
 
-                    const threshold = mission.sogliaFinanziaria || 0;
-                    const isCompleted = threshold > 0 ? sum >= threshold : sum > 0;
-                    
-                    let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
-
-                    return (
-                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
-                        <Package className="w-2.5 h-2.5" />
-                        {statusText}
-                      </div>
+                    const hasOrderThisMonth = (extra.history || []).some((curr: any) => 
+                      (curr.tipo === 'ORDINE' || curr.tipo === 'ORDINE_LOGISTA') && curr.data.startsWith(currentMonthStr)
                     );
-                  }
-                  return null;
-                })}
-              </div>
-            )}
-          </div>
-        )}
+
+                    if (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) > 0) {
+                      const sbarramento = Number(mission.targetSingolo);
+                      const mancante = Math.max(0, sbarramento - fattoMese);
+                      const isCompleted = mancante <= 0;
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                          <Target className="w-2.5 h-2.5" />
+                          {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
+                        </div>
+                      );
+                    }
+
+                    if (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) <= 0)) {
+                      const isCompleted = hasOrderThisMonth; 
+                      const isOrd = mission.tipo === 'ORDINANTI';
+                      const icon = mission.tipo === 'FATTURATO' ? <Target className="w-2.5 h-2.5" /> : (isOrd ? <RefreshCw className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />);
+                      const textLabel = isCompleted ? (isOrd ? 'Ordine OK ✓' : 'Attivata ✓') : (isOrd ? 'Manca Ordine' : 'Da Attivare');
+                      
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                          {icon}
+                          {textLabel}
+                        </div>
+                      );
+                    }
+
+                    if (mission.tipo === 'PRODOTTO') {
+                      const currentMonthStr = new Date().toISOString().substring(0, 7);
+                      let sum = 0;
+                      
+                      (extra.history || []).forEach(h => {
+                        if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(currentMonthStr) && h.isEseguito === true) {
+                          h.items.forEach(item => {
+                            const matchCat = mission.targetCategorie?.includes(item.categoria || '');
+                            const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
+                            if (matchCat || matchSku) {
+                              sum += (item.prezzoApplicato * item.quantita);
+                            }
+                          });
+                        }
+                      });
+
+                      const threshold = mission.sogliaFinanziaria || 0;
+                      const isCompleted = threshold > 0 ? sum >= threshold : sum > 0;
+                      
+                      let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
+
+                      return (
+                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
+                          <Package className="w-2.5 h-2.5" />
+                          {statusText}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
       
       <LastOrderTile data={extra} rivenditaId={id} openQuickEdit={openQuickEdit} />

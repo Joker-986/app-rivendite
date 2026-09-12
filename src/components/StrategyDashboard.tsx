@@ -1051,7 +1051,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             <div className="px-4 py-3 bg-white border-b border-slate-100 flex gap-2 shrink-0">
               <button
                 onClick={() => {
-                  combinedRivendite.filter(r => rubrica[getRivenditaId(r)]?.stato !== 'RIP').forEach(r => {
+                  combinedRivendite.forEach(r => {
                     const id = getRivenditaId(r);
                     const current = rubrica[id]?.targetIdoneo || [];
                     if (!current.includes(massAssignMission.id)) {
@@ -1065,7 +1065,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               </button>
               <button
                 onClick={() => {
-                  combinedRivendite.filter(r => rubrica[getRivenditaId(r)]?.stato !== 'RIP').forEach(r => {
+                  combinedRivendite.forEach(r => {
                     const id = getRivenditaId(r);
                     const current = rubrica[id]?.targetIdoneo || [];
                     if (current.includes(massAssignMission.id)) {
@@ -1092,7 +1092,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
             
             <div className="p-4 overflow-y-auto flex-1 bg-slate-50/50 space-y-2">
               {combinedRivendite.filter(r => {
-                if (rubrica[getRivenditaId(r)]?.stato === 'RIP') return false;
                 const term = assignSearchTerm.trim().toUpperCase();
                 if (!term) return true;
                 const num = r.isStore ? r.storeNumber : r['Num. Rivendita'];
@@ -1102,7 +1101,6 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 <p className="text-center text-sm text-slate-500 italic py-10">Nessuna rivendita trovata.</p>
               ) : (
                 combinedRivendite.filter(r => {
-                  if (rubrica[getRivenditaId(r)]?.stato === 'RIP') return false;
                   const term = assignSearchTerm.trim().toUpperCase();
                   if (!term) return true;
                   const num = r.isStore ? r.storeNumber : r['Num. Rivendita'];
