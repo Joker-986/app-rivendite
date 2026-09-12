@@ -16,7 +16,8 @@ import {
   Calendar,
   Edit3,
   Eye,
-  X
+  X,
+  MoreVertical
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate } from '../utils/helpers';
@@ -39,6 +40,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
   const [execDates, setExecDates] = useState<Record<string, string>>({});
   const [dateModal, setDateModal] = useState<{isOpen: boolean, type: 'PENDING'|'ARCHIVED', tempDate: string, ndc: any}>({isOpen: false, type: 'PENDING', tempDate: '', ndc: null});
   const [orderModal, setOrderModal] = useState<{isOpen: boolean, ndc: any | null}>({isOpen: false, ndc: null});
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   // Logica di estrazione ottimizzata O(1) per lookup rivendite
   const { pendingNdc, completedNdc, stats } = useMemo(() => {
@@ -261,12 +263,14 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                 
                 return (
                   <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex justify-between items-start mb-2 gap-3">
+                    <div className="flex justify-between items-start mb-2 gap-3 relative">
                       <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex flex-col gap-1 mb-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {ndc.isVoucher ? <Ticket className="shrink-0 w-3.5 h-3.5 text-orange-500" /> : <Receipt className="shrink-0 w-3.5 h-3.5 text-emerald-500" />}
-                            {ndc.riv.isStore ? (
+                        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                          {ndc.riv.isStore ? (
+                            <>
+                              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-600 text-white text-[10px] font-black rounded-md tracking-wider shadow-sm uppercase">
+                                {ndc.riv.storeName || ndc.riv['Riferimento'] || 'STORE SENZA NOME'}
+                              </span>
                               <div 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -277,42 +281,39 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                                 className="inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm bg-indigo-900 text-white border-transparent hover:bg-indigo-800 shrink-0"
                                 title="Clicca per copiare il codice store"
                               >
+                                <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                                 <span>SVAPO({ndc.riv.storeNumber || ndc.riv['Num. Rivendita']})</span>
                               </div>
-                            ) : (
-                              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-800 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
+                            </>
+                          ) : (
+                            <>
+                              <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-600 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
                                 {ndc.riv.Comune || 'Sconosciuto'} {ndc.riv['Num. Rivendita']}
                               </span>
-                            )}
-                            
-                            {!ndc.riv.isStore && ndc.data.codiceLogista && (
-                              <div 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(ndc.data.codiceLogista || '');
-                                  if (typeof showToast === 'function') showToast('Codice Logista copiato!', 'success');
-                                }}
-                                className="flex items-center gap-1 px-2 py-1 leading-none bg-slate-900 text-white text-[10px] font-black rounded-md tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
-                                title="Clicca per copiare il Codice Logista"
-                              >
-                                <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
-                                <span>{ndc.data.codiceLogista}</span>
-                              </div>
-                            )}
-                          </div>
-                          {ndc.riv.isStore && (
-                            <h3 className="font-black text-slate-900 text-[14px] leading-tight whitespace-normal break-words ml-5">
-                              {ndc.riv.storeName || ndc.riv['Riferimento'] || 'STORE SENZA NOME'}
-                            </h3>
+                              {ndc.data.codiceLogista && (
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                                    if (typeof showToast === 'function') showToast('Codice Logista copiato!', 'success');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm bg-slate-900 text-white border-transparent hover:bg-slate-700 shrink-0"
+                                  title="Clicca per copiare il Codice Logista"
+                                >
+                                  <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                                  <span>{ndc.data.codiceLogista}</span>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                           {ndc.isMismatch ? (
-                            <span className="shrink-0 bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
-                              <AlertOctagon className="w-3 h-3 shrink-0" /> ⚠️ ORDINE EVASO: RICHIEDI NdC!
+                            <span className="shrink-0 bg-red-600 text-white text-[9px] font-black px-2 py-1 rounded-md animate-pulse flex items-center gap-1 leading-none uppercase tracking-wider">
+                              <AlertOctagon className="w-3 h-3 shrink-0" /> ORDINE EVASO: RICHIEDI NdC!
                             </span>
                           ) : (
-                            <div className={`shrink-0 flex items-center gap-1 text-[10px] font-black uppercase ${isUrgent ? 'text-amber-500' : 'text-slate-400'}`}>
+                            <div className={`shrink-0 flex items-center gap-1 text-[10px] font-black uppercase leading-none px-2 py-1 rounded-md border ${isUrgent ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                               <Clock className="w-3 h-3 shrink-0" />
                               {days === 0 ? 'Oggi' : `${days} giorni`}
                               {isUrgent && <AlertCircle className="w-3 h-3 shrink-0" />}
@@ -320,7 +321,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                           )}
                         </div>
                         {/* INIEZIONE LABEL DATI */}
-                        <div className="flex flex-wrap items-center gap-1 mt-1 text-[10px] text-slate-400 font-medium">
+                        <div className="flex flex-wrap items-center gap-1 mt-1.5 text-[10px] text-slate-400 font-medium">
                           <span className="flex items-center gap-1">
                             <History className="w-2.5 h-2.5" /> Ord. {safeFormatDate(ndc.h.data)}
                           </span>
@@ -334,28 +335,39 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                           )}
                         </div>
                       </div>
-                      <div className="flex items-start gap-1.5 shrink-0">
-                        <div className="text-right mt-0.5 mr-1">
+                      <div className="flex items-start gap-2 shrink-0">
+                        <div className="text-right mt-0.5">
                           <span className={`text-[16px] font-black ${ndc.isVoucher ? 'text-orange-600' : 'text-emerald-600'} tracking-tighter block leading-none`}>
                             €{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                           </span>
-                          <span className={`text-[9px] font-bold ${ndc.isVoucher ? 'text-orange-400' : 'text-slate-400'} uppercase block mt-1`}>
-                            {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
+                          <span className={`text-[9px] font-bold ${ndc.isVoucher ? 'text-orange-400' : 'text-slate-400'} uppercase flex items-center justify-end gap-1 mt-1`}>
+                            {ndc.isVoucher ? <Ticket className="w-2.5 h-2.5" /> : <Receipt className="w-2.5 h-2.5" />} {ndc.isVoucher ? 'One Shot' : 'Storno AM'}
                           </span>
                         </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setOrderModal({ isOpen: true, ndc }); }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0"
-                          title="Vedi Ordine Completo"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200 shrink-0"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        <div className="relative ml-1" onMouseLeave={() => setOpenMenuId(null)}>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === `pend-${i}` ? null : `pend-${i}`); }}
+                             className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                           >
+                             <MoreVertical className="w-5 h-5" />
+                           </button>
+                           {openMenuId === `pend-${i}` && (
+                             <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 z-[100] flex flex-col gap-0.5 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                               <button
+                                 onClick={(e) => { setOpenMenuId(null); setOrderModal({ isOpen: true, ndc }); }}
+                                 className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl transition-colors"
+                               >
+                                 <Eye className="w-4 h-4" /> Vedi Ordine
+                               </button>
+                               <button
+                                 onClick={(e) => { setOpenMenuId(null); onDeepLink(ndc.id, !!ndc.riv.isStore); }}
+                                 className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-emerald-600 rounded-xl transition-colors"
+                               >
+                                 <ChevronRight className="w-4 h-4" /> Apri Scheda
+                               </button>
+                             </div>
+                           )}
+                        </div>
                       </div>
                     </div>
 
@@ -408,9 +420,12 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
             {completedNdc.map((ndc, i) => (
               <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80">
                 <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {ndc.riv.isStore ? (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    {ndc.riv.isStore ? (
+                      <>
+                        <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-600 text-white text-[10px] font-black rounded-md tracking-wider shadow-sm uppercase">
+                          {ndc.riv.storeName || ndc.riv['Riferimento'] || 'STORE SENZA NOME'}
+                        </span>
                         <div 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -421,46 +436,44 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                           className="inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm bg-indigo-900 text-white border-transparent hover:bg-indigo-800 shrink-0"
                           title="Clicca per copiare il codice store"
                         >
+                          <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                           <span>SVAPO({ndc.riv.storeNumber || ndc.riv['Num. Rivendita']})</span>
                         </div>
-                      ) : (
-                        <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-800 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
+                      </>
+                    ) : (
+                      <>
+                        <span className="shrink-0 inline-flex items-center px-2 py-1 leading-none bg-slate-600 text-white text-[10px] font-black rounded-md tracking-wider uppercase shadow-sm">
                           {ndc.riv.Comune || 'Sconosciuto'} {ndc.riv['Num. Rivendita']}
                         </span>
-                      )}
-                      
-                      {!ndc.riv.isStore && ndc.data.codiceLogista && (
-                        <div 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(ndc.data.codiceLogista || '');
-                            if (typeof showToast === 'function') showToast('Codice Logista copiato!', 'success');
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 leading-none bg-slate-900 text-white text-[10px] font-black rounded-md tracking-widest shadow-sm cursor-pointer hover:bg-slate-700 active:scale-95 transition-all shrink-0"
-                          title="Clicca per copiare il Codice Logista"
-                        >
-                          <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
-                          <span>{ndc.data.codiceLogista}</span>
-                        </div>
-                      )}
-                    </div>
-                    {ndc.riv.isStore && (
-                      <span className="text-[12px] font-bold text-slate-700 whitespace-normal break-words leading-tight ml-1">
-                        {ndc.riv.storeName || ndc.riv['Riferimento'] || 'STORE SENZA NOME'}
-                      </span>
+                        {ndc.data.codiceLogista && (
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(ndc.data.codiceLogista || '');
+                              if (typeof showToast === 'function') showToast('Codice Logista copiato!', 'success');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 leading-none text-[10px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm bg-slate-900 text-white border-transparent hover:bg-slate-700 shrink-0"
+                            title="Clicca per copiare il Codice Logista"
+                          >
+                            <Package className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                            <span>{ndc.data.codiceLogista}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
+
                   <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                     {ndc.isVoucher ? <Ticket className="w-3 h-3 text-orange-400 shrink-0" /> : <Receipt className="w-3 h-3 text-emerald-400 shrink-0" />}
                     <span className={`shrink-0 ${ndc.isVoucher ? 'text-orange-500' : 'text-emerald-500'}`}>€{ndc.totaleCredito.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                    <span className="shrink-0">• {ndc.isVoucher ? 'VOUCHER' : 'NdC'} •</span>
+                    <span className="shrink-0 px-1.5 py-0.5 bg-slate-100 rounded leading-none">{ndc.isVoucher ? 'VOUCHER' : 'NdC'}</span>
                     <div 
                       onClick={(e) => { e.stopPropagation(); setDateModal({ isOpen: true, type: 'ARCHIVED', tempDate: (ndc.h.dataEsecuzioneNdC || ndc.h.data || '').split('T')[0], ndc }); }}
-                      className="flex items-center gap-1 cursor-pointer group/date px-1.5 py-0.5 rounded hover:bg-slate-200 transition-colors"
+                      className="flex items-center gap-1 cursor-pointer group/date px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-100 transition-colors bg-white shadow-sm leading-none ml-1"
                       title="Modifica data di emissione"
                     >
                       <span className="text-slate-600">{safeFormatDate(ndc.h.dataEsecuzioneNdC || ndc.h.data)}</span>
-                      <Edit3 className="w-3 h-3 text-slate-400 group-hover/date:text-emerald-500 transition-colors" />
+                      <Edit3 className="w-2.5 h-2.5 text-slate-400 group-hover/date:text-emerald-500 transition-colors" />
                     </div>
                   </div>
                   {/* INIEZIONE LABEL DATI */}
@@ -476,23 +489,32 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center mr-1`}>
+                <div className="flex items-center gap-2 shrink-0 relative" onMouseLeave={() => setOpenMenuId(null)}>
+                  <div className={`w-7 h-7 ${ndc.isVoucher ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'} rounded-full flex items-center justify-center`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setOrderModal({ isOpen: true, ndc }); }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90 border border-transparent bg-slate-100/50"
-                    title="Vedi Ordine Completo"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
                   <button 
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDeepLink(ndc.id, !!ndc.riv.isStore); }} 
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-90 bg-slate-100/50 border border-slate-200"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                     onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === `arch-${i}` ? null : `arch-${i}`); }}
+                     className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors ml-1"
+                   >
+                     <MoreVertical className="w-5 h-5" />
+                   </button>
+                   {openMenuId === `arch-${i}` && (
+                     <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 z-[100] flex flex-col gap-0.5 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                       <button
+                         onClick={(e) => { setOpenMenuId(null); setOrderModal({ isOpen: true, ndc }); }}
+                         className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600 rounded-xl transition-colors"
+                       >
+                         <Eye className="w-4 h-4" /> Vedi Ordine
+                       </button>
+                       <button
+                         onClick={(e) => { setOpenMenuId(null); onDeepLink(ndc.id, !!ndc.riv.isStore); }}
+                         className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-emerald-600 rounded-xl transition-colors"
+                       >
+                         <ChevronRight className="w-4 h-4" /> Apri Scheda
+                       </button>
+                     </div>
+                   )}
                 </div>
               </div>
             ))}
