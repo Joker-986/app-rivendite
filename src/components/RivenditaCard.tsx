@@ -639,6 +639,13 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
             </>
           )}
         </div>
+
+        {/* LIVELLO 3: Località (solo per gli Store SVAPO) */}
+        {res.isStore && (
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5 ml-0.5">
+            {res['Comune'] || ''} {res['Prov.'] ? `(${res['Prov.']})` : ''}
+          </p>
+        )}
       </div>
       
       <LastOrderTile data={extra} rivenditaId={id} openQuickEdit={openQuickEdit} />
