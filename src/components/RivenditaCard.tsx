@@ -4,7 +4,7 @@ import {
   Copy, Check, Trash2, BookOpen, ChevronDown, ChevronUp, 
   Calendar, CheckCircle2, X, ClipboardList, Database, 
   Target, Activity, CalendarClock, UserCheck, Edit3, 
-  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag
+  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag, MoreVertical, RefreshCw
 } from 'lucide-react';
 import OrderModule from './OrderModule';
 import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData, OrderItem } from '../types';
@@ -327,6 +327,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const [isCopied, setIsCopied] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [tornoPiuTardi, setTornoPiuTardi] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // Estrazione sicura dell'ultima nota (Priorità: Ultima in History -> Root extra -> Rubrica)
   const displayNote = React.useMemo(() => {
@@ -400,244 +401,234 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
 
   return (
     <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3 relative text-left">
-      <div className="flex justify-between items-start gap-3">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              
-              {activeTab === 'giro' && (
-                <div 
-                  className="flex items-center bg-slate-100 border border-slate-200 rounded-md overflow-hidden h-6 shadow-sm focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 transition-all shrink-0" 
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="px-1.5 bg-slate-200/70 text-slate-500 text-[10px] font-black border-r border-slate-200 h-full flex items-center select-none">#</div>
-                  <input
-                    type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={idx + 1} key={`pos-${idx}-${idx + 1}`}
-                    onBlur={(e) => { const val = e.target.value; if (val && val !== (idx + 1).toString()) jumpToPosition?.(idx, val); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    className="w-7 text-center text-[11px] font-black text-slate-700 bg-transparent focus:bg-white focus:text-brand-700 outline-none m-0 p-0 h-full"
-                  />
-                </div>
-              )}
-
-              {res.isStore ? (
-                <span className="shrink-0 px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
-                  SVAPO ({res.storeNumber ? res.storeNumber : 'Da File'})
-                </span>
-              ) : (
-                <span className="shrink-0 px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider">
-                  RIV. {res['Num. Rivendita']}
-                </span>
-              )}
-
-              {!res.isStore && (
-                <div 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (extra.codiceLogista) {
-                      navigator.clipboard.writeText(extra.codiceLogista);
-                      showToast('Copiato!', 'success');
-                    } else {
-                      generateLogistaCode(e);
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-2 py-1 text-[9px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm ${
-                    extra.codiceLogista 
-                      ? 'bg-slate-900 text-white border-transparent hover:bg-slate-700' 
-                      : 'bg-white text-slate-400 border border-dashed border-slate-300 hover:border-brand-400 hover:text-brand-600'
-                  }`}
-                  title={extra.codiceLogista ? "Clicca per copiare" : "Clicca per generare codice logista"}
-                >
-                  {logistaLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : extra.codiceLogista ? (
-                    <Package className="w-3 h-3 text-blue-400" />
-                  ) : (
-                    <Zap className="w-3 h-3 text-brand-500" />
-                  )}
-                  <span>{extra.codiceLogista || 'GENERA LOGISTA'}</span>
-                </div>
-              )}
-              {activeTab === 'search' ? (
-                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {res['Stato']}
-                </span>
-              ) : (
-                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
-                  extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
-                  extra.stato === 'Non Attiva' ? 'bg-amber-100 text-amber-700' : 
-                  extra.stato === 'RIP' ? 'bg-slate-800 text-slate-100' : 
-                  'bg-slate-100 text-slate-500 border border-slate-200'
-                }`}>
-                  {extra.stato || 'Da definire'}
-                </span>
-              )}
-
-              {extra.ordinante === 'alto' && (
-                <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                </span>
-              )}
-              {extra.ordinante === 'basso' && (
-                <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                </span>
-              )}
-              {/* BADGES MISSIONI IBRIDE (CALCOLO LOCALE MENSILE) */}
-              {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
-                <div 
-                  className="flex flex-wrap gap-1.5 mt-1 cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedRivenditaId(id);
-                    openKpiAssign();
-                  }}
-                >
-                  {extra.targetIdoneo.map(missionId => {
-                    const mission = missions.find(m => m.id === missionId);
-                    if (!mission) return null;
-
-                    // Calcolo Fatturato per il mese corrente (allineato a Strategy)
-                    const currentMonthStr = new Date().toISOString().substring(0, 7);
-                    const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
-                      if (curr.tipo === 'ORDINE' && curr.data.startsWith(currentMonthStr)) {
-                        return acc + (Number(curr.importo) || 0);
-                      }
-                      return acc;
-                    }, 0);
-
-                    if (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) > 0) {
-                      const sbarramento = Number(mission.targetSingolo);
-                      const mancante = Math.max(0, sbarramento - fattoMese);
-                      const isCompleted = mancante <= 0;
-                      return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
-                          <Target className="w-2.5 h-2.5" />
-                          {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
-                        </div>
-                      );
-                    }
-
-                    if (mission.tipo === 'ATTIVAZIONE' || (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) <= 0)) {
-                      const isCompleted = fattoMese > 0;
-                      const icon = mission.tipo === 'FATTURATO' ? <Target className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />;
-                      return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                          {icon}
-                          {isCompleted ? 'Attivata ✓' : 'Da Attivare'}
-                        </div>
-                      );
-                    }
-
-                    if (mission.tipo === 'PRODOTTO') {
-                      const currentMonthStr = new Date().toISOString().substring(0, 7);
-                      let sum = 0;
-                      
-                      (extra.history || []).forEach(h => {
-                        if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(currentMonthStr) && h.isEseguito === true) {
-                          h.items.forEach(item => {
-                            const matchCat = mission.targetCategorie?.includes(item.categoria || '');
-                            const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
-                            if (matchCat || matchSku) {
-                              sum += (item.prezzoApplicato * item.quantita);
-                            }
-                          });
-                        }
-                      });
-
-                      const threshold = mission.sogliaFinanziaria || 0;
-                      const isCompleted = threshold > 0 ? sum >= threshold : sum > 0;
-                      
-                      let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
-
-                      return (
-                        <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
-                          <Package className="w-2.5 h-2.5" />
-                          {statusText}
-                        </div>
-                      );
-                    }
-
-                    return null;
-                  })}
-                </div>
-              )}
-            </div>
-            
-            <h3 className="font-black text-slate-900 leading-tight whitespace-normal break-words pr-2">
-              {res.isStore ? (
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-black text-brand-700 whitespace-normal break-words leading-tight">{res.storeName || 'Senza Nome'}</span>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight whitespace-normal break-words leading-tight">
-                    {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
-                  </span>
-                </span>
-              ) : (
-                <span className="text-sm font-black text-slate-800 whitespace-normal break-words leading-tight">
-                  {capToDisplay ? `${capToDisplay} ` : ''}{(res['Comune'] || '').toUpperCase()} ({res['Prov.']})
-                </span>
-              )}
-            </h3>
-          </div>
-        </div>
-        
-        {/* Pulsanti laterali (Segmented Control UI - Stile Pillola Colorata) */}
-        <div className="flex items-center bg-white border border-slate-200/80 rounded-[1.25rem] shadow-sm h-10 overflow-hidden shrink-0" onClick={(e) => e.stopPropagation()}>
-          {/* INIZIO BLOCCO MENU FLUTTUANTE BLINDATO */}
-          <div className="relative h-full" onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}>
-            <button
-              type="button"
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                e.preventDefault(); 
-                setSelectedRivenditaId(id);
-                openKpiAssign(); 
-              }}
-              className="px-3 h-full transition-colors flex items-center justify-center text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
-              title="Assegna Target"
-            >
-              <Target className="w-4 h-4" />
-            </button>
-          </div>
-          {/* FINE BLOCCO MENU FLUTTUANTE BLINDATO */}
-          
-          <div className="w-px h-5 bg-slate-200 shrink-0"></div>
-          
-          <button
-            onClick={(e) => handleShare(e)}
-            className={`px-3 h-full transition-colors flex items-center justify-center ${isCopied ? 'text-emerald-600 bg-emerald-50' : 'text-sky-500 hover:text-sky-700 hover:bg-sky-50'}`}
-            title="Condividi informazioni"
-          >
-            {isCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-          </button>
-          
-          <div className="w-px h-5 bg-slate-200 shrink-0"></div>
-          
-          <button
-            onClick={() => toggleSave(res)}
-            className={`px-3 h-full transition-colors flex items-center justify-center ${isInGiro ? 'text-brand-700 bg-brand-50' : 'text-brand-500 hover:text-brand-700 hover:bg-brand-50'}`}
-            title="Aggiungi/Rimuovi dal Giro"
-          >
-            <ClipboardList className="w-4 h-4" />
-          </button>
-
-          {isCrmTab && (
-            <>
-              <div className="w-px h-5 bg-slate-200 shrink-0"></div>
-              <button
+      <div className="flex flex-col w-full relative gap-2 mb-1">
+        {/* LIVELLO 1: Codice Logista + Stato + Menu Kebab */}
+        <div className="flex justify-between items-center w-full">
+          <div className="flex items-center gap-2 flex-1">
+            {!res.isStore && (
+              <div 
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (res.isStore) removeStore(res);
-                  else removeFromCrm(res);
+                  if (extra.codiceLogista) {
+                    navigator.clipboard.writeText(extra.codiceLogista);
+                    showToast('Copiato!', 'success');
+                  } else {
+                    generateLogistaCode(e);
+                  }
                 }}
-                className="px-3 h-full transition-colors flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50"
-                title="Elimina definitivamente"
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-black rounded-md tracking-widest transition-all active:scale-95 cursor-pointer shadow-sm ${
+                  extra.codiceLogista 
+                    ? 'bg-slate-900 text-white border-transparent hover:bg-slate-700' 
+                    : 'bg-white text-slate-400 border border-dashed border-slate-300 hover:border-brand-400 hover:text-brand-600'
+                }`}
+                title={extra.codiceLogista ? "Clicca per copiare" : "Clicca per generare codice logista"}
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
-          )}
+                {logistaLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : extra.codiceLogista ? (
+                  <Package className="w-3 h-3 text-blue-400" />
+                ) : (
+                  <Zap className="w-3 h-3 text-brand-500" />
+                )}
+                <span>{extra.codiceLogista || 'GENERA LOGISTA'}</span>
+              </div>
+            )}
+            
+            {/* STATO BADGE */}
+            {activeTab === 'search' ? (
+              <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${res['Stato'] === 'Attiva' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                {res['Stato']}
+              </span>
+            ) : (
+              <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm ${
+                extra.stato === 'Attivata' ? 'bg-emerald-100 text-emerald-700' : 
+                extra.stato === 'Non Attiva' ? 'bg-amber-100 text-amber-700' : 
+                extra.stato === 'RIP' ? 'bg-slate-800 text-slate-100' : 
+                'bg-slate-100 text-slate-500 border border-slate-200'
+              }`}>
+                {extra.stato || 'Da definire'}
+              </span>
+            )}
+          </div>
+
+          <div className="relative shrink-0" onMouseLeave={() => setIsMenuOpen(false)}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+              className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+            
+            {isMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 z-[100] flex flex-col gap-0.5 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={(e) => { setIsMenuOpen(false); setSelectedRivenditaId(id); openKpiAssign(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                >
+                  <Target className="w-4 h-4" /> Assegna Target
+                </button>
+                <button
+                  onClick={(e) => { setIsMenuOpen(false); handleShare(e); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-sky-600 hover:bg-sky-50 rounded-xl transition-colors"
+                >
+                  <Share2 className="w-4 h-4" /> Condividi
+                </button>
+                <button
+                  onClick={() => { setIsMenuOpen(false); toggleSave(res); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
+                >
+                  <ClipboardList className="w-4 h-4" /> {isInGiro ? 'Rimuovi dal Giro' : 'Aggiungi al Giro'}
+                </button>
+                {isCrmTab && (
+                  <button
+                    onClick={(e) => {
+                      setIsMenuOpen(false);
+                      if (res.isStore) removeStore(res);
+                      else removeFromCrm(res);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" /> Elimina
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* LIVELLO 2: Nome Rivendita/Store a Pillola e Input Posizione Giro */}
+        <div className="flex items-center gap-2">
+          {activeTab === 'giro' && (
+            <div 
+              className="flex items-center bg-slate-100 border border-slate-200 rounded-md overflow-hidden h-6 shadow-sm focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 transition-all shrink-0" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-1.5 bg-slate-200/70 text-slate-500 text-[10px] font-black border-r border-slate-200 h-full flex items-center select-none">#</div>
+              <input
+                type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={idx + 1} key={`pos-${idx}-${idx + 1}`}
+                onBlur={(e) => { const val = e.target.value; if (val && val !== (idx + 1).toString()) jumpToPosition?.(idx, val); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                className="w-7 text-center text-[11px] font-black text-slate-700 bg-transparent focus:bg-white focus:text-brand-700 outline-none m-0 p-0 h-full"
+              />
+            </div>
+          )}
+          
+          <h3 className="font-black text-slate-900 leading-tight truncate">
+            {res.isStore ? (
+              <span className="shrink-0 px-2 py-1 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md tracking-wider">
+                STORE {res.storeNumber || res.storeName || ''}
+              </span>
+            ) : (
+              <span className="shrink-0 px-2 py-1 bg-brand-100 text-brand-800 text-[10px] font-black rounded-md tracking-wider uppercase">
+                {toTitleCase(res['Comune'] || 'Riv.')} {res['Num. Rivendita']}
+              </span>
+            )}
+          </h3>
+        </div>
+
+        {/* LIVELLO 3: Label in orizzontale (flex-wrap) */}
+        {(extra.ordinante || (extra.targetIdoneo && extra.targetIdoneo.length > 0)) && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+            {extra.ordinante === 'alto' && (
+              <span className="shrink-0 flex items-center justify-center bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Alto Ordinante">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </span>
+            )}
+            {extra.ordinante === 'basso' && (
+              <span className="shrink-0 flex items-center justify-center bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md shadow-sm" title="Basso Ordinante">
+                <TrendingDown className="w-3.5 h-3.5" />
+              </span>
+            )}
+
+            {extra.targetIdoneo && extra.targetIdoneo.length > 0 && (
+              <div 
+                className="flex flex-wrap gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedRivenditaId(id);
+                  openKpiAssign();
+                }}
+              >
+                {extra.targetIdoneo.map(missionId => {
+                  const mission = missions.find(m => m.id === missionId);
+                  if (!mission) return null;
+
+                  const currentMonthStr = new Date().toISOString().substring(0, 7);
+                  
+                  // Calcola i soldi reali spesi (per missioni Fatturato)
+                  const fattoMese = (extra.history || []).reduce((acc: number, curr: any) => {
+                    if (curr.tipo === 'ORDINE' && curr.data.startsWith(currentMonthStr)) {
+                      return acc + (Number(curr.importo) || 0);
+                    }
+                    return acc;
+                  }, 0);
+
+                  // Calcola se c'è un ordine a prescindere dall'importo (per Ordinanti/Attivazione) compreso Logista
+                  const hasOrderThisMonth = (extra.history || []).some((curr: any) => 
+                    (curr.tipo === 'ORDINE' || curr.tipo === 'ORDINE_LOGISTA') && curr.data.startsWith(currentMonthStr)
+                  );
+
+                  if (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) > 0) {
+                    const sbarramento = Number(mission.targetSingolo);
+                    const mancante = Math.max(0, sbarramento - fattoMese);
+                    const isCompleted = mancante <= 0;
+                    return (
+                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white text-amber-600 border-amber-300'}`}>
+                        <Target className="w-2.5 h-2.5" />
+                        {isCompleted ? 'Target OK' : `Manca €${mancante.toLocaleString('it-IT')}`}
+                      </div>
+                    );
+                  }
+
+                  if (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || (mission.tipo === 'FATTURATO' && Number(mission.targetSingolo) <= 0)) {
+                    // Usa la presenza dell'ordine, non l'importo monetario
+                    const isCompleted = hasOrderThisMonth; 
+                    const isOrd = mission.tipo === 'ORDINANTI';
+                    const icon = mission.tipo === 'FATTURATO' ? <Target className="w-2.5 h-2.5" /> : (isOrd ? <RefreshCw className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />);
+                    const textLabel = isCompleted ? (isOrd ? 'Ordine OK ✓' : 'Attivata ✓') : (isOrd ? 'Manca Ordine' : 'Da Attivare');
+                    
+                    return (
+                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-indigo-500 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                        {icon}
+                        {textLabel}
+                      </div>
+                    );
+                  }
+
+                  if (mission.tipo === 'PRODOTTO') {
+                    const currentMonthStr = new Date().toISOString().substring(0, 7);
+                    let sum = 0;
+                    
+                    (extra.history || []).forEach(h => {
+                      if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(currentMonthStr) && h.isEseguito === true) {
+                        h.items.forEach(item => {
+                          const matchCat = mission.targetCategorie?.includes(item.categoria || '');
+                          const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
+                          if (matchCat || matchSku) {
+                            sum += (item.prezzoApplicato * item.quantita);
+                          }
+                        });
+                      }
+                    });
+
+                    const threshold = mission.sogliaFinanziaria || 0;
+                    const isCompleted = threshold > 0 ? sum >= threshold : sum > 0;
+                    
+                    let statusText = isCompleted ? 'Target OK' : (threshold > 0 ? `€${sum.toFixed(0)} / €${threshold}` : 'Da Piazzare');
+
+                    return (
+                      <div key={missionId} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm border ${isCompleted ? 'bg-purple-500 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-300'}`}>
+                        <Package className="w-2.5 h-2.5" />
+                        {statusText}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       <LastOrderTile data={extra} rivenditaId={id} openQuickEdit={openQuickEdit} />
@@ -955,15 +946,23 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         {showTimeline && extra.history && (
           <div className="mt-4 space-y-1 border-t border-slate-100 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="relative">
-              {extra.history.slice(0, 10).map((h, i) => (
-                <TimelineItem 
-                  key={`${id}-history-${i}`} 
-                  entry={h} 
-                  index={i}
-                  onEdit={(idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine) => handleEditHistory(id, idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine)}
-                  showToast={showToast}
-                  onOpenModal={() => openQuickEdit(h.tipo, id, extra, i)}
-                />
+              {extra.history
+                .map((h, index) => ({ ...h, originalIndex: index }))
+                .sort((a, b) => {
+                  const dateA = new Date(a.dataEsecuzione || a.dataEvasione || a.visitaInizio || a.data).getTime();
+                  const dateB = new Date(b.dataEsecuzione || b.dataEvasione || b.visitaInizio || b.data).getTime();
+                  return dateB - dateA;
+                })
+                .slice(0, 10)
+                .map((h) => (
+                  <TimelineItem 
+                    key={`${id}-history-${h.originalIndex}`} 
+                    entry={h} 
+                    index={h.originalIndex}
+                    onEdit={(idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine) => handleEditHistory(id, idx, note, imp, data, ora, stato, isEseguito, dataEsecuzione, items, dataEvasione, vInizio, vFine)}
+                    showToast={showToast}
+                    onOpenModal={() => openQuickEdit(h.tipo, id, extra, h.originalIndex)}
+                  />
               ))}
             </div>
           </div>

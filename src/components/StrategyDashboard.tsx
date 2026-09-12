@@ -1192,11 +1192,24 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 onClick={() => {
                   const enrichedDettagli = (mission.dettagliProgresso || []).map(d => {
                     const r = combinedRivendite.find(cr => getRivenditaId(cr) === d.id);
-                    return {
-                      ...d,
-                      nome: r ? (r.isStore ? `Store ${r.storeNumber || r.storeName || ''}` : `Riv. ${r['Num. Rivendita']}`) : d.nome,
-                      comune: r ? (r['Comune'] || '') : d.comune
-                    };
+                    if (r) {
+                      if (r.isStore) {
+                        return {
+                          ...d,
+                          nome: `Store ${r.storeNumber || r.storeName || ''}`,
+                          comune: r['Comune'] || ''
+                        };
+                      } else {
+                        const strComune = r['Comune'] || '';
+                        const fmtComune = strComune ? strComune.charAt(0).toUpperCase() + strComune.slice(1).toLowerCase() : 'Riv.';
+                        return {
+                          ...d,
+                          nome: `${fmtComune} ${r['Num. Rivendita']}`,
+                          comune: '' // Svuota per nascondere la riga mappa
+                        };
+                      }
+                    }
+                    return d;
                   });
                   setDrillDownMission({ nome: mission.nome, dettagli: enrichedDettagli });
                 }}
