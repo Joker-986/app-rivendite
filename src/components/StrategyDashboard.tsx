@@ -57,9 +57,11 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     columns: string[];
     isOpen: boolean;
     mapping: { vendorCol: string; vendorName: string; codeCol: string; targetCol: string; displayCol: string; };
+    selectedDate: string;
   }>({
     rows: [], columns: [], isOpen: false,
-    mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' }
+    mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' },
+    selectedDate: new Date().toISOString().split('T')[0]
   });
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,7 +79,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         const columns = Object.keys(rows[0]);
         setExcelState(prev => ({
           ...prev, rows, columns, isOpen: true,
-          mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' }
+          mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' },
+          selectedDate: new Date().toISOString().split('T')[0]
         }));
       }
     } catch (err) {
@@ -123,33 +126,34 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               const extra = rubrica[matchedId];
               const history = [...(extra.history || [])];
               
-              const existingLogistaIndex = history.findIndex((h: any) => 
-                h.tipo === 'ORDINE_LOGISTA' && 
-                h.data.startsWith(meseSelezionato)
-              );
+              // 1. Calcolo Logista cumulativo del mese
+              const currentLogistaTotal = history.reduce((acc, h: any) => {
+                if (h.tipo === 'ORDINE_LOGISTA' && h.data.startsWith(meseSelezionato)) {
+                  return acc + (h.importo || 0);
+                }
+                return acc;
+              }, 0);
 
-              if (existingLogistaIndex >= 0) {
-                // Aggiorna l'importo del record esistente
-                history[existingLogistaIndex] = {
-                  ...history[existingLogistaIndex],
-                  importo: targetVal,
-                  note: 'Import Excel AM (Aggiornato)'
-                };
-              } else {
-                // Crea nuovo record
-                history.push({
-                  data: `${meseSelezionato}-01T12:00:00.000Z`,
+              // 2. Partita Doppia: aggiungi solo se c'è un incremento
+              if (targetVal > currentLogistaTotal) {
+                const diff = targetVal - currentLogistaTotal;
+                const dataOrario = excelState.selectedDate 
+                  ? `${excelState.selectedDate}T12:00:00.000Z` 
+                  : new Date().toISOString();
+                  
+                const newEntry = {
+                  data: dataOrario,
                   tipo: 'ORDINE_LOGISTA',
-                  note: 'Import Excel AM',
-                  importo: targetVal,
+                  note: currentLogistaTotal > 0 ? 'Integrazione Excel AM' : 'Import Excel AM',
+                  importo: diff,
                   isEseguito: true
-                });
-              }
-              
-              handleRubricaUpdate(matchedId, 'history', history);
-              
-              if (extra.stato !== 'Attivata') {
-                handleRubricaUpdate(matchedId, 'stato', 'Attivata');
+                };
+                
+                handleRubricaUpdate(matchedId, 'history', [...history, newEntry]);
+                
+                if (extra.stato !== 'Attivata') {
+                  handleRubricaUpdate(matchedId, 'stato', 'Attivata');
+                }
               }
               foundCount++;
             } else {
@@ -171,6 +175,28 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       title: 'Sincronizzazione Logista Completata',
       message: `✅ Trovati e aggiornati: ${foundCount} ordinanti.\n⚠️ Non trovati nel CRM: ${missingCount}.\n\n${missingText}`,
       onConfirm: () => {}
+    });
+  };
+
+  const handleResetExcelLogista = () => {
+    openConfirm({
+      title: 'Reset Dati Excel Logista',
+      message: `ATTENZIONE: Stai per eliminare tutti i record Logista (importati da Excel) per il mese di ${meseSelezionato}. L'operazione non è reversibile. Procedere?`,
+      isDestructive: true,
+      onConfirm: () => {
+        combinedRivendite.forEach(r => {
+          const id = getRivenditaId(r);
+          const extra = rubrica[id];
+          if (extra && extra.history) {
+            const filteredHistory = extra.history.filter((h: any) => 
+              !(h.tipo === 'ORDINE_LOGISTA' && h.data.startsWith(meseSelezionato))
+            );
+            if (filteredHistory.length !== extra.history.length) {
+              handleRubricaUpdate(id, 'history', filteredHistory);
+            }
+          }
+        });
+      }
     });
   };
 
@@ -1362,10 +1388,15 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   {/* Badge Motivazionale / Completamento e Azioni Extra */}
                   <div className="flex items-center gap-2">
                     {(mission.tipo === 'ORDINANTI' || mission.tipo === 'ATTIVAZIONE') && (
-                       <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Importa Ordinanti da Excel">
-                         <Upload className="w-3 h-3" /> EXCEL
-                         <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
-                       </label>
+                       <div className="flex items-center gap-1">
+                         <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Importa Ordinanti da Excel">
+                           <Upload className="w-3 h-3" /> EXCEL
+                           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
+                         </label>
+                         <button onClick={(e) => { e.stopPropagation(); handleResetExcelLogista(); }} className="bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-slate-400 p-1.5 rounded-lg transition-colors shadow-sm" title="Rimuovi tutti gli import Logista del mese">
+                           <Trash2 className="w-3 h-3" />
+                         </button>
+                       </div>
                     )}
                     {(() => {
                       if (mission.tipo === 'FATTURATO' && mission.target > 0) {
@@ -1602,6 +1633,16 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   <option value="">Seleziona colonna...</option>
                   {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+              </div>
+
+              <div className="space-y-1 mt-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Calendar className="w-3 h-3"/> Data Importazione</label>
+                <input 
+                  type="date" 
+                  value={excelState.selectedDate} 
+                  onChange={e => setExcelState(prev => ({...prev, selectedDate: e.target.value}))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700"
+                />
               </div>
 
               <button onClick={processExcelData} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black text-sm transition-all mt-4 shadow-md">

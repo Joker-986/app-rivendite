@@ -262,18 +262,16 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               riv.history?.forEach(h => {
                 if ((h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato)) {
                   const val = (h.importo || 0);
+                  progress += val;
+                  generatedValue += val;
                   const fonte: 'Logista' | 'Magazzino' = h.tipo === 'ORDINE_LOGISTA' ? 'Logista' : 'Magazzino';
                   
-                  // Il Totalone e la barra avanzano SOLO con ordini standard
-                  if (fonte === 'Magazzino') {
-                     progress += val;
-                     generatedValue += val;
-                     totMag += val;
-                     cntMag += 1;
+                  if (fonte === 'Logista') {
+                    totLog += val;
+                    cntLog += 1;
                   } else {
-                     // Logista: Non intacca il Totalone (progress), ma conserviamo il dato
-                     totLog += val;
-                     cntLog += 1;
+                    totMag += val;
+                    cntMag += 1;
                   }
 
                   if (!lastDate || new Date(h.data).getTime() > new Date(lastDate).getTime()) {
@@ -375,6 +373,8 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             // 2. Conguaglio Logista
             if (adj.logista && adj.logista !== 0) {
+              progress += adj.logista;
+              generatedValue += adj.logista;
               dettagli.push({
                 id: 'conguaglio-logista',
                 nome: 'Rettifica Logista',
