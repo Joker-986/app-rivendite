@@ -121,24 +121,35 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
             if (matchedId) {
               const extra = rubrica[matchedId];
-              const history = extra.history || [];
-              const hasOrder = history.some((h: any) => 
-                (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && 
+              const history = [...(extra.history || [])];
+              
+              const existingLogistaIndex = history.findIndex((h: any) => 
+                h.tipo === 'ORDINE_LOGISTA' && 
                 h.data.startsWith(meseSelezionato)
               );
 
-              if (!hasOrder) {
-                const newEntry = {
+              if (existingLogistaIndex >= 0) {
+                // Aggiorna l'importo del record esistente
+                history[existingLogistaIndex] = {
+                  ...history[existingLogistaIndex],
+                  importo: targetVal,
+                  note: 'Import Excel AM (Aggiornato)'
+                };
+              } else {
+                // Crea nuovo record
+                history.push({
                   data: `${meseSelezionato}-01T12:00:00.000Z`,
                   tipo: 'ORDINE_LOGISTA',
                   note: 'Import Excel AM',
-                  importo: 0,
+                  importo: targetVal,
                   isEseguito: true
-                };
-                handleRubricaUpdate(matchedId, 'history', [...history, newEntry]);
-                if (extra.stato !== 'Attivata') {
-                  handleRubricaUpdate(matchedId, 'stato', 'Attivata');
-                }
+                });
+              }
+              
+              handleRubricaUpdate(matchedId, 'history', history);
+              
+              if (extra.stato !== 'Attivata') {
+                handleRubricaUpdate(matchedId, 'stato', 'Attivata');
               }
               foundCount++;
             } else {

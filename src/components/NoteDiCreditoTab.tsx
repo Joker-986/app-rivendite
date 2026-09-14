@@ -262,7 +262,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                 const isUrgent = days > 15;
                 
                 return (
-                  <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative overflow-hidden group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
+                  <div key={`pending-${i}`} className={`border rounded-xl p-3 shadow-sm relative group mb-2 transition-all ${ndc.isMismatch ? 'bg-red-50/50 border-red-500 shadow-md shadow-red-100' : ndc.isVoucher ? 'bg-orange-50/30 border-orange-200' : 'bg-white border-slate-200'}`}>
                     <div className="flex justify-between items-start mb-2 gap-3 relative">
                       <div className="flex flex-col min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5 mb-2">
@@ -418,7 +418,7 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
 
           <div className="space-y-2">
             {completedNdc.map((ndc, i) => (
-              <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 shadow-sm opacity-80">
+              <div key={`completed-${i}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 shadow-sm">
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                     {ndc.riv.isStore ? (
