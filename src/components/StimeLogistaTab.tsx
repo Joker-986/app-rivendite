@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { 
   Zap, Search, X, Calendar, TrendingUp, Wallet, ShoppingBag, 
-  Clock, ExternalLink, ListOrdered, ChevronRight, SearchX, Ghost,
+  Clock, ExternalLink, ListOrdered, SearchX, Ghost,
   CalendarClock, Target, Phone, MessageCircle
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
@@ -29,6 +29,7 @@ interface LogistaItem {
   lastOrderTime: number;
   spanDays: number;
   stimaMensile: number;
+  currentMonthTotal: number;
   frequenzaGG: number;
   daysSinceLastOrder: number;
   orderedCurrentMonth: boolean;
@@ -51,7 +52,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
   const [modalData, setModalData] = useState<LogistaItem | null>(null);
   const [visibleCount, setVisibleCount] = useState(25);
 
-  // 1. LOGICA DATI: Calcolo metriche per ogni cliente Logista e suddivisione
+  // 1. LOGICA DATI: Calcolo metriche per ciascun cliente Logista e suddivisione
   const categoriesData = useMemo(() => {
     const allRiv = [...crmAnagrafiche, ...stores, ...giroVisite];
     const rivenditeMap = new Map<string, SearchResult>();
@@ -100,14 +101,18 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         frequenzaGG = Math.round(spanDays / (count - 1));
       }
 
-      // Analisi mensile
+      // NUOVO DATO: currentMonthTotal + analisi ordini mese corrente e mese precedente
+      let currentMonthTotal = 0;
       let orderedCurrentMonth = false;
       let orderedPrevMonth = false;
 
       logistaOrders.forEach((o: any) => {
         const orderDate = new Date(o.data);
+        const importo = parseFloat(String(o.importo)) || 0;
+
         if (orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear) {
           orderedCurrentMonth = true;
+          currentMonthTotal += importo;
         }
         if (orderDate.getMonth() === prevMonth && orderDate.getFullYear() === prevYear) {
           orderedPrevMonth = true;
@@ -130,6 +135,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         lastOrderTime,
         spanDays,
         stimaMensile,
+        currentMonthTotal,
         frequenzaGG,
         daysSinceLastOrder,
         orderedCurrentMonth,
@@ -205,8 +211,8 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-4 text-white shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-emerald-100" />
+              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center overflow-hidden p-0.5">
+                <img src="/logista_logo.jpg" alt="Logista" className="w-full h-full object-cover rounded-md" />
               </div>
               <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100">
                 Stime Potenziale Logista
@@ -308,7 +314,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
         {filteredAndSortedItems.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl text-center border border-slate-100 shadow-sm mt-4">
-            <Zap className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <img src="/logista_logo.jpg" alt="Logista" className="w-12 h-12 mx-auto mb-3 opacity-40 grayscale rounded-xl" />
             <p className="text-slate-700 text-sm font-black">
               {searchTerm 
                 ? 'Nessun cliente trovato per la ricerca' 
@@ -408,30 +414,56 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                       </span>
                     </div>
 
-                    {/* RIGA 3: Banner "Stima Potenziale Mese" */}
-                    <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between shadow-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                          <Target className="w-4 h-4" />
+                    {/* RIGA 3 (IL CONFRONTO): Fatto Mese vs Stima Mese */}
+                    <div className="rounded-xl border border-slate-200 overflow-hidden flex divide-x divide-slate-200 shadow-2xs">
+                      {/* PARTE SINISTRA: Fatto Mese */}
+                      <div className="flex-1 bg-slate-50/90 p-2.5 flex items-center justify-between min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                            <Calendar className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider leading-none truncate">
+                              Fatto Mese
+                            </p>
+                            <p className="text-[8px] text-slate-400 font-medium mt-0.5 truncate">
+                              {item.orderedCurrentMonth ? 'Ordinato' : 'Non ordinato'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[9px] font-black text-emerald-700 uppercase tracking-wider leading-none">
-                            Stima Potenziale Mese
-                          </p>
-                          <p className="text-[9px] text-emerald-600 font-medium mt-0.5">
-                            {item.count === 1 ? '1 ordine registrato' : `su ${item.spanDays} gg tracciati`}
-                          </p>
+                        <div className="text-right shrink-0 pl-1.5">
+                          <span className={`text-sm font-black tracking-tight block leading-none ${item.currentMonthTotal > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                            €{item.currentMonthTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-base font-black text-emerald-900 tracking-tight block leading-none">
-                          €{item.stimaMensile.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                        <span className="text-[8px] font-black text-emerald-600 uppercase">
-                          / mese
-                        </span>
+
+                      {/* PARTE DESTRA: Stima Mese (in leggero risalto smeraldo) */}
+                      <div className="flex-1 bg-emerald-50/90 p-2.5 flex items-center justify-between min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                            <Target className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black text-emerald-800 uppercase tracking-wider leading-none truncate">
+                              Stima Mese
+                            </p>
+                            <p className="text-[8px] text-emerald-600 font-medium mt-0.5 truncate">
+                              {item.count === 1 ? '1 ordine' : `${item.spanDays} gg`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pl-1.5">
+                          <span className="text-sm font-black text-emerald-900 tracking-tight block leading-none">
+                            €{item.stimaMensile.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[8px] font-black text-emerald-600 uppercase">
+                            / mese
+                          </span>
+                        </div>
                       </div>
                     </div>
+
                   </div>
                 </div>
               );
@@ -469,7 +501,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                   {modalData.riv.isStore ? modalData.riv.storeName : modalData.riv.Comune}
                 </h3>
                 <p className="text-emerald-400 text-xs font-bold uppercase mt-1 flex items-center gap-1">
-                  <Zap className="w-3 h-3" />
+                  <img src="/logista_logo.jpg" alt="L" className="w-3.5 h-3.5 rounded-sm" />
                   {!modalData.riv.isStore && modalData.riv['Num. Rivendita'] 
                     ? `Rivendita N. ${modalData.riv['Num. Rivendita']}`
                     : `Store ${modalData.riv.storeNumber || ''}`}
@@ -527,7 +559,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
 
             {/* BODY SCROLLABILE */}
             <div className="p-4 overflow-y-auto space-y-4 flex-1 bg-slate-50">
-              {/* BOX VERDE: RIEPILOGO STIMA */}
+              {/* BOX VERDE: RIEPILOGO STIMA E FATTO MESE CORRENTE */}
               <div className="bg-emerald-600 text-white rounded-xl p-3.5 shadow-sm">
                 <div className="flex justify-between items-start">
                   <div>
@@ -548,14 +580,24 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/20 text-xs">
+                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/20 text-xs">
+                  <div>
+                    <span className="text-[9px] text-emerald-200 block uppercase">Fatto Mese</span>
+                    <span className="font-bold">
+                      €{modalData.currentMonthTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                   <div>
                     <span className="text-[9px] text-emerald-200 block uppercase">Totale Speso</span>
-                    <span className="font-bold">€{modalData.totalLogista.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-bold">
+                      €{modalData.totalLogista.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="text-[9px] text-emerald-200 block uppercase">Media Ordine</span>
-                    <span className="font-bold">€{modalData.mediaPerOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-bold">
+                      €{modalData.mediaPerOrdine.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -576,8 +618,8 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                         className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between"
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                            <Zap className="w-3.5 h-3.5" />
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden p-0.5">
+                            <img src="/logista_logo.jpg" alt="Logista" className="w-full h-full object-cover rounded-md" />
                           </div>
                           <div>
                             <p className="text-xs font-black text-slate-800">

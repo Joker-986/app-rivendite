@@ -1189,7 +1189,7 @@ export default function App() {
       { id: 'ordini', label: 'Ordini', count: 0 },
       { id: 'rimborsi', label: 'Rimborsi', count: 0 },
       { id: 'storico', label: 'Storico', count: 0 },
-      { id: 'stimeLogista', label: 'Stime L.', count: 0 },
+      { id: 'stimeLogista', label: 'Logista', count: 0 },
       { id: 'crm', label: 'CRM', count: crmList.length },
       { id: 'store', label: 'Store', count: storeList.length },
       { id: 'magazzino', label: 'Magazzino', count: 0 },
