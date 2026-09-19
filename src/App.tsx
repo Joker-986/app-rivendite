@@ -9,6 +9,7 @@ import AgendaTab from './components/AgendaTab';
 import NoteDiCreditoTab from './components/NoteDiCreditoTab';
 import OrdiniTab from './components/OrdiniTab';
 import StoricoTab from './components/StoricoTab';
+import StimeLogistaTab from './components/StimeLogistaTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
@@ -1188,6 +1189,7 @@ export default function App() {
       { id: 'ordini', label: 'Ordini', count: 0 },
       { id: 'rimborsi', label: 'Rimborsi', count: 0 },
       { id: 'storico', label: 'Storico', count: 0 },
+      { id: 'stimeLogista', label: 'Stime L.', count: 0 },
       { id: 'crm', label: 'CRM', count: crmList.length },
       { id: 'store', label: 'Store', count: storeList.length },
       { id: 'magazzino', label: 'Magazzino', count: 0 },
@@ -2143,7 +2145,7 @@ export default function App() {
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col gap-4 px-1">
-            {!['warroom', 'regia', 'statistiche', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
+            {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista'].includes(activeTab) && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -2219,7 +2221,7 @@ export default function App() {
             )}
 
               {/* Filtri Comuni */}
-              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico'].includes(activeTab) && (
+              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista'].includes(activeTab) && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2443,6 +2445,15 @@ export default function App() {
               />
             ) : activeTab === 'storico' ? (
               <StoricoTab 
+                rubrica={rubrica}
+                crmAnagrafiche={crmAnagrafiche}
+                stores={stores}
+                giroVisite={giroVisite}
+                onDeepLink={handleDeepLink}
+                handleRubricaUpdate={handleRubricaUpdate}
+              />
+            ) : activeTab === 'stimeLogista' ? (
+              <StimeLogistaTab 
                 rubrica={rubrica}
                 crmAnagrafiche={crmAnagrafiche}
                 stores={stores}
