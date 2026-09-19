@@ -92,14 +92,27 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                             ({item.ordini?.length} {item.ordini?.length === 1 ? 'ordine' : 'ordini'})
                           </span>
                         )}
+                        {/* Stampa numero ordini per missioni Ordinanti/Attivazioni */}
+                        {isCounterOnly && item.countMagazzino && item.countMagazzino > 0 && (
+                          <span className="text-[10px] font-bold text-slate-400">
+                            ({item.countMagazzino} {item.countMagazzino === 1 ? 'ordine' : 'ordini'})
+                          </span>
+                        )}
                       </div>
 
-                      {(item.comune || item.totaleLogista !== undefined || item.totaleMagazzino !== undefined) && (
+                      {(item.comune || item.totaleLogista !== undefined || item.totaleMagazzino !== undefined || (isCounterOnly && item.data)) && (
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {item.comune && (
                             <span className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold shrink-0">
                               <MapPin className="w-3 h-3 text-slate-300 shrink-0" /> {item.comune}
                             </span>
+                          )}
+                          
+                          {/* Stampa Data Primo Ordine */}
+                          {isCounterOnly && item.data && (
+                             <span className="flex items-center gap-1 text-[10px] text-brand-600 font-semibold shrink-0">
+                               <Calendar className="w-3 h-3 text-brand-400 shrink-0" /> 1° ord: {new Date(item.data).toLocaleDateString('it-IT')}
+                             </span>
                           )}
 
                           {/* Micro Badges Fonte */}

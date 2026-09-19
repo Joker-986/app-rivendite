@@ -304,17 +304,24 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             }
           } else if (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') {
-            // Conta +1 SOLO SE la missione è assegnata E c'è un ordine nel mese corrente
+            // Estrazione di tutti gli ordini del mese e data del primo
             if (riv.targetIdoneo?.includes(mission.id)) {
-              const activationOrder = riv.history?.find(h => (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato));
-              if (activationOrder) {
+              const allMonthOrders = riv.history?.filter(h => (h.tipo === 'ORDINE' || h.tipo === 'ORDINE_LOGISTA') && h.data.startsWith(meseSelezionato)) || [];
+              
+              if (allMonthOrders.length > 0) {
+                // Ordina per trovare il più vecchio
+                const sortedOrders = [...allMonthOrders].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+                const firstOrderDate = sortedOrders[0].data;
+                const totalOrdersCount = allMonthOrders.length;
+                
                 progress += 1;
                 dettagli.push({
                   id: rivId,
                   nome: rivNome,
                   comune: comune,
                   valore: 1,
-                  data: activationOrder.data
+                  data: firstOrderDate,
+                  countMagazzino: totalOrdersCount // Sfruttiamo questa key per passare il totale ordini
                 });
               }
             }
