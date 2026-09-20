@@ -29,6 +29,7 @@ interface LogistaItem {
   lastOrderTime: number;
   spanDays: number;
   stimaMensile: number;
+  stimaNote: string;
   currentMonthTotal: number;
   frequenzaGG: number;
   daysSinceLastOrder: number;
@@ -91,14 +92,46 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       const rawSpanDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
       const spanDays = Math.max(1, rawSpanDays);
 
-      // Stima Mensile su base 30 gg divisa per spanDays
-      const stimaMensile = count === 1 ? totalLogista : (totalLogista / spanDays) * 30;
-
       // Ciclo e giorni dall'ultimo riordino
       const daysSinceLastOrder = Math.max(0, Math.floor((oggi.getTime() - lastOrderTime) / (1000 * 3600 * 24)));
       let frequenzaGG = 0;
       if (count > 1) {
         frequenzaGG = Math.round(spanDays / (count - 1));
+      }
+
+      // NUOVO MOTORE DI CALCOLO RIGOROSO E STABILIZZATO (N >= 3, Floor 7gg e Arco temporale fino a OGGI)
+      let stimaMensile = 0;
+      let stimaNote = '';
+
+      if (daysSinceLastOrder > 45) {
+        stimaMensile = 0;
+        stimaNote = 'Inattivo';
+      } else {
+        // Filtra ordini effettuati negli ultimi 90 giorni
+        const cutoff90 = oggi.getTime() - (90 * 24 * 3600 * 1000);
+        const recentOrders = logistaOrders.filter((o: any) => new Date(o.data).getTime() >= cutoff90);
+
+        if (recentOrders.length < 3) {
+          stimaMensile = 0;
+          stimaNote = 'Storico insufficiente';
+        } else {
+          // 3 ordini più recenti
+          const o1 = parseFloat(String(recentOrders[0].importo)) || 0;
+          const o2 = parseFloat(String(recentOrders[1].importo)) || 0;
+          const o3 = parseFloat(String(recentOrders[2].importo)) || 0;
+
+          // Media Ponderata (50% recente, 30% penultimo, 20% terzultimo)
+          const mediaPonderata = (o1 * 0.50) + (o2 * 0.30) + (o3 * 0.20);
+
+          // Calcola i giorni trascorsi dal 3° ordine recente fino a OGGI
+          const t3 = new Date(recentOrders[2].data).getTime();
+          const spanFinoAdOggi = Math.max(1, Math.round((oggi.getTime() - t3) / (1000 * 3600 * 24)));
+
+          // Ciclo minimo Logista fissato a 7 giorni
+          const cicloRecente = Math.max(7, spanFinoAdOggi / 2);
+          stimaMensile = mediaPonderata * (30 / cicloRecente);
+          stimaNote = `${Math.round(cicloRecente)} gg`;
+        }
       }
 
       // NUOVO DATO: currentMonthTotal + analisi ordini mese corrente e mese precedente
@@ -119,7 +152,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         }
       });
 
-      const isMissingThisMonth = orderedPrevMonth && !orderedCurrentMonth;
+      const isMissingThisMonth = !orderedCurrentMonth;
       const stato = extra.stato || '';
 
       processed.push({
@@ -135,6 +168,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         lastOrderTime,
         spanDays,
         stimaMensile,
+        stimaNote,
         currentMonthTotal,
         frequenzaGG,
         daysSinceLastOrder,
@@ -145,23 +179,35 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       });
     });
 
-    const attivi = processed.filter(p => !['RIP', 'Perso', 'Sospeso'].includes(p.stato));
-    const persi = processed.filter(p => ['RIP', 'Perso', 'Sospeso'].includes(p.stato));
-    const mancanti = attivi.filter(p => p.isMissingThisMonth);
+    const attivi = processed.filter(p => !['RIP', 'Perso', 'Sospeso'].includes(p.stato) && p.daysSinceLastOrder <= 45);
+    const persi = processed.filter(p => ['RIP', 'Perso', 'Sospeso'].includes(p.stato) || p.daysSinceLastOrder > 45);
+    const mancanti = attivi.filter(p => !p.orderedCurrentMonth);
 
     return { attivi, persi, mancanti };
   }, [crmAnagrafiche, stores, giroVisite, rubrica]);
 
-  // KPI aggregati basati sui clienti attivi
+  // KPI aggregati operativi basati sui clienti attivi
   const kpis = useMemo(() => {
-    const totalStima = categoriesData.attivi.reduce((sum, item) => sum + item.stimaMensile, 0);
-    const totalSpeso = categoriesData.attivi.reduce((sum, item) => sum + item.totalLogista, 0);
-    const totalOrdini = categoriesData.attivi.reduce((sum, item) => sum + item.count, 0);
+    let totalBaselineStima = 0;
+    let totalProiezione = 0;
+    let totalFattoMese = 0;
+
+    categoriesData.attivi.forEach(item => {
+      totalBaselineStima += item.stimaMensile;
+      totalFattoMese += item.currentMonthTotal;
+      totalProiezione += Math.max(item.stimaMensile, item.currentMonthTotal);
+    });
+
+    const deltaPercent = totalBaselineStima > 0 
+      ? ((totalProiezione - totalBaselineStima) / totalBaselineStima) * 100 
+      : 0;
+
     return {
       clientiCount: categoriesData.attivi.length,
-      totalStima,
-      totalSpeso,
-      totalOrdini
+      totalProiezione,
+      totalBaselineStima,
+      totalFattoMese,
+      deltaPercent
     };
   }, [categoriesData.attivi]);
 
@@ -224,20 +270,32 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-1">
+            {/* BOX 1: Proiezione a Fine Mese + Target Delta */}
             <div className="bg-black/15 rounded-xl p-2.5 border border-white/10">
               <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200">
-                Stima Mensile Complessiva
+                Proiezione Chiusura
               </p>
               <p className="text-xl font-black tracking-tight mt-0.5">
-                €{kpis.totalStima.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                €{kpis.totalProiezione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 truncate">
+                Target: €{kpis.totalBaselineStima.toLocaleString('it-IT', { maximumFractionDigits: 0 })} 
+                <span className={`ml-1 font-black ${kpis.deltaPercent >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                  ({kpis.deltaPercent >= 0 ? '+' : ''}{kpis.deltaPercent.toFixed(1)}%)
+                </span>
               </p>
             </div>
+
+            {/* BOX 2: Fatto Mese Reale Incassato */}
             <div className="bg-black/15 rounded-xl p-2.5 border border-white/10">
               <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200">
-                Totale Speso Storico
+                Fatto Mese Corrente
               </p>
               <p className="text-xl font-black tracking-tight mt-0.5">
-                €{kpis.totalSpeso.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                €{kpis.totalFattoMese.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 uppercase tracking-wider">
+                Reale Incassato
               </p>
             </div>
           </div>
@@ -334,6 +392,9 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
           <>
             {filteredAndSortedItems.slice(0, visibleCount).map((item) => {
               const isLate = item.frequenzaGG > 0 && item.daysSinceLastOrder > item.frequenzaGG;
+              const hasStima = item.stimaMensile > 0;
+              const perfPercent = hasStima ? Math.round((item.currentMonthTotal / item.stimaMensile) * 100) : 0;
+              const isTargetReached = hasStima && perfPercent >= 100;
 
               return (
                 <div 
@@ -414,53 +475,59 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                       </span>
                     </div>
 
-                    {/* RIGA 3 (IL CONFRONTO): Fatto Mese vs Stima Mese */}
-                    <div className="rounded-xl border border-slate-200 overflow-hidden flex divide-x divide-slate-200 shadow-2xs">
-                      {/* PARTE SINISTRA: Fatto Mese */}
-                      <div className="flex-1 bg-slate-50/90 p-2.5 flex items-center justify-between min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
-                            <Calendar className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider leading-none truncate">
-                              Fatto Mese
-                            </p>
-                            <p className="text-[8px] text-slate-400 font-medium mt-0.5 truncate">
-                              {item.orderedCurrentMonth ? 'Ordinato' : 'Non ordinato'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0 pl-1.5">
-                          <span className={`text-sm font-black tracking-tight block leading-none ${item.currentMonthTotal > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
-                            €{item.currentMonthTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {/* RIGA 3: Fatto Mese con Indicatore Performance e Barra Progresso */}
+                    <div className={`rounded-lg px-2.5 py-2 border flex flex-col gap-1.5 transition-all ${isTargetReached ? 'bg-emerald-50/70 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className={`w-3.5 h-3.5 ${isTargetReached ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                            Fatto Mese:
+                            {hasStima ? (
+                              isTargetReached ? (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-black tracking-normal shadow-xs flex items-center gap-0.5">
+                                  <TrendingUp className="w-2.5 h-2.5" /> SUPERATO ({perfPercent}%)
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[8px] font-black tracking-normal">
+                                  {perfPercent}% DEL TARGET
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-slate-400 font-bold ml-1">{item.orderedCurrentMonth ? 'Ordinato' : 'Non ordinato'}</span>
+                            )}
                           </span>
                         </div>
+                        <span className={`text-sm font-black ${isTargetReached ? 'text-emerald-900' : item.currentMonthTotal > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                          €{item.currentMonthTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
                       </div>
 
-                      {/* PARTE DESTRA: Stima Mese (in leggero risalto smeraldo) */}
-                      <div className="flex-1 bg-emerald-50/90 p-2.5 flex items-center justify-between min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                            <Target className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-black text-emerald-800 uppercase tracking-wider leading-none truncate">
-                              Stima Mese
-                            </p>
-                            <p className="text-[8px] text-emerald-600 font-medium mt-0.5 truncate">
-                              {item.count === 1 ? '1 ordine' : `${item.spanDays} gg`}
-                            </p>
-                          </div>
+                      {/* Micro Barra di Avanzamento Target */}
+                      {hasStima && (
+                        <div className="w-full bg-slate-200/80 h-1 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${isTargetReached ? 'bg-emerald-500' : 'bg-emerald-500/80'}`}
+                            style={{ width: `${Math.min(100, perfPercent)}%` }}
+                          />
                         </div>
-                        <div className="text-right shrink-0 pl-1.5">
-                          <span className="text-sm font-black text-emerald-900 tracking-tight block leading-none">
-                            €{item.stimaMensile.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-[8px] font-black text-emerald-600 uppercase">
-                            / mese
-                          </span>
-                        </div>
+                      )}
+                    </div>
+
+                    {/* RIGA 4: Stima Potenziale */}
+                    <div className="rounded-lg px-2.5 py-2 bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Target className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
+                          Stima Mese <span className="text-[9px] text-emerald-600 font-bold ml-0.5">({item.stimaNote})</span>
+                        </span>
+                      </div>
+                      <div className="text-right leading-none flex items-baseline gap-1">
+                        <span className="text-sm font-black text-emerald-900">
+                          €{item.stimaMensile.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[9px] font-black text-emerald-600 uppercase">
+                          / Mese
+                        </span>
                       </div>
                     </div>
 
