@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { 
   Zap, Search, X, Calendar, TrendingUp, Wallet, ShoppingBag, 
   Clock, ExternalLink, ListOrdered, SearchX, Ghost,
-  CalendarClock, Target, Phone, MessageCircle
+  CalendarClock, Target, Phone, MessageCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate } from '../utils/helpers';
@@ -52,6 +52,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
   const [sortMode, setSortMode] = useState<'stima' | 'ultimo' | 'totale'>('stima');
   const [modalData, setModalData] = useState<LogistaItem | null>(null);
   const [visibleCount, setVisibleCount] = useState(25);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
 
   // 1. LOGICA DATI: Calcolo metriche per ciascun cliente Logista e suddivisione
   const categoriesData = useMemo(() => {
@@ -59,11 +60,19 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
     const rivenditeMap = new Map<string, SearchResult>();
     allRiv.forEach(r => rivenditeMap.set(String(getRivenditaId(r)), r));
 
-    const oggi = new Date();
+    const realToday = new Date();
+    const isCurrentMonth = selectedDate.getMonth() === realToday.getMonth() && selectedDate.getFullYear() === realToday.getFullYear();
+    
+    // Se guardiamo un mese passato, la macchina del tempo si ferma all'ultimo giorno di quel mese
+    const oggi = isCurrentMonth 
+      ? realToday 
+      : new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59);
+
     const currentMonth = oggi.getMonth();
     const currentYear = oggi.getFullYear();
-    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+    const prevMonth = prevMonthDate.getMonth();
+    const prevYear = prevMonthDate.getFullYear();
 
     const processed: LogistaItem[] = [];
 
@@ -71,8 +80,12 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       const riv = rivenditeMap.get(id);
       if (!riv) return;
 
+      // MACCHINA DEL TEMPO: Nascondiamo gli ordini avvenuti DOPO la data 'oggi' di riferimento
       const logistaOrders = (extra.history || [])
-        .filter((h: any) => h.tipo === 'ORDINE_LOGISTA')
+        .filter((h: any) => {
+          if (h.tipo !== 'ORDINE_LOGISTA') return false;
+          return new Date(h.data).getTime() <= oggi.getTime();
+        })
         .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
       if (logistaOrders.length === 0) return;
@@ -184,7 +197,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
     const mancanti = attivi.filter(p => !p.orderedCurrentMonth);
 
     return { attivi, persi, mancanti };
-  }, [crmAnagrafiche, stores, giroVisite, rubrica]);
+  }, [crmAnagrafiche, stores, giroVisite, rubrica, selectedDate]);
 
   // KPI aggregati operativi basati sui clienti attivi
   const kpis = useMemo(() => {
@@ -255,17 +268,37 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         
         {/* BANNER KPI AGGREGATI (Calcolati sui clienti attivi) */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-4 text-white shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center overflow-hidden p-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center overflow-hidden p-0.5 shadow-sm shrink-0">
                 <img src="/logista_logo.jpg" alt="Logista" className="w-full h-full object-cover rounded-md" />
               </div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100">
-                Stime Potenziale Logista
-              </span>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100 leading-none mb-1.5">
+                  Stime Potenziale Logista
+                </span>
+                <div className="flex items-center gap-1.5 bg-black/20 rounded-md w-fit pl-0.5 pr-2 py-0.5 border border-white/10 shadow-inner">
+                  <button 
+                    onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1))} 
+                    className="p-0.5 hover:bg-white/10 rounded transition-colors text-white active:scale-90"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-50 min-w-[75px] text-center">
+                    {selectedDate.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })}
+                  </span>
+                  <button 
+                    onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))} 
+                    disabled={selectedDate.getMonth() === new Date().getMonth() && selectedDate.getFullYear() === new Date().getFullYear()} 
+                    className="p-0.5 hover:bg-white/10 rounded transition-colors text-white disabled:opacity-30 disabled:active:scale-100 active:scale-90"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
-            <span className="text-[10px] font-black bg-white/20 px-2.5 py-0.5 rounded-full">
-              {kpis.clientiCount} {kpis.clientiCount === 1 ? 'Cliente Attivo' : 'Clienti Attivi'}
+            <span className="text-[10px] font-black bg-white/20 px-2.5 py-1 rounded-full shadow-sm border border-white/10 shrink-0">
+              {kpis.clientiCount} {kpis.clientiCount === 1 ? 'Cliente' : 'Clienti'}
             </span>
           </div>
 
