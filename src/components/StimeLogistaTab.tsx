@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { 
-  Zap, Search, X, Calendar, TrendingUp, Wallet, ShoppingBag, 
+  Zap, Search, X, Calendar, TrendingUp, TrendingDown, Wallet, ShoppingBag, 
   Clock, ExternalLink, ListOrdered, SearchX, Ghost,
   CalendarClock, Target, Phone, MessageCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
@@ -112,7 +112,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         frequenzaGG = Math.round(spanDays / (count - 1));
       }
 
-      // NUOVO MOTORE DI CALCOLO RIGOROSO E STABILIZZATO (N >= 3, Floor 7gg e Arco temporale fino a OGGI)
+      // MOTORE DI CALCOLO RIGOROSO, PRUDENTE E SENZA SOVRASTIME
       let stimaMensile = 0;
       let stimaNote = '';
 
@@ -120,27 +120,44 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
         stimaMensile = 0;
         stimaNote = 'Inattivo';
       } else {
-        // Filtra ordini effettuati negli ultimi 90 giorni
-        const cutoff90 = oggi.getTime() - (90 * 24 * 3600 * 1000);
-        const recentOrders = logistaOrders.filter((o: any) => new Date(o.data).getTime() >= cutoff90);
+        // Memoria Storica Annuale (365 giorni)
+        const cutoff365 = oggi.getTime() - (365 * 24 * 3600 * 1000);
+        const annualOrders = logistaOrders.filter((o: any) => new Date(o.data).getTime() >= cutoff365);
+        const nOrders = annualOrders.length;
 
-        if (recentOrders.length < 3) {
+        if (nOrders === 0) {
           stimaMensile = 0;
-          stimaNote = 'Storico insufficiente';
+          stimaNote = 'Nessun ordine';
+        } else if (nOrders === 1) {
+          // CASO N = 1: Importo dell'unico ordine come baseline diretta (rapporto 1:1, no moltiplicatori)
+          const importo = parseFloat(String(annualOrders[0].importo)) || 0;
+          stimaMensile = importo;
+          stimaNote = '1 ord (base)';
+        } else if (nOrders === 2) {
+          // CASO N = 2: Media aritmetica con Ciclo prudenziale (minimo 30 giorni) per evitare sovrastime
+          const o1 = parseFloat(String(annualOrders[0].importo)) || 0;
+          const o2 = parseFloat(String(annualOrders[1].importo)) || 0;
+          const media = (o1 + o2) / 2;
+
+          const t1 = new Date(annualOrders[0].data).getTime();
+          const t2 = new Date(annualOrders[1].data).getTime();
+          const distBetweenOrders = Math.max(1, Math.round((t1 - t2) / (1000 * 3600 * 24)));
+          const distToToday = Math.max(1, Math.round((oggi.getTime() - t2) / (1000 * 3600 * 24)));
+
+          // Ciclo minimo fissato a 30 giorni: la stima non potrà mai superare la media dei 2 ordini
+          const ciclo = Math.max(30, distBetweenOrders, distToToday);
+          stimaMensile = media * (30 / ciclo);
+          stimaNote = `2 ord (${Math.round(ciclo)} gg)`;
         } else {
-          // 3 ordini più recenti
-          const o1 = parseFloat(String(recentOrders[0].importo)) || 0;
-          const o2 = parseFloat(String(recentOrders[1].importo)) || 0;
-          const o3 = parseFloat(String(recentOrders[2].importo)) || 0;
+          // CASO N >= 3: Media Ponderata (50/30/20) e ciclo recente con Floor 7gg
+          const o1 = parseFloat(String(annualOrders[0].importo)) || 0;
+          const o2 = parseFloat(String(annualOrders[1].importo)) || 0;
+          const o3 = parseFloat(String(annualOrders[2].importo)) || 0;
 
-          // Media Ponderata (50% recente, 30% penultimo, 20% terzultimo)
           const mediaPonderata = (o1 * 0.50) + (o2 * 0.30) + (o3 * 0.20);
-
-          // Calcola i giorni trascorsi dal 3° ordine recente fino a OGGI
-          const t3 = new Date(recentOrders[2].data).getTime();
+          const t3 = new Date(annualOrders[2].data).getTime();
           const spanFinoAdOggi = Math.max(1, Math.round((oggi.getTime() - t3) / (1000 * 3600 * 24)));
 
-          // Ciclo minimo Logista fissato a 7 giorni
           const cicloRecente = Math.max(7, spanFinoAdOggi / 2);
           stimaMensile = mediaPonderata * (30 / cicloRecente);
           stimaNote = `${Math.round(cicloRecente)} gg`;
@@ -192,37 +209,43 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       });
     });
 
-    const attivi = processed.filter(p => !['RIP', 'Perso', 'Sospeso'].includes(p.stato) && p.daysSinceLastOrder <= 45);
+    const attivi = processed.filter(p => !['RIP', 'Perso', 'Sospeso'].includes(p.stato) && p.daysSinceLastOrder <= 45 && p.orderedCurrentMonth);
+    const mancanti = processed.filter(p => !['RIP', 'Perso', 'Sospeso'].includes(p.stato) && p.daysSinceLastOrder <= 45 && !p.orderedCurrentMonth);
     const persi = processed.filter(p => ['RIP', 'Perso', 'Sospeso'].includes(p.stato) || p.daysSinceLastOrder > 45);
-    const mancanti = attivi.filter(p => !p.orderedCurrentMonth);
 
     return { attivi, persi, mancanti };
   }, [crmAnagrafiche, stores, giroVisite, rubrica, selectedDate]);
 
-  // KPI aggregati operativi basati sui clienti attivi
+  // KPI aggregati puliti: Target Potenziale Puro vs Fatto Mese Reale (REALI + MANCANTI)
   const kpis = useMemo(() => {
-    let totalBaselineStima = 0;
-    let totalProiezione = 0;
+    let totalTarget = 0;
     let totalFattoMese = 0;
 
-    categoriesData.attivi.forEach(item => {
-      totalBaselineStima += item.stimaMensile;
+    const allActive = [...categoriesData.attivi, ...categoriesData.mancanti];
+
+    allActive.forEach(item => {
+      totalTarget += item.stimaMensile;
       totalFattoMese += item.currentMonthTotal;
-      totalProiezione += Math.max(item.stimaMensile, item.currentMonthTotal);
     });
 
-    const deltaPercent = totalBaselineStima > 0 
-      ? ((totalProiezione - totalBaselineStima) / totalBaselineStima) * 100 
+    const realToday = new Date();
+    const isCurrentMonth = selectedDate.getMonth() === realToday.getMonth() && selectedDate.getFullYear() === realToday.getFullYear();
+
+    // Mese Corrente: % Avanzamento del Target. Mesi Passati: Delta % Reale vs Target.
+    const deltaPercent = totalTarget > 0 
+      ? isCurrentMonth
+        ? (totalFattoMese / totalTarget) * 100
+        : ((totalFattoMese - totalTarget) / totalTarget) * 100 
       : 0;
 
     return {
-      clientiCount: categoriesData.attivi.length,
-      totalProiezione,
-      totalBaselineStima,
+      clientiCount: allActive.length,
+      totalTarget,
       totalFattoMese,
-      deltaPercent
+      deltaPercent,
+      isCurrentMonth
     };
-  }, [categoriesData.attivi]);
+  }, [categoriesData, selectedDate]);
 
   // Filtro ricerca e ordinamento
   const filteredAndSortedItems = useMemo(() => {
@@ -289,7 +312,12 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                   </span>
                   <button 
                     onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1))} 
-                    disabled={selectedDate.getMonth() === new Date().getMonth() && selectedDate.getFullYear() === new Date().getFullYear()} 
+                    disabled={(() => {
+                      const realToday = new Date();
+                      const maxFutureDate = new Date(realToday.getFullYear(), realToday.getMonth() + 1, 1);
+                      return selectedDate.getFullYear() > maxFutureDate.getFullYear() || 
+                        (selectedDate.getFullYear() === maxFutureDate.getFullYear() && selectedDate.getMonth() >= maxFutureDate.getMonth());
+                    })()} 
                     className="p-0.5 hover:bg-white/10 rounded transition-colors text-white disabled:opacity-30 disabled:active:scale-100 active:scale-90"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -303,32 +331,39 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-1">
-            {/* BOX 1: Proiezione a Fine Mese + Target Delta */}
+            {/* BOX 1: Target Potenziale Mese (Puro) */}
             <div className="bg-black/15 rounded-xl p-2.5 border border-white/10">
               <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200">
-                Proiezione Chiusura
+                Target Potenziale
               </p>
               <p className="text-xl font-black tracking-tight mt-0.5">
-                €{kpis.totalProiezione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                €{kpis.totalTarget.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
-              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 truncate">
-                Target: €{kpis.totalBaselineStima.toLocaleString('it-IT', { maximumFractionDigits: 0 })} 
-                <span className={`ml-1 font-black ${kpis.deltaPercent >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
-                  ({kpis.deltaPercent >= 0 ? '+' : ''}{kpis.deltaPercent.toFixed(1)}%)
-                </span>
+              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 uppercase tracking-wider">
+                Stima Teorica
               </p>
             </div>
 
-            {/* BOX 2: Fatto Mese Reale Incassato */}
+            {/* BOX 2: Fatto Mese Reale con Delta / Avanzamento % */}
             <div className="bg-black/15 rounded-xl p-2.5 border border-white/10">
               <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200">
-                Fatto Mese Corrente
+                {kpis.isCurrentMonth ? 'Fatto Mese Corrente' : 'Fatto Mese Reale'}
               </p>
               <p className="text-xl font-black tracking-tight mt-0.5">
                 €{kpis.totalFattoMese.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
-              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 uppercase tracking-wider">
-                Reale Incassato
+              <p className="text-[9px] font-bold text-emerald-200/80 mt-1 truncate">
+                {kpis.isCurrentMonth ? (
+                  <span>
+                    Avanzamento: <span className="font-black text-emerald-300">{kpis.deltaPercent.toFixed(1)}%</span>
+                  </span>
+                ) : (
+                  <span>
+                    vs Target: <span className={`font-black ${kpis.deltaPercent >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                      {kpis.deltaPercent >= 0 ? '+' : ''}{kpis.deltaPercent.toFixed(1)}%
+                    </span>
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -428,6 +463,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
               const hasStima = item.stimaMensile > 0;
               const perfPercent = hasStima ? Math.round((item.currentMonthTotal / item.stimaMensile) * 100) : 0;
               const isTargetReached = hasStima && perfPercent >= 100;
+              const deltaPerf = perfPercent - 100;
 
               return (
                 <div 
@@ -515,17 +551,18 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
                           <Calendar className={`w-3.5 h-3.5 ${isTargetReached ? 'text-emerald-600' : 'text-slate-400'}`} />
                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                             Fatto Mese:
-                            {hasStima ? (
-                              isTargetReached ? (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[8px] font-black tracking-normal shadow-xs flex items-center gap-0.5">
-                                  <TrendingUp className="w-2.5 h-2.5" /> SUPERATO ({perfPercent}%)
+                            {hasStima ? (() => {
+                              const deltaPercent = ((item.currentMonthTotal - item.stimaMensile) / item.stimaMensile) * 100;
+                              const isPlus = deltaPercent >= 0;
+                              return (
+                                <span className={`px-1.5 py-0.5 rounded text-white text-[8px] font-black tracking-normal shadow-xs flex items-center gap-0.5 ${
+                                  isPlus ? 'bg-emerald-600' : 'bg-amber-600'
+                                }`}>
+                                  {isPlus ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                                  {isPlus ? `+${deltaPercent.toFixed(1)}%` : `${deltaPercent.toFixed(1)}%`}
                                 </span>
-                              ) : (
-                                <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[8px] font-black tracking-normal">
-                                  {perfPercent}% DEL TARGET
-                                </span>
-                              )
-                            ) : (
+                              );
+                            })() : (
                               <span className="text-slate-400 font-bold ml-1">{item.orderedCurrentMonth ? 'Ordinato' : 'Non ordinato'}</span>
                             )}
                           </span>
