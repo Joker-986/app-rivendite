@@ -63,10 +63,10 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
     const realToday = new Date();
     const isCurrentMonth = selectedDate.getMonth() === realToday.getMonth() && selectedDate.getFullYear() === realToday.getFullYear();
     
-    // Se guardiamo un mese passato, la macchina del tempo si ferma all'ultimo giorno di quel mese
+    // Fissa la Macchina del Tempo a fine giornata (23:59:59) per non escludere gli ordini odierni importati da Excel
     const oggi = isCurrentMonth 
-      ? realToday 
-      : new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59);
+      ? new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate(), 23, 59, 59, 999)
+      : new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const currentMonth = oggi.getMonth();
     const currentYear = oggi.getFullYear();
@@ -216,14 +216,15 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
     return { attivi, persi, mancanti };
   }, [crmAnagrafiche, stores, giroVisite, rubrica, selectedDate]);
 
-  // KPI aggregati puliti: Target Potenziale Puro vs Fatto Mese Reale (REALI + MANCANTI)
+  // KPI aggregati puliti: Target Potenziale Puro vs Fatto Mese Reale Totale (Quadratura con Regia)
   const kpis = useMemo(() => {
     let totalTarget = 0;
     let totalFattoMese = 0;
 
-    const allActive = [...categoriesData.attivi, ...categoriesData.mancanti];
+    // Per il Fatto Mese Reale sommiamo l'intero portafoglio (REALI + MANCANTI + FANTASMI) per quadratura con Regia
+    const allItems = [...categoriesData.attivi, ...categoriesData.mancanti, ...categoriesData.persi];
 
-    allActive.forEach(item => {
+    allItems.forEach(item => {
       totalTarget += item.stimaMensile;
       totalFattoMese += item.currentMonthTotal;
     });
@@ -239,7 +240,7 @@ const StimeLogistaTab: React.FC<StimeLogistaTabProps> = ({
       : 0;
 
     return {
-      clientiCount: allActive.length,
+      clientiCount: categoriesData.attivi.length + categoriesData.mancanti.length,
       totalTarget,
       totalFattoMese,
       deltaPercent,
