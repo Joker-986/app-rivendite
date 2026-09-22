@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Search, MapPin, Store, AlertCircle, Loader2, ChevronRight, Info, Map as MapIcon, List, Navigation, Clock, Phone, Mail, Globe, ExternalLink, RefreshCw, Copy, Check, Heart, Trash2, Bookmark, BookOpen, ChevronDown, ChevronUp, Download, Save, Calendar, GripVertical, CheckCircle2, X, ClipboardList, Layers, Settings, Upload, Share2, MessageCircle, Layout, Database, Sparkles, Filter, Cloud, Plus, BarChart2, BarChart3, Target, Activity, CalendarClock, User, UserCheck, ArrowDownAZ, ArrowUpZA, Edit3, TrendingDown, TrendingUp, History, Package, Wand2, ShoppingBag, MoveRight, MoveLeft, EyeOff } from 'lucide-react';
 import MapView from './components/MapView';
 import RivenditaCard from './components/RivenditaCard';
@@ -10,6 +11,7 @@ import NoteDiCreditoTab from './components/NoteDiCreditoTab';
 import OrdiniTab from './components/OrdiniTab';
 import StoricoTab from './components/StoricoTab';
 import StimeLogistaTab from './components/StimeLogistaTab';
+import StimeCRTab from './components/StimeCRTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
@@ -1190,6 +1192,7 @@ export default function App() {
       { id: 'rimborsi', label: 'Rimborsi', count: 0 },
       { id: 'storico', label: 'Storico', count: 0 },
       { id: 'stimeLogista', label: 'Logista', count: 0 },
+      { id: 'stimeCR', label: 'CR', count: 0 },
       { id: 'crm', label: 'CRM', count: crmList.length },
       { id: 'store', label: 'Store', count: storeList.length },
       { id: 'magazzino', label: 'Magazzino', count: 0 },
@@ -1830,13 +1833,21 @@ export default function App() {
                   onMouseDown={startLongPress}
                   onMouseUp={clearLongPress}
                   onMouseLeave={clearLongPress}
-                  className={`flex-none px-5 py-3 text-sm font-bold rounded-2xl transition-all select-none ${
+                  className={`flex-none transition-all select-none flex items-center justify-center ${
                     activeTab === tab.id 
                       ? (tab.id === 'rimborsi' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'bg-brand-600 text-white shadow-lg shadow-brand-100')
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
+                  } ${(tab.id === 'stimeLogista' || tab.id === 'stimeCR') ? 'w-11 h-11 p-0.5 rounded-2xl shadow-sm' : 'px-5 py-3 text-sm font-bold rounded-2xl gap-1.5'}`}
                 >
-                  {tab.label} {tab.count > 0 ? `(${tab.count})` : ''}
+                  {(tab.id === 'stimeLogista' || tab.id === 'stimeCR') ? (
+                    <img 
+                      src={tab.id === 'stimeLogista' ? '/logista_logo.jpg' : '/CR.jpg'} 
+                      alt={tab.label} 
+                      className={`w-full h-full object-cover rounded-[14px] transition-opacity ${activeTab === tab.id ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`} 
+                    />
+                  ) : (
+                    <span>{tab.label} {tab.count > 0 ? `(${tab.count})` : ''}</span>
+                  )}
               </button>
             ))}
             
@@ -1941,10 +1952,19 @@ export default function App() {
             }
           }}
         >
-        {activeTab === 'search' ? (
-          <>
-            {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-start gap-3">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full"
+          >
+            {activeTab === 'search' ? (
+              <>
+                {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
             <p className="text-sm text-red-700">{error}</p>
           </div>
@@ -2143,9 +2163,9 @@ export default function App() {
             )}
           </>
         ) : (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-4">
             <div className="flex flex-col gap-4 px-1">
-            {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista'].includes(activeTab) && (
+            {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR'].includes(activeTab) && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -2221,7 +2241,7 @@ export default function App() {
             )}
 
               {/* Filtri Comuni */}
-              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista'].includes(activeTab) && (
+              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR'].includes(activeTab) && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2461,6 +2481,15 @@ export default function App() {
                 onDeepLink={handleDeepLink}
                 handleRubricaUpdate={handleRubricaUpdate}
               />
+            ) : activeTab === 'stimeCR' ? (
+              <StimeCRTab 
+                rubrica={rubrica}
+                crmAnagrafiche={crmAnagrafiche}
+                stores={stores}
+                giroVisite={giroVisite}
+                onDeepLink={handleDeepLink}
+                handleRubricaUpdate={handleRubricaUpdate}
+              />
             ) : activeTab === 'statistiche' ? (
               <StatsTab 
                 statsPeriod={statsPeriod}
@@ -2556,6 +2585,8 @@ export default function App() {
             )}
           </div>
         )}
+          </motion.div>
+        </AnimatePresence>
         </div>
       </main>
 
