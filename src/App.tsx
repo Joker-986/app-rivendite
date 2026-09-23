@@ -12,6 +12,7 @@ import OrdiniTab from './components/OrdiniTab';
 import StoricoTab from './components/StoricoTab';
 import StimeLogistaTab from './components/StimeLogistaTab';
 import StimeCRTab from './components/StimeCRTab';
+import StimeMasterTab from './components/StimeMasterTab';
 import StatsTab from './components/StatsTab';
 import StrategyDashboard from './components/StrategyDashboard';
 import WarehouseTab from './components/WarehouseTab';
@@ -1193,6 +1194,7 @@ export default function App() {
       { id: 'storico', label: 'Storico', count: 0 },
       { id: 'stimeLogista', label: 'Logista', count: 0 },
       { id: 'stimeCR', label: 'CR', count: 0 },
+      { id: 'stimeMaster', label: 'Master', count: 0 },
       { id: 'crm', label: 'CRM', count: crmList.length },
       { id: 'store', label: 'Store', count: storeList.length },
       { id: 'magazzino', label: 'Magazzino', count: 0 },
@@ -1837,14 +1839,20 @@ export default function App() {
                     activeTab === tab.id 
                       ? (tab.id === 'rimborsi' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : 'bg-brand-600 text-white shadow-lg shadow-brand-100')
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  } ${(tab.id === 'stimeLogista' || tab.id === 'stimeCR') ? 'w-11 h-11 p-0.5 rounded-2xl shadow-sm' : 'px-5 py-3 text-sm font-bold rounded-2xl gap-1.5'}`}
+                  } ${(tab.id === 'stimeLogista' || tab.id === 'stimeCR' || tab.id === 'stimeMaster') ? 'w-10 h-10 p-1 rounded-2xl shadow-sm' : 'px-5 py-2.5 text-sm font-bold rounded-2xl gap-1.5'}`}
                 >
-                  {(tab.id === 'stimeLogista' || tab.id === 'stimeCR') ? (
-                    <img 
-                      src={tab.id === 'stimeLogista' ? '/logista_logo.jpg' : '/CR.jpg'} 
-                      alt={tab.label} 
-                      className={`w-full h-full object-cover rounded-[14px] transition-opacity ${activeTab === tab.id ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`} 
-                    />
+                  {(tab.id === 'stimeLogista' || tab.id === 'stimeCR' || tab.id === 'stimeMaster') ? (
+                    tab.id === 'stimeMaster' ? (
+                      <div className={`w-full h-full rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-600 to-violet-700 transition-opacity ${activeTab === tab.id ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`}>
+                        <BarChart3 className="w-4 h-4 text-white" />
+                      </div>
+                    ) : (
+                      <img 
+                        src={tab.id === 'stimeLogista' ? '/logista_logo.jpg' : '/CR.jpg'} 
+                        alt={tab.label} 
+                        className={`w-full h-full object-cover rounded-xl transition-opacity ${activeTab === tab.id ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`} 
+                      />
+                    )
                   ) : (
                     <span>{tab.label} {tab.count > 0 ? `(${tab.count})` : ''}</span>
                   )}
@@ -2165,7 +2173,7 @@ export default function App() {
         ) : (
           <div className="space-y-4">
             <div className="flex flex-col gap-4 px-1">
-            {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR'].includes(activeTab) && (
+            {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR', 'stimeMaster'].includes(activeTab) && (
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   {activeTab === 'giro' ? `Giro Visite (${giroVisiteList.length})` : 
@@ -2241,7 +2249,7 @@ export default function App() {
             )}
 
               {/* Filtri Comuni */}
-              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR'].includes(activeTab) && (
+              {!['warroom', 'statistiche', 'regia', 'agenda', 'magazzino', 'anagrafica', 'logista', 'calcolatore', 'rimborsi', 'ordini', 'storico', 'stimeLogista', 'stimeCR', 'stimeMaster'].includes(activeTab) && (
                 <div className="flex flex-row gap-2 items-center">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -2483,6 +2491,15 @@ export default function App() {
               />
             ) : activeTab === 'stimeCR' ? (
               <StimeCRTab 
+                rubrica={rubrica}
+                crmAnagrafiche={crmAnagrafiche}
+                stores={stores}
+                giroVisite={giroVisite}
+                onDeepLink={handleDeepLink}
+                handleRubricaUpdate={handleRubricaUpdate}
+              />
+            ) : activeTab === 'stimeMaster' ? (
+              <StimeMasterTab 
                 rubrica={rubrica}
                 crmAnagrafiche={crmAnagrafiche}
                 stores={stores}
