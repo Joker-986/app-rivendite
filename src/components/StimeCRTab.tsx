@@ -62,15 +62,27 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
     allRiv.forEach(r => rivenditeMap.set(String(getRivenditaId(r)), r));
 
     const realToday = new Date();
-    const isCurrentMonth = selectedDate.getMonth() === realToday.getMonth() && selectedDate.getFullYear() === realToday.getFullYear();
-    
-    // Fissa la Macchina del Tempo a fine giornata (23:59:59) per non escludere gli ordini odierni importati da Excel
-    const oggi = isCurrentMonth 
-      ? new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate(), 23, 59, 59, 999)
-      : new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const currentMonthDate = new Date(realToday.getFullYear(), realToday.getMonth(), 1);
+    const targetMonthDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
 
-    const currentMonth = oggi.getMonth();
-    const currentYear = oggi.getFullYear();
+    const isPastMonth = targetMonthDate.getTime() < currentMonthDate.getTime();
+    const isFutureMonth = targetMonthDate.getTime() > currentMonthDate.getTime();
+    
+    const cutoffDate = isPastMonth 
+      ? new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59, 999)
+      : new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate(), 23, 59, 59, 999);
+
+    let referenceDateForRecency: Date;
+    if (isPastMonth) {
+      referenceDateForRecency = cutoffDate;
+    } else if (isFutureMonth) {
+      referenceDateForRecency = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 0, 0, 0, 0);
+    } else {
+      referenceDateForRecency = new Date(realToday.getFullYear(), realToday.getMonth(), realToday.getDate(), 23, 59, 59, 999);
+    }
+
+    const currentMonth = selectedDate.getMonth();
+    const currentYear = selectedDate.getFullYear();
     const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
     const prevMonth = prevMonthDate.getMonth();
     const prevYear = prevMonthDate.getFullYear();
@@ -81,11 +93,11 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
       const riv = rivenditeMap.get(id);
       if (!riv) return;
 
-      // MACCHINA DEL TEMPO: Nascondiamo gli ordini avvenuti DOPO la data 'oggi' di riferimento
+      // MACCHINA DEL TEMPO: Nascondiamo gli ordini avvenuti DOPO la data di cutoff
       const logistaOrders = (extra.history || [])
         .filter((h: any) => {
           if (h.tipo !== 'ORDINE' || !h.isEseguito) return false;
-          return new Date(h.data).getTime() <= oggi.getTime();
+          return new Date(h.data).getTime() <= cutoffDate.getTime();
         })
         .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
@@ -107,7 +119,7 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
       const spanDays = Math.max(1, rawSpanDays);
 
       // Ciclo e giorni dall'ultimo riordino
-      const daysSinceLastOrder = Math.max(0, Math.floor((oggi.getTime() - lastOrderTime) / (1000 * 3600 * 24)));
+      const daysSinceLastOrder = Math.max(0, Math.floor((referenceDateForRecency.getTime() - lastOrderTime) / (1000 * 3600 * 24)));
       let frequenzaGG = 0;
       if (count > 1) {
         frequenzaGG = Math.round(spanDays / (count - 1));
@@ -122,7 +134,7 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
         stimaNote = 'Inattivo';
       } else {
         // Memoria Storica Annuale (365 giorni)
-        const cutoff365 = oggi.getTime() - (365 * 24 * 3600 * 1000);
+        const cutoff365 = referenceDateForRecency.getTime() - (365 * 24 * 3600 * 1000);
         const annualOrders = logistaOrders.filter((o: any) => new Date(o.data).getTime() >= cutoff365);
         const nOrders = annualOrders.length;
 
@@ -143,7 +155,7 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
           const t1 = new Date(annualOrders[0].data).getTime();
           const t2 = new Date(annualOrders[1].data).getTime();
           const distBetweenOrders = Math.max(1, Math.round((t1 - t2) / (1000 * 3600 * 24)));
-          const distToToday = Math.max(1, Math.round((oggi.getTime() - t2) / (1000 * 3600 * 24)));
+          const distToToday = Math.max(1, Math.round((referenceDateForRecency.getTime() - t2) / (1000 * 3600 * 24)));
 
           // Ciclo minimo fissato a 30 giorni: la stima non potrà mai superare la media dei 2 ordini
           const ciclo = Math.max(30, distBetweenOrders, distToToday);
@@ -157,7 +169,7 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
 
           const mediaPonderata = (o1 * 0.50) + (o2 * 0.30) + (o3 * 0.20);
           const t3 = new Date(annualOrders[2].data).getTime();
-          const spanFinoAdOggi = Math.max(1, Math.round((oggi.getTime() - t3) / (1000 * 3600 * 24)));
+          const spanFinoAdOggi = Math.max(1, Math.round((referenceDateForRecency.getTime() - t3) / (1000 * 3600 * 24)));
 
           const cicloRecente = Math.max(7, spanFinoAdOggi / 2);
           stimaMensile = mediaPonderata * (30 / cicloRecente);
