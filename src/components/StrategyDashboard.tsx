@@ -1320,13 +1320,13 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
                   return (
                     <div className="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px] font-bold">
-                      <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-2 flex justify-between items-center">
+                      <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-2 flex flex-row flex-wrap justify-between items-center gap-x-2 gap-y-0.5 min-w-0">
                         <span className="text-blue-700 font-extrabold">Magazzino:</span>
-                        <span className="text-slate-700">€{totMagazzino.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctMagazzino}%)</span>
+                        <span className="text-slate-700 truncate text-right shrink-0">€{totMagazzino.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctMagazzino}%)</span>
                       </div>
-                      <div className="bg-orange-50/60 border border-orange-100 rounded-xl p-2 flex justify-between items-center">
+                      <div className="bg-orange-50/60 border border-orange-100 rounded-xl p-2 flex flex-row flex-wrap justify-between items-center gap-x-2 gap-y-0.5 min-w-0">
                         <span className="text-orange-700 font-extrabold">Logista:</span>
-                        <span className="text-slate-700">€{totLogista.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctLogista}%)</span>
+                        <span className="text-slate-700 truncate text-right shrink-0">€{totLogista.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pctLogista}%)</span>
                       </div>
                     </div>
                   );

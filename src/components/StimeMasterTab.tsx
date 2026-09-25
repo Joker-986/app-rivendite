@@ -154,7 +154,14 @@ const StimeMasterTab: React.FC<StimeMasterTabProps> = ({
       const logistaMetrics = calcMetrics(logistaOrders);
       const crMetrics = calcMetrics(crOrders);
 
-      const stimaMensile = logistaMetrics.stimaMensile + crMetrics.stimaMensile;
+      let stimaMensile = logistaMetrics.stimaMensile + crMetrics.stimaMensile;
+      let stimaNote = 'Logista + CR';
+
+      if (extra.isExtraPanel) {
+        stimaMensile = 0;
+        stimaNote = 'Extra Panel';
+      }
+
       const currentMonthTotal = logistaMetrics.currentMonthTotal + crMetrics.currentMonthTotal;
       const orderedCurrentMonth = logistaMetrics.orderedCurrentMonth || crMetrics.orderedCurrentMonth;
 
@@ -177,7 +184,7 @@ const StimeMasterTab: React.FC<StimeMasterTabProps> = ({
       });
 
       processed.push({
-        id, riv, extra, orders: unifiedOrders, totalLogista: totalSpeso, count, mediaPerOrdine, firstDate, lastDate, lastOrderTime, spanDays, stimaMensile, stimaNote: 'Logista + CR', currentMonthTotal, frequenzaGG, daysSinceLastOrder, orderedCurrentMonth, orderedPrevMonth, isMissingThisMonth: !orderedCurrentMonth, stato: extra.stato || ''
+        id, riv, extra, orders: unifiedOrders, totalLogista: totalSpeso, count, mediaPerOrdine, firstDate, lastDate, lastOrderTime, spanDays, stimaMensile, stimaNote, currentMonthTotal, frequenzaGG, daysSinceLastOrder, orderedCurrentMonth, orderedPrevMonth, isMissingThisMonth: !orderedCurrentMonth, stato: extra.stato || ''
       });
     });
 

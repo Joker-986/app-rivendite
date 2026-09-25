@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { 
   Zap, Search, X, Calendar, TrendingUp, TrendingDown, Wallet, ShoppingBag, 
   Clock, ExternalLink, ListOrdered, SearchX, Ghost,
-  CalendarClock, Target, Phone, MessageCircle, ChevronLeft, ChevronRight
+  CalendarClock, Target, Phone, MessageCircle, ChevronLeft, ChevronRight, EyeOff
 } from 'lucide-react';
 import { SearchResult, RubricaData } from '../types';
 import { getRivenditaId, safeFormatDate } from '../utils/helpers';
@@ -175,6 +175,12 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
           stimaMensile = mediaPonderata * (30 / cicloRecente);
           stimaNote = `${Math.round(cicloRecente)} gg`;
         }
+      }
+
+      // LOGICA EXTRA PANEL: Azzera la stima per i clienti non ciclici (mantiene i guadagni reali)
+      if (extra.isExtraPanel) {
+        stimaMensile = 0;
+        stimaNote = 'Extra Panel';
       }
 
       // NUOVO DATO: currentMonthTotal + analisi ordini mese corrente e mese precedente
@@ -700,6 +706,24 @@ const StimeCRTab: React.FC<StimeCRTabProps> = ({
                     >
                       <ExternalLink className="w-3.5 h-3.5" /> SCHEDA CRM
                     </button>
+                    {handleRubricaUpdate && (
+                      <button 
+                        onClick={() => {
+                          const newValue = !modalData.extra.isExtraPanel;
+                          handleRubricaUpdate(modalData.id, 'isExtraPanel', newValue);
+                          setModalData({ ...modalData, extra: { ...modalData.extra, isExtraPanel: newValue } });
+                        }} 
+                        className={`flex items-center gap-1.5 px-3 py-2 text-[10px] font-black rounded-lg border shadow-sm shrink-0 active:scale-95 transition-all ${
+                          modalData.extra.isExtraPanel 
+                            ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' 
+                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                        }`}
+                        title="Escludi dalle stime predittive (mantiene incassi reali)"
+                      >
+                        <EyeOff className={`w-3.5 h-3.5 ${modalData.extra.isExtraPanel ? 'text-amber-600' : 'text-slate-400'}`} />
+                        EXTRA PANEL
+                      </button>
+                    )}
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0">
                     {modalData.count} {modalData.count === 1 ? 'ordine' : 'ordini'}

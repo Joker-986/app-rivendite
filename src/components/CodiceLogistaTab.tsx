@@ -47,10 +47,17 @@ const CodiceLogistaTab: React.FC = () => {
     setCopied(false);
 
     try {
+      // Normalizzazione avanzata del Comune
+      let safeComune = comune.trim();
+      // Trasforma varianti di apostrofo in apostrofo standard
+      safeComune = safeComune.replace(/[`´’‘]/g, "'");
+      // Converte vocale+apostrofo in vocale accentata (es. o' -> ò) per i finali di parola
+      safeComune = safeComune.replace(/a'/ig, 'à').replace(/e'/ig, 'è').replace(/i'/ig, 'ì').replace(/o'/ig, 'ò').replace(/u'/ig, 'ù');
+
       const res = await fetch('/api/logista', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comune: comune.trim() })
+        body: JSON.stringify({ comune: safeComune })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

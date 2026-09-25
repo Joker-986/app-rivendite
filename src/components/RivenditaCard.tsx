@@ -366,10 +366,17 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
     setLogistaLoading(true);
     setLogistaError('');
     try {
+      // Normalizzazione avanzata del Comune
+      let safeComune = comune.trim();
+      // Trasforma varianti di apostrofo in apostrofo standard
+      safeComune = safeComune.replace(/[`´’‘]/g, "'");
+      // Converte vocale+apostrofo in vocale accentata (es. o' -> ò) per i finali di parola
+      safeComune = safeComune.replace(/a'/ig, 'à').replace(/e'/ig, 'è').replace(/i'/ig, 'ì').replace(/o'/ig, 'ò').replace(/u'/ig, 'ù');
+
       const response = await fetch('/api/logista', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comune: comune.trim() })
+        body: JSON.stringify({ comune: safeComune })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -387,7 +394,9 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
         throw new Error('Comune non trovato.');
       }
     } catch (err: any) {
-      setLogistaError(err.message || 'Errore di rete.');
+      const errorMessage = err.message || 'Errore di rete.';
+      setLogistaError(errorMessage);
+      showToast(`Logista: ${errorMessage}`, 'error');
     } finally {
       setLogistaLoading(false);
     }
