@@ -7,9 +7,10 @@ interface DrillDownModalProps {
   onClose: () => void;
   missionName: string;
   dettagli: MissionDetail[];
+  isValuta?: boolean;
 }
 
-const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missionName, dettagli }) => {
+const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missionName, dettagli, isValuta }) => {
   if (!isOpen) return null;
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
@@ -18,7 +19,7 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
   const totaleElementi = dettagli.length;
   const totaleValore = dettagli.reduce((acc, curr) => acc + (curr.valore || 0), 0);
   const isCounterOnly = dettagli.length > 0 && dettagli.every(d => d.valore === 1);
-  const isEuro = !isCounterOnly;
+  const isEuro = isValuta !== undefined ? isValuta : !isCounterOnly;
 
   const toggleExpand = (id: string) => {
     setExpandedId(prev => prev === id ? null : id);
@@ -183,7 +184,7 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                                 </span>
                               </div>
                               <span className="font-bold text-slate-800 text-[11px]">
-                                €{ord.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {ord.quantita !== undefined ? `+${ord.quantita} pz` : `€${ord.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                               </span>
                             </div>
                           ))}

@@ -288,7 +288,7 @@ const WarehouseTab: React.FC = () => {
                         })}
                         className="text-[9px] font-black bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg hover:bg-purple-200 transition-colors"
                       >
-                        + AGGIUNGI ARTICOLO
+                        + AGGIUNGI
                       </button>
                     </div>
                     
@@ -311,15 +311,15 @@ const WarehouseTab: React.FC = () => {
                                 {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                               </select>
                               <div className="flex items-center gap-2 w-full min-w-0">
-                                <select value={item.productId} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].productId = e.target.value; setFormData({...formData, bundleItems: newItems}); }} className="flex-1 min-w-0 truncate bg-slate-50 border border-purple-200 rounded-lg px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-purple-500">
+                                <select value={item.productId} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].productId = e.target.value; setFormData({...formData, bundleItems: newItems}); }} className="flex-1 min-w-0 truncate bg-slate-50 border border-purple-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-800 outline-none focus:border-purple-500">
                                   <option value="">Seleziona prodotto...</option>
                                   {filteredAvailableProducts.map(p => (
                                     <option key={p.id} value={p.id}>{p.codice} - {p.descrizione}</option>
                                   ))}
                                 </select>
-                                <input type="number" min="1" value={item.quantita || ''} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].quantita = parseInt(e.target.value) || 1; setFormData({...formData, bundleItems: newItems}); }} className="w-16 shrink-0 bg-slate-50 border border-purple-200 rounded-lg px-2 py-2.5 text-xs font-bold text-center text-slate-800 outline-none focus:border-purple-500" placeholder="Q.tà" />
-                                <button onClick={() => { const newItems = (formData.bundleItems || []).filter((_, i) => i !== index); setFormData({...formData, bundleItems: newItems}); }} className="p-2.5 shrink-0 text-purple-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors bg-white border border-purple-100 shadow-sm" title="Rimuovi">
-                                  <Trash2 className="w-4 h-4" />
+                                <input type="number" min="1" value={item.quantita || ''} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].quantita = parseInt(e.target.value) || 1; setFormData({...formData, bundleItems: newItems}); }} className="w-12 shrink-0 bg-slate-50 border border-purple-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-center text-slate-800 outline-none focus:border-purple-500" placeholder="Q.tà" />
+                                <button onClick={() => { const newItems = (formData.bundleItems || []).filter((_, i) => i !== index); setFormData({...formData, bundleItems: newItems}); }} className="p-1.5 shrink-0 text-purple-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors bg-white border border-purple-100 shadow-sm" title="Rimuovi">
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>

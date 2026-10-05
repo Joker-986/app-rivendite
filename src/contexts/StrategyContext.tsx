@@ -371,6 +371,63 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 });
               }
             }
+          } else if (mission.tipo === 'QUANTITÀ') {
+            const magazzinoProducts = JSON.parse(localStorage.getItem('tgest_magazzino') || '[]');
+            let storePiecesTotal = 0;
+            const storeOrders: MissionOrderDetail[] = [];
+
+            riv.history?.forEach(h => {
+              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
+                let piecesInThisOrder = 0;
+
+                h.items.forEach(item => {
+                  if (item.isOmaggio && !mission.includeOmaggi) return;
+
+                  const checkMatch = (codice: string, categoria: string) => {
+                    const matchCat = mission.targetCategorie?.includes(categoria || '');
+                    const matchSku = mission.targetSkus?.includes(codice) || (mission.sku && codice === mission.sku);
+                    return matchCat || matchSku;
+                  };
+
+                  if (checkMatch(item.codice, item.categoria || '')) {
+                    piecesInThisOrder += item.quantita;
+                  }
+
+                  const magazzinoItem = magazzinoProducts.find((p: any) => p.codice === item.codice);
+                  if (magazzinoItem && magazzinoItem.isBundle && magazzinoItem.bundleItems) {
+                    magazzinoItem.bundleItems.forEach((bi: any) => {
+                      const innerProduct = magazzinoProducts.find((p: any) => p.id === bi.productId);
+                      if (innerProduct && checkMatch(innerProduct.codice, innerProduct.categoria || '')) {
+                        piecesInThisOrder += (bi.quantita * item.quantita);
+                      }
+                    });
+                  }
+                });
+
+                if (piecesInThisOrder > 0) {
+                  storePiecesTotal += piecesInThisOrder;
+                  storeOrders.push({
+                    id: h.id || Math.random().toString(36).substring(2, 9),
+                    data: h.data,
+                    importo: piecesInThisOrder,
+                    fonte: 'Magazzino',
+                    quantita: piecesInThisOrder
+                  });
+                }
+              }
+            });
+
+            if (storePiecesTotal > 0) {
+              progress += storePiecesTotal;
+              dettagli.push({
+                id: rivId,
+                nome: rivNome,
+                comune: comune,
+                valore: storePiecesTotal,
+                data: storeOrders.length > 0 ? storeOrders[storeOrders.length - 1].data : '',
+                ordini: storeOrders.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+              });
+            }
           }
         }); // <-- Fine ciclo ordini
         

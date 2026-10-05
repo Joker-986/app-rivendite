@@ -77,6 +77,7 @@ export interface MissionOrderDetail {
   data: string;
   importo: number;
   fonte: 'Logista' | 'Magazzino';
+  quantita?: number;
 }
 
 export interface MissionProdottoDetail {
@@ -105,7 +106,7 @@ export interface MissionDetail {
 export interface Mission {
   id: string;
   nome: string;
-  tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'ORDINANTI' | 'PRODOTTO';
+  tipo: 'FATTURATO' | 'ATTIVAZIONE' | 'ORDINANTI' | 'PRODOTTO' | 'QUANTITÀ';
   sku?: string;
   target: number;
   targetSingolo?: number;
@@ -116,6 +117,7 @@ export interface Mission {
   targetCategorie?: string[];
   targetSkus?: string[];
   sogliaFinanziaria?: number;
+  includeOmaggi?: boolean;
   dettagliProgresso?: MissionDetail[];
 }
 

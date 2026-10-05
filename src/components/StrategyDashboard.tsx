@@ -49,7 +49,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
   const [massAssignMission, setMassAssignMission] = useState<Mission | null>(null);
   const [assignSearchTerm, setAssignSearchTerm] = useState('');
-  const [drillDownMission, setDrillDownMission] = useState<{nome: string, dettagli: any[]} | null>(null);
+  const [drillDownMission, setDrillDownMission] = useState<{nome: string, dettagli: any[], tipo: string} | null>(null);
 
   // --- STATI IMPORT EXCEL LOGISTA ---
   const [excelState, setExcelState] = useState<{
@@ -289,7 +289,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   const archivedMissions = missions.filter(m => m.stato === 'ARCHIVIATA');
   
   const totalWeight = activeMissions.reduce((acc, m) => acc + m.pesoPercentuale, 0);
-  const isWeightValid = totalWeight === 100;
+  const isWeightValid = totalWeight >= 99 && totalWeight <= 101;
 
   const handleSaveMission = () => {
     if (!editingMission?.nome || !editingMission?.tipo || editingMission.target === undefined || editingMission.pesoPercentuale === undefined) return;
@@ -634,7 +634,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
           <div>
             <p className="text-xs font-black text-red-900 uppercase tracking-tight mb-0.5">Configurazione Incompleta</p>
             <p className="text-[11px] text-red-700 font-bold leading-tight">
-              La somma dei pesi delle missioni attive è {totalWeight}%. Deve essere esattamente 100%.
+              La somma dei pesi delle missioni attive è {Number(totalWeight.toFixed(2))}%. Deve essere ~100%.
             </p>
           </div>
         </div>
@@ -829,6 +829,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                         <option value="ATTIVAZIONE">Attivazione</option>
                         <option value="ORDINANTI">Ordinanti</option>
                         <option value="PRODOTTO">Prodotto</option>
+                        <option value="QUANTITÀ">Quantità / Volumi</option>
                       </select>
                     )}
                     <div className="relative">
@@ -857,7 +858,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
                         />
                       </div>
-                    ) : editingMission.tipo === 'PRODOTTO' ? (
+                    ) : editingMission.tipo === 'PRODOTTO' || editingMission.tipo === 'QUANTITÀ' ? (
                       <>
                         <div>
                           <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
@@ -933,29 +934,46 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                           )}
                         </div>
 
-                        <div>
-                          <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
-                            Soglia Minima (€)
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type="number" 
-                              placeholder="Es: 48" 
-                              value={editingMission.sogliaFinanziaria || ''} 
-                              onChange={e => setEditingMission({...editingMission, sogliaFinanziaria: Number(e.target.value)})}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
-                            />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 text-xs font-bold">€</span>
+                        {editingMission.tipo === 'PRODOTTO' && (
+                          <div>
+                            <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
+                              Soglia Minima (€)
+                            </label>
+                            <div className="relative">
+                              <input 
+                                type="number" 
+                                placeholder="Es: 48" 
+                                value={editingMission.sogliaFinanziaria || ''} 
+                                onChange={e => setEditingMission({...editingMission, sogliaFinanziaria: Number(e.target.value)})}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-8 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
+                              />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 text-xs font-bold">€</span>
+                            </div>
                           </div>
-                        </div>
+                        )}
+
+                        {editingMission.tipo === 'QUANTITÀ' && (
+                          <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-xl mb-2">
+                            <input 
+                              type="checkbox" 
+                              id="includeOmaggi"
+                              checked={editingMission.includeOmaggi || false}
+                              onChange={e => setEditingMission({...editingMission, includeOmaggi: e.target.checked})}
+                              className="w-4 h-4 rounded border-white/20 text-brand-500 focus:ring-brand-500 bg-slate-800"
+                            />
+                            <label htmlFor="includeOmaggi" className="text-xs font-bold text-slate-300 cursor-pointer select-none">
+                              Includi articoli Omaggio
+                            </label>
+                          </div>
+                        )}
 
                         <div>
                           <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-1.5 ml-1 block">
-                            Num. Negozi Target (Globale)
+                            {editingMission.tipo === 'PRODOTTO' ? 'Num. Negozi Target (Globale)' : 'Obiettivo Globale (Pezzi)'}
                           </label>
                           <input 
                             type="number" 
-                            placeholder="Es: 10"
+                            placeholder={editingMission.tipo === 'PRODOTTO' ? "Es: 10" : "Es: 500"}
                             value={editingMission.target || ''} 
                             onChange={e => setEditingMission({...editingMission, target: Number(e.target.value)})}
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
@@ -1246,7 +1264,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     }
                     return d;
                   });
-                  setDrillDownMission({ nome: mission.nome, dettagli: enrichedDettagli });
+                  setDrillDownMission({ nome: mission.nome, dettagli: enrichedDettagli, tipo: mission.tipo });
                 }}
                 className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
@@ -1257,12 +1275,12 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     </div>
                     <div>
                       <h4 className="font-black text-slate-800 text-sm">{mission.nome}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Peso: {mission.pesoPercentuale}% • Max €{potentialValue.toLocaleString('it-IT')}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Peso: {mission.pesoPercentuale}% • Max €{potentialValue.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-1">
                     <p className="text-lg font-black text-slate-800">{percentage}%</p>
-                    <p className="text-[10px] font-bold text-brand-600">+€{earnedValue.toLocaleString('it-IT')}</p>
+                    <p className="text-[10px] font-bold text-brand-600">+€{earnedValue.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
 
@@ -1293,7 +1311,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 })() : (
                   <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
                     <div 
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-amber-500' : 'bg-purple-500'}`}
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-amber-500' : mission.tipo === 'QUANTITÀ' ? 'bg-blue-400' : 'bg-purple-500'}`}
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
@@ -1333,7 +1351,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 })()}
 
                 {/* WIDGET OBIETTIVO GIORNALIERO INTEGRATO */}
-                {(mission.id === 'm1' || mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || mission.tipo === 'PRODOTTO') && (() => {
+                {(mission.id === 'm1' || mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || mission.tipo === 'PRODOTTO' || mission.tipo === 'QUANTITÀ') && (() => {
                   const runRateData = calculateRunRate(mission);
                   if (!runRateData) return null;
                   const isCurrency = mission.tipo === 'FATTURATO';
@@ -1657,7 +1675,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         isOpen={!!drillDownMission} 
         onClose={() => setDrillDownMission(null)} 
         missionName={drillDownMission?.nome || ''} 
-        dettagli={drillDownMission?.dettagli || []} 
+        dettagli={drillDownMission?.dettagli || []}
+        isValuta={drillDownMission?.tipo === 'FATTURATO' || drillDownMission?.tipo === 'PRODOTTO'} 
       />
     </div>
   );
