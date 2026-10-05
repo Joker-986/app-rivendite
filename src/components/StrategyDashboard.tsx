@@ -800,17 +800,17 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 </div>
                 
                 <div className="space-y-3">
-                  {editingMission.id === 'm1' || editingMission.tipo === 'PRODOTTO' ? (
+                  {editingMission.id === 'm1' ? (
                     <div className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-sm text-slate-400 font-bold">
-                      {editingMission.nome || (editingMission.tipo === 'PRODOTTO' ? 'Nuova Missione Prodotto' : '')}
+                      {editingMission.nome}
                     </div>
                   ) : (
                     <input 
                       type="text" 
-                      placeholder="Nome Missione" 
+                      placeholder="Nome Missione (es. Lancio Prodotto X)" 
                       value={editingMission.nome} 
                       onChange={e => setEditingMission({...editingMission, nome: e.target.value})}
-                      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all"
+                      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white placeholder-white/30"
                     />
                   )}
                   
@@ -871,7 +871,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                               const current = editingMission.targetCategorie || [];
                               if (!current.includes(cat)) {
                                 const next = [...current, cat];
-                                setEditingMission({...editingMission, targetCategorie: next, nome: `Focus ${next.join(', ')}`});
+                                setEditingMission({...editingMission, targetCategorie: next});
                               }
                             }}
                             className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand-500 transition-all text-white mb-2"
@@ -889,7 +889,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                                   <span>{cat}</span>
                                   <button onClick={() => {
                                     const next = (editingMission.targetCategorie || []).filter(c => c !== cat);
-                                    setEditingMission({...editingMission, targetCategorie: next, nome: next.length > 0 ? `Focus ${next.join(', ')}` : editingMission.nome});
+                                    setEditingMission({...editingMission, targetCategorie: next});
                                   }} className="ml-1.5 text-brand-400 hover:text-white transition-colors">&times;</button>
                                 </div>
                               ))}
@@ -1333,7 +1333,7 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                 })()}
 
                 {/* WIDGET OBIETTIVO GIORNALIERO INTEGRATO */}
-                {(mission.id === 'm1' || mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') && (() => {
+                {(mission.id === 'm1' || mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI' || mission.tipo === 'PRODOTTO') && (() => {
                   const runRateData = calculateRunRate(mission);
                   if (!runRateData) return null;
                   const isCurrency = mission.tipo === 'FATTURATO';
