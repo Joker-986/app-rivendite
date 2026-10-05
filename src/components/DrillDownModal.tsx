@@ -64,7 +64,7 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
               const itemId = item.id || String(idx);
               const isExpanded = expandedId === itemId;
               const isHighlighted = highlightedIds.includes(itemId);
-              const hasSubOrders = item.ordini && item.ordini.length > 0;
+              const hasSubOrders = (item.ordini && item.ordini.length > 0) || (item.prodotti && item.prodotti.length > 0);
 
               return (
                 <div 
@@ -87,9 +87,14 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                     >
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-black text-slate-800 truncate">{item.nome}</p>
-                        {hasSubOrders && (
+                        {item.ordini && item.ordini.length > 0 && (
                           <span className="text-[10px] font-bold text-slate-400">
-                            ({item.ordini?.length} {item.ordini?.length === 1 ? 'ordine' : 'ordini'})
+                            ({item.ordini.length} {item.ordini.length === 1 ? 'ordine' : 'ordini'})
+                          </span>
+                        )}
+                        {item.prodotti && item.prodotti.length > 0 && (
+                          <span className="text-[10px] font-bold text-slate-400">
+                            ({item.prodotti.length} {item.prodotti.length === 1 ? 'prodotto' : 'prodotti'})
                           </span>
                         )}
                         {/* Stampa numero ordini per missioni Ordinanti/Attivazioni */}
@@ -155,31 +160,66 @@ const DrillDownModal: React.FC<DrillDownModalProps> = ({ isOpen, onClose, missio
                   {/* Sotto-elenco Analitico (Espandibile) */}
                   {isExpanded && hasSubOrders && (
                     <div className="bg-slate-50/80 border-t border-slate-100 p-3 space-y-1.5 animate-in fade-in duration-150">
-                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
-                        Dettaglio Ordini Mensili
-                      </p>
-                      {item.ordini?.map((ord, oIdx) => (
-                        <div 
-                          key={ord.id || oIdx}
-                          className="flex items-center justify-between p-2 bg-white rounded-xl border border-slate-200/60 text-xs shadow-2xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-tight ${
-                              ord.fonte === 'Logista' 
-                                ? 'bg-orange-100/80 text-orange-800' 
-                                : 'bg-blue-100/80 text-blue-800'
-                            }`}>
-                              {ord.fonte}
-                            </span>
-                            <span className="text-[11px] font-medium text-slate-500">
-                              {new Date(ord.data).toLocaleDateString('it-IT')}
-                            </span>
-                          </div>
-                          <span className="font-bold text-slate-800 text-[11px]">
-                            €{ord.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      ))}
+                      {item.ordini && item.ordini.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                            Dettaglio Ordini Mensili
+                          </p>
+                          {item.ordini.map((ord, oIdx) => (
+                            <div 
+                              key={ord.id || oIdx}
+                              className="flex items-center justify-between p-2 bg-white rounded-xl border border-slate-200/60 text-xs shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-tight ${
+                                  ord.fonte === 'Logista' 
+                                    ? 'bg-orange-100/80 text-orange-800' 
+                                    : 'bg-blue-100/80 text-blue-800'
+                                }`}>
+                                  {ord.fonte}
+                                </span>
+                                <span className="text-[11px] font-medium text-slate-500">
+                                  {new Date(ord.data).toLocaleDateString('it-IT')}
+                                </span>
+                              </div>
+                              <span className="font-bold text-slate-800 text-[11px]">
+                                €{ord.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      
+                      {item.prodotti && item.prodotti.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                            Dettaglio Prodotti Acquistati
+                          </p>
+                          {item.prodotti.map((prod, pIdx) => (
+                            <div 
+                              key={pIdx}
+                              className="flex items-center justify-between p-2 bg-white rounded-xl border border-slate-200/60 text-xs shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-tight bg-purple-100/80 text-purple-800 shrink-0">
+                                  {prod.quantita}x
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-700 truncate" title={prod.descrizione}>
+                                  {prod.descrizione}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end shrink-0 ml-2">
+                                <span className="font-bold text-slate-800 text-[11px]">
+                                  €{prod.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                <span className="text-[9px] font-medium text-slate-400">
+                                  {new Date(prod.data).toLocaleDateString('it-IT')}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

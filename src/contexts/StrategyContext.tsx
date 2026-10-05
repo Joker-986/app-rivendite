@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail, MissionOrderDetail } from '../types';
+import { Mission, SalaryConfig, RubricaData, Campaign, CampaignPeriod, MissionDetail, MissionOrderDetail, MissionProdottoDetail } from '../types';
 
 export interface MonthlyAdjustment { logista: number; amCorrection: number; }
 
@@ -329,6 +329,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (riv.targetIdoneo?.includes(mission.id)) {
               let storeProductTotal = 0;
               let lastOrderDate = '';
+              const prodottiAcquistati: MissionProdottoDetail[] = [];
 
               riv.history?.forEach(h => {
                 if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
@@ -340,8 +341,17 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
                     
                     if (matchCategory || matchSku) {
-                      storeProductTotal += (item.prezzoApplicato * item.quantita);
+                      const lineTotal = item.prezzoApplicato * item.quantita;
+                      storeProductTotal += lineTotal;
                       lastOrderDate = h.data;
+                      
+                      prodottiAcquistati.push({
+                        codice: item.codice,
+                        descrizione: item.descrizione,
+                        quantita: item.quantita,
+                        importo: lineTotal,
+                        data: h.data
+                      });
                     }
                   });
                 }
@@ -356,7 +366,8 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   nome: rivNome,
                   comune: comune,
                   valore: storeProductTotal,
-                  data: lastOrderDate
+                  data: lastOrderDate,
+                  prodotti: prodottiAcquistati
                 });
               }
             }

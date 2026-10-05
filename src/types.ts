@@ -77,6 +77,14 @@ export interface MissionOrderDetail {
   fonte: 'Logista' | 'Magazzino';
 }
 
+export interface MissionProdottoDetail {
+  codice: string;
+  descrizione: string;
+  quantita: number;
+  importo: number;
+  data: string;
+}
+
 export interface MissionDetail {
   id: string;
   nome: string;
@@ -89,6 +97,7 @@ export interface MissionDetail {
   countLogista?: number;
   countMagazzino?: number;
   ordini?: MissionOrderDetail[];
+  prodotti?: MissionProdottoDetail[];
 }
 
 export interface Mission {
