@@ -33,6 +33,8 @@ export interface Product {
   pezziPerStecca?: number;
   attivo?: boolean;
   categoria?: string;
+  isBundle?: boolean;
+  bundleItems?: { productId: string; quantita: number }[];
 }
 
 // 2. IL CARRELLO (ORDER ITEM)

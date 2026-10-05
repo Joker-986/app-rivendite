@@ -110,13 +110,15 @@ const WarehouseTab: React.FC = () => {
     prezzoUnita: 0,
     unita: 'Pezzi',
     pezziPerStecca: 10,
-    categoria: ''
+    categoria: '',
+    isBundle: false,
+    bundleItems: []
   });
 
   const handleAdd = () => {
     if (!formData.codice || !formData.descrizione) return;
     addProduct(formData);
-    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '' });
+    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '', isBundle: false, bundleItems: [] });
     setIsAdding(false);
   };
 
@@ -125,7 +127,7 @@ const WarehouseTab: React.FC = () => {
     if (product) {
       updateProduct(id, formData);
       setEditingId(null);
-      setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '' });
+      setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '', isBundle: false, bundleItems: [] });
     }
   };
 
@@ -137,7 +139,9 @@ const WarehouseTab: React.FC = () => {
       prezzoUnita: product.prezzoUnita,
       unita: product.unita,
       pezziPerStecca: product.pezziPerStecca || 10,
-      categoria: product.categoria || ''
+      categoria: product.categoria || '',
+      isBundle: product.isBundle || false,
+      bundleItems: product.bundleItems || []
     });
   };
 
@@ -205,7 +209,7 @@ const WarehouseTab: React.FC = () => {
                   onClick={() => {
                     setIsAdding(false);
                     setEditingId(null);
-                    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', categoria: '' });
+                    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '', isBundle: false, bundleItems: [] });
                   }}
                   className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-colors"
                 >
@@ -258,7 +262,75 @@ const WarehouseTab: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                {/* --- SEZIONE BUNDLE --- */}
+                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 mt-2">
+                  <input 
+                    type="checkbox" 
+                    id="isBundle"
+                    checked={formData.isBundle || false}
+                    onChange={(e) => setFormData({...formData, isBundle: e.target.checked})}
+                    className="w-5 h-5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  <div>
+                    <label htmlFor="isBundle" className="text-sm font-black text-slate-800 cursor-pointer select-none">È un Bundle promozionale?</label>
+                    <p className="text-[10px] text-slate-500 font-bold leading-tight mt-0.5">Permette di includere altri articoli come componenti</p>
+                  </div>
+                </div>
+
+                {formData.isBundle && (
+                  <div className="space-y-3 p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-black text-purple-700 uppercase tracking-widest">Contenuto del Bundle</label>
+                      <button 
+                        onClick={() => setFormData({
+                          ...formData, 
+                          bundleItems: [...(formData.bundleItems || []), { productId: '', quantita: 1 }]
+                        })}
+                        className="text-[9px] font-black bg-purple-100 text-purple-700 px-2.5 py-1.5 rounded-lg hover:bg-purple-200 transition-colors"
+                      >
+                        + AGGIUNGI ARTICOLO
+                      </button>
+                    </div>
+                    
+                    {(formData.bundleItems || []).length === 0 ? (
+                      <p className="text-xs text-purple-600/70 italic text-center py-3 bg-white/50 rounded-xl border border-purple-100/50">Nessun articolo aggiunto. Il bundle è vuoto.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(formData.bundleItems || []).map((item, index) => {
+                          const itemCategory = (item as any)._category || '';
+                          const filteredAvailableProducts = products.filter(p => 
+                            p.attivo !== false && 
+                            p.id !== editingId && 
+                            !p.isBundle && 
+                            (itemCategory ? p.categoria === itemCategory : true)
+                          );
+                          return (
+                            <div key={index} className="flex flex-col gap-2 p-3 bg-white border border-purple-100 rounded-xl shadow-sm min-w-0">
+                              <select value={itemCategory} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; (newItems[index] as any)._category = e.target.value; setFormData({...formData, bundleItems: newItems}); }} className="w-full min-w-0 truncate bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-slate-600 outline-none focus:border-purple-500">
+                                <option value="">Tutte le Categorie</option>
+                                {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                              <div className="flex items-center gap-2 w-full min-w-0">
+                                <select value={item.productId} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].productId = e.target.value; setFormData({...formData, bundleItems: newItems}); }} className="flex-1 min-w-0 truncate bg-slate-50 border border-purple-200 rounded-lg px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-purple-500">
+                                  <option value="">Seleziona prodotto...</option>
+                                  {filteredAvailableProducts.map(p => (
+                                    <option key={p.id} value={p.id}>{p.codice} - {p.descrizione}</option>
+                                  ))}
+                                </select>
+                                <input type="number" min="1" value={item.quantita || ''} onChange={(e) => { const newItems = [...(formData.bundleItems || [])]; newItems[index].quantita = parseInt(e.target.value) || 1; setFormData({...formData, bundleItems: newItems}); }} className="w-16 shrink-0 bg-slate-50 border border-purple-200 rounded-lg px-2 py-2.5 text-xs font-bold text-center text-slate-800 outline-none focus:border-purple-500" placeholder="Q.tà" />
+                                <button onClick={() => { const newItems = (formData.bundleItems || []).filter((_, i) => i !== index); setFormData({...formData, bundleItems: newItems}); }} className="p-2.5 shrink-0 text-purple-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors bg-white border border-purple-100 shadow-sm" title="Rimuovi">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-1.5 mt-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Prezzo *</label>
                   <div className="relative">
                     <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -312,7 +384,7 @@ const WarehouseTab: React.FC = () => {
                   onClick={() => {
                     setIsAdding(false);
                     setEditingId(null);
-                    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', categoria: '' });
+                    setFormData({ codice: '', descrizione: '', prezzoUnita: 0, unita: 'Pezzi', pezziPerStecca: 10, categoria: '', isBundle: false, bundleItems: [] });
                   }}
                   className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black text-xs transition-all hover:bg-slate-50"
                 >
@@ -381,6 +453,11 @@ const WarehouseTab: React.FC = () => {
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none break-all">
                     {product.codice}
                   </span>
+                  {product.isBundle && (
+                    <span className="text-[8px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 uppercase tracking-wider leading-none flex items-center gap-0.5">
+                      <Layers className="w-2.5 h-2.5" /> BUNDLE
+                    </span>
+                  )}
                   {product.categoria && (
                     <span className="text-[8px] font-black text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100 uppercase tracking-wider leading-none">
                       {product.categoria}
@@ -390,6 +467,14 @@ const WarehouseTab: React.FC = () => {
                 <h3 className="text-sm font-bold text-slate-900 leading-tight break-words">
                   {product.descrizione}
                 </h3>
+                {product.isBundle && product.bundleItems && product.bundleItems.length > 0 && (
+                  <p className="text-[10px] text-slate-500 font-medium mt-1 truncate">
+                    Contiene: {product.bundleItems.map(bi => {
+                      const found = products.find(p => p.id === bi.productId);
+                      return found ? `${bi.quantita}x ${found.codice}` : '';
+                    }).filter(Boolean).join(', ')}
+                  </p>
+                )}
               </div>
 
               {/* Prezzo e Azioni */}
