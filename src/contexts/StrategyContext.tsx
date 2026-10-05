@@ -333,6 +333,9 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               riv.history?.forEach(h => {
                 if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
                   h.items.forEach(item => {
+                    // Se l'articolo è un omaggio, lo ignoriamo per il calcolo della missione
+                    if (item.isOmaggio) return;
+
                     const matchCategory = mission.targetCategorie?.includes(item.categoria || '');
                     const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
                     

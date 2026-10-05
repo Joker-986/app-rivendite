@@ -578,7 +578,6 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   // --- CASCATA MULTI-MODELLO (Stringhe Ufficiali Validate Google AI) ---
   const waterfallModels = [
-    { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
     { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
     { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
     { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" }
@@ -594,21 +593,14 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
     try {
       console.log(`[AI Enrich] Tentativo ${i + 1}/${waterfallModels.length} con: ${currentModel.name}`);
       
-      const aiConfig: any = {
-        systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }]
-      };
-
-      if (currentModel.id.includes("3.5-flash-lite")) {
-        aiConfig.thinkingConfig = { thinkingLevel: "MINIMAL" };
-      } else {
-        aiConfig.temperature = 0.1;
-      }
-
       const response = await ai.models.generateContent({
         model: currentModel.id,
         contents: userPrompt,
-        config: aiConfig
+        config: {
+          systemInstruction: systemPrompt,
+          tools: [{ googleSearch: {} }],
+          temperature: 0.1
+        }
       });
 
       let responseText = response.text || "{}";
