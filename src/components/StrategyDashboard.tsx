@@ -1309,12 +1309,31 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                     </div>
                   );
                 })() : (
-                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-amber-500' : mission.tipo === 'QUANTITÀ' ? 'bg-blue-400' : 'bg-purple-500'}`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
+                  <>
+                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ease-out ${percentage === 100 ? 'bg-emerald-500' : (mission.tipo === 'ATTIVAZIONE' || mission.tipo === 'ORDINANTI') ? 'bg-amber-500' : mission.tipo === 'QUANTITÀ' ? 'bg-blue-400' : 'bg-purple-500'}`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                    {/* SEZIONE POTENZIALE (Bozze non eseguite) */}
+                    {mission.progressoPotenziale !== undefined && mission.progressoPotenziale > mission.progressoAttuale && (
+                      <div className="mt-3 p-3 bg-slate-50 border border-slate-200/60 border-dashed rounded-xl animate-in fade-in duration-300">
+                        <div className="flex justify-between items-center mb-2">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                             <Clock className="w-3.5 h-3.5" /> In attesa di conferma
+                           </span>
+                           <span className="text-xs font-black text-slate-700">+{mission.progressoPotenziale - mission.progressoAttuale}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-200/50 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full rounded-full transition-all duration-1000 ease-out bg-slate-400"
+                            style={{ width: `${Math.min(100, (mission.progressoPotenziale / mission.target) * 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Ripartizione Visiva Logista vs Magazzino per Missione Fatturato */}

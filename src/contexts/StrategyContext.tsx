@@ -328,37 +328,41 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           } else if (mission.tipo === 'PRODOTTO') {
             if (riv.targetIdoneo?.includes(mission.id)) {
               let storeProductTotal = 0;
+              let storeProductTotalPotenziale = 0;
               let lastOrderDate = '';
               const prodottiAcquistati: MissionProdottoDetail[] = [];
 
               riv.history?.forEach(h => {
-                if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
+                if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato)) {
                   h.items.forEach(item => {
-                    // Se l'articolo è un omaggio, lo ignoriamo per il calcolo della missione
                     if (item.isOmaggio) return;
-
                     const matchCategory = mission.targetCategorie?.includes(item.categoria || '');
                     const matchSku = mission.targetSkus?.includes(item.codice) || (mission.sku && item.codice === mission.sku);
                     
                     if (matchCategory || matchSku) {
                       const lineTotal = item.prezzoApplicato * item.quantita;
-                      storeProductTotal += lineTotal;
-                      lastOrderDate = h.data;
+                      // 1. Somma al potenziale sempre
+                      storeProductTotalPotenziale += lineTotal;
                       
-                      prodottiAcquistati.push({
-                        codice: item.codice,
-                        descrizione: item.descrizione,
-                        quantita: item.quantita,
-                        importo: lineTotal,
-                        data: h.data
-                      });
+                      // 2. Somma al reale solo se eseguito
+                      if (h.isEseguito === true) {
+                        storeProductTotal += lineTotal;
+                        lastOrderDate = h.data;
+                        prodottiAcquistati.push({
+                          codice: item.codice,
+                          descrizione: item.descrizione,
+                          quantita: item.quantita,
+                          importo: lineTotal,
+                          data: h.data
+                        });
+                      }
                     }
                   });
                 }
               });
 
               const threshold = mission.sogliaFinanziaria || 0;
-              // Supera il target se ha raggiunto la soglia in euro (o se non c'è soglia basta > 0)
+              // Aggiungiamo al progresso reale
               if (storeProductTotal > 0 && storeProductTotal >= threshold) {
                 progress += 1;
                 dettagli.push({
@@ -370,19 +374,23 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                   prodotti: prodottiAcquistati
                 });
               }
+              // Aggiungiamo al progresso potenziale globale dell'oggetto (usiamo una prop temporanea creata fuori)
+              if (storeProductTotalPotenziale > 0 && storeProductTotalPotenziale >= threshold) {
+                (mission as any)._tempPotenziale = ((mission as any)._tempPotenziale || 0) + 1;
+              }
             }
           } else if (mission.tipo === 'QUANTITÀ') {
             const magazzinoProducts = JSON.parse(localStorage.getItem('tgest_magazzino') || '[]');
             let storePiecesTotal = 0;
+            let storePiecesTotalPotenziale = 0;
             const storeOrders: MissionOrderDetail[] = [];
 
             riv.history?.forEach(h => {
-              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato) && h.isEseguito === true) {
+              if (h.tipo === 'ORDINE' && h.items && h.data.startsWith(meseSelezionato)) {
                 let piecesInThisOrder = 0;
 
                 h.items.forEach(item => {
                   if (item.isOmaggio && !mission.includeOmaggi) return;
-
                   const checkMatch = (codice: string, categoria: string) => {
                     const matchCat = mission.targetCategorie?.includes(categoria || '');
                     const matchSku = mission.targetSkus?.includes(codice) || (mission.sku && codice === mission.sku);
@@ -405,14 +413,17 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 });
 
                 if (piecesInThisOrder > 0) {
-                  storePiecesTotal += piecesInThisOrder;
-                  storeOrders.push({
-                    id: h.id || Math.random().toString(36).substring(2, 9),
-                    data: h.data,
-                    importo: piecesInThisOrder,
-                    fonte: 'Magazzino',
-                    quantita: piecesInThisOrder
-                  });
+                  storePiecesTotalPotenziale += piecesInThisOrder;
+                  if (h.isEseguito === true) {
+                    storePiecesTotal += piecesInThisOrder;
+                    storeOrders.push({
+                      id: h.id || Math.random().toString(36).substring(2, 9),
+                      data: h.data,
+                      importo: piecesInThisOrder,
+                      fonte: 'Magazzino',
+                      quantita: piecesInThisOrder
+                    });
+                  }
                 }
               }
             });
@@ -428,8 +439,14 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 ordini: storeOrders.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
               });
             }
+            if (storePiecesTotalPotenziale > 0) {
+               (mission as any)._tempPotenziale = ((mission as any)._tempPotenziale || 0) + storePiecesTotalPotenziale;
+            }
           }
         }); // <-- Fine ciclo ordini
+        
+        const progressoPotenzialeFinale = (mission as any)._tempPotenziale || progress;
+        delete (mission as any)._tempPotenziale;
         
         // APPLICAZIONE CONGUAGLI SEPARATI (MAGAZZINO & LOGISTA)
         if (mission.tipo === 'FATTURATO' && !(mission.targetSingolo && mission.targetSingolo > 0)) {
@@ -467,7 +484,7 @@ export const StrategyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         
         dettagli.sort((a, b) => new Date(b.data || 0).getTime() - new Date(a.data || 0).getTime());
         
-        return { ...mission, progressoAttuale: progress, valoreGenerato: generatedValue, dettagliProgresso: dettagli };
+        return { ...mission, progressoAttuale: progress, progressoPotenziale: progressoPotenzialeFinale, valoreGenerato: generatedValue, dettagliProgresso: dettagli };
       });
     });
   }, [adjustments]);
