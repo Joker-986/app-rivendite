@@ -132,12 +132,41 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
     const selectedDate = execDates[ndc.id] || new Date().toISOString().split('T')[0];
     const executionTimestamp = `${selectedDate}T12:00:00.000Z`;
     
+    // Contrassegna tutti gli items di tipo credito come eseguiti
+    const updatedItems = ndc.h.items.map((it: any) => it.isCredito ? { ...it, ndcItemEseguita: true } : it);
+
     onEditHistory(
       ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo, 
-      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, updatedItems, undefined, undefined, undefined,
       true, executionTimestamp
     );
     showToast(ndc.isVoucher ? "Voucher archiviato correttamente!" : "Nota di Credito archiviata correttamente!", "success");
+  };
+
+  const handleItemExecute = (ndc: any, targetItemId: string) => {
+    const updatedItems = ndc.h.items.map((it: any) => it.id === targetItemId ? { ...it, ndcItemEseguita: true } : it);
+    const allExecuted = updatedItems.filter((it: any) => it.isCredito).every((it: any) => it.ndcItemEseguita);
+
+    const selectedDate = execDates[ndc.id] || new Date().toISOString().split('T')[0];
+    const executionTimestamp = `${selectedDate}T12:00:00.000Z`;
+
+    onEditHistory(
+      ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo,
+      undefined, undefined, undefined, undefined, undefined, updatedItems, undefined, undefined, undefined,
+      allExecuted ? true : ndc.h.ndcEseguita, 
+      allExecuted ? executionTimestamp : ndc.h.dataEsecuzioneNdC
+    );
+    showToast(allExecuted ? "Nota di Credito completata!" : "P4P Inserito", "success");
+  };
+
+  const handleRestore = (ndc: any) => {
+    const updatedItems = ndc.h.items.map((it: any) => it.isCredito ? { ...it, ndcItemEseguita: false } : it);
+    onEditHistory(
+      ndc.id, ndc.originalIndex, ndc.h.note, ndc.h.importo,
+      undefined, undefined, undefined, undefined, undefined, updatedItems, undefined, undefined, undefined,
+      false, ''
+    );
+    showToast("Ripristino effettuato!", "info");
   };
 
   const handleConfirmDate = () => {
@@ -365,6 +394,14 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                                >
                                  <ChevronRight className="w-4 h-4" /> Apri Scheda
                                </button>
+                               {ndc.creditItems.some((it: any) => it.ndcItemEseguita) && (
+                                 <button
+                                   onClick={(e) => { setOpenMenuId(null); handleRestore(ndc); }}
+                                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-amber-600 rounded-xl transition-colors"
+                                 >
+                                   <History className="w-4 h-4" /> Ripristina Voci
+                                 </button>
+                               )}
                              </div>
                            )}
                         </div>
@@ -372,11 +409,27 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                     </div>
 
                     {/* Dettaglio Articoli */}
-                    <div className="bg-slate-50 rounded-lg p-2 mb-2 space-y-1">
+                    <div className="bg-slate-50 rounded-lg p-2 mb-2 space-y-1.5">
                       {ndc.creditItems.map((item: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center text-[10px] font-bold text-slate-500">
-                          <span className="truncate pr-4">• {item.descrizione || item.codice}</span>
-                          <span className="shrink-0 text-slate-700">x{item.quantita} unità</span>
+                        <div key={idx} className={`flex justify-between items-center text-[10px] font-bold p-1.5 rounded border ${item.ndcItemEseguita ? 'bg-emerald-50/50 border-emerald-100 text-emerald-600/70' : 'bg-white border-slate-200 text-slate-600'}`}>
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <span className={`truncate ${item.ndcItemEseguita ? 'line-through' : ''}`}>• {item.descrizione || item.codice}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`shrink-0 ${item.ndcItemEseguita ? 'text-emerald-500/70' : 'text-slate-700'}`}>x{item.quantita} pz</span>
+                            {ndc.creditItems.length > 1 && (
+                              !item.ndcItemEseguita ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleItemExecute(ndc, item.id); }}
+                                  className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded text-[8px] font-black uppercase tracking-tighter transition-colors shadow-sm"
+                                >
+                                  P4P Inserito
+                                </button>
+                              ) : (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              )
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -512,6 +565,12 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-emerald-600 rounded-xl transition-colors"
                        >
                          <ChevronRight className="w-4 h-4" /> Apri Scheda
+                       </button>
+                       <button
+                         onClick={(e) => { setOpenMenuId(null); handleRestore(ndc); }}
+                         className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-amber-600 rounded-xl transition-colors"
+                       >
+                         <History className="w-4 h-4" /> Ripristina Rimborso
                        </button>
                      </div>
                    )}

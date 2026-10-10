@@ -51,6 +51,7 @@ export interface OrderItem {
   isCredito?: boolean;
   isSpacchettato?: boolean;
   isVoucher?: boolean; // Identificativo per il voucher One Shot
+  ndcItemEseguita?: boolean; // NOVITÀ: spunta singola per riga di rimborso completata
 }
 
 export interface RivenditaHistoryEntry {
@@ -112,7 +113,6 @@ export interface Mission {
   targetSingolo?: number;
   pesoPercentuale: number;
   progressoAttuale: number;
-  progressoPotenziale?: number; // NOVITA: Il potenziale includendo le bozze
   valoreGenerato?: number;
   stato?: "ATTIVA" | "ARCHIVIATA";
   targetCategorie?: string[];
