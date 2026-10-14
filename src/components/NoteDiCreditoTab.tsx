@@ -111,8 +111,23 @@ const NoteDiCreditoTab: React.FC<NoteDiCreditoTabProps> = ({
       });
     });
     
-    const totalPending = pNdc.reduce((acc, item) => acc + item.totaleCredito, 0);
-    const totalCompleted = cNdc.reduce((acc, item) => acc + item.totaleCredito, 0);
+    let totalPending = 0;
+    let totalCompleted = 0;
+
+    pNdc.forEach(ndc => {
+      ndc.creditItems.forEach((item: any) => {
+        const itemVal = item.prezzoApplicato * item.quantita * (item.unita || 1);
+        if (item.ndcItemEseguita) {
+          totalCompleted += itemVal;
+        } else {
+          totalPending += itemVal;
+        }
+      });
+    });
+
+    cNdc.forEach(ndc => {
+      totalCompleted += ndc.totaleCredito;
+    });
 
     return { 
        pendingNdc: pNdc.sort((a, b) => new Date(a.h.data).getTime() - new Date(b.h.data).getTime()),

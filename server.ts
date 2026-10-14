@@ -578,10 +578,9 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   // --- CASCATA MULTI-MODELLO (Stringhe Ufficiali Validate Google AI) ---
   const waterfallModels = [
+    { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
     { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
-    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
-    { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" }
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" }
   ];
 
   let finalJson: any = null;
@@ -599,10 +598,8 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
         tools: [{ googleSearch: {} }]
       };
 
-      if (currentModel.id.includes("3.5-flash-lite")) {
+      if (currentModel.id.includes("3.5-flash-lite") || currentModel.id.includes("3.6-flash")) {
         aiConfig.thinkingConfig = { thinkingLevel: "MINIMAL" };
-      } else {
-        aiConfig.temperature = 0.1;
       }
 
       const response = await ai.models.generateContent({
@@ -722,11 +719,10 @@ app.post('/api/followup', async (req, res) => {
 
     // 2. CHIAMATA A GEMINI
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.6-flash",
       contents: finalPrompt,
       config: {
-        systemInstruction: systemInstructions,
-        temperature: 0.7, // Tono naturale, leggermente creativo ma sotto controllo
+        systemInstruction: systemInstructions
       }
     });
 
@@ -764,7 +760,7 @@ app.post('/api/gemini-chat', async (req, res) => {
     });
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
     });
 
@@ -790,7 +786,14 @@ app.post('/api/logista', async (req, res) => {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
     });
 
+    console.log(`[DEBUG LOGISTA] Richiesta per comune: ${comune}`);
+    console.log(`[DEBUG LOGISTA] Status HTTP Pagine Bianche: ${response.status}`);
+
     const html = await response.text();
+    
+    // Stampiamo i primi 300 caratteri della pagina per capire se è un CAPTCHA o blocco
+    console.log(`[DEBUG LOGISTA] Snippet HTML ricevuto: ${html.substring(0, 300)}`);
+    
     const $ = cheerio.load(html);
     const results = [];
 
