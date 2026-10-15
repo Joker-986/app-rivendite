@@ -775,103 +775,36 @@ app.post('/api/gemini-chat', async (req, res) => {
   }
 });
 
-// --- ROTTA LOGISTA CON STEALTH HEADERS E FULL-TRACE LOGGING ---
-const STEALTH_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"Windows"',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'same-origin',
-  'Sec-Fetch-User': '?1',
-  'Upgrade-Insecure-Requests': '1',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-  'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Referer': 'https://www.paginebianche.it/',
-  'Cache-Control': 'max-age=0'
-};
-
+// --- NUOVA ROTTA LOGISTA (Open Data JSON - Infallibile) ---
 app.post('/api/logista', async (req, res) => {
   const { comune } = req.body;
   if (!comune) return res.status(400).json({ error: 'Comune mancante' });
 
-  const targetUrl = `https://www.paginebianche.it/codice-istat?dv=${encodeURIComponent(comune)}`;
-  const startTime = Date.now();
-
-  console.log(`\n================== [LOGISTA REQUEST START] ==================`);
-  console.log(`[TARGET URL]   : ${targetUrl}`);
-  console.log(`[PARAM COMUNE] : "${comune}"`);
-
   try {
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: STEALTH_HEADERS,
-      redirect: 'follow'
-    });
-
-    const elapsed = Date.now() - startTime;
-    console.log(`\n------------------ [RESPONSE DIAGNOSTICS] ------------------`);
-    console.log(`[HTTP STATUS]  : ${response.status} ${response.statusText} (${elapsed}ms)`);
-    console.log(`[FINAL URL]    : ${response.url}`);
+    console.log(`\n[LOGISTA] Ricerca ISTAT Open Data per: ${comune}`);
+    const url = 'https://raw.githubusercontent.com/matteocontrini/comuni-json/master/comuni.json';
+    const response = await fetch(url);
     
-    const respHeadersObj: Record<string, string> = {};
-    response.headers.forEach((val, key) => { respHeadersObj[key] = val; });
-    console.log(`[RESP HEADERS] :`, JSON.stringify(respHeadersObj, null, 2));
-
-    const html = await response.text();
-    const bodySnippet = html.substring(0, 500).replace(/\r?\n|\r/g, ' ');
-    console.log(`[BODY SNIPPET] : ${bodySnippet}`);
-    console.log(`[BODY LENGTH]  : ${html.length} caratteri`);
-
-    if (response.status === 403 || html.includes('cf-browser-verification') || html.includes('Attention Required! | Cloudflare')) {
-      console.warn(`[WAF DETECTED] : Blocco WAF/Cloudflare ancora attivo.`);
-      return res.status(502).json({ 
-        error: 'Sorgente bloccata dal firewall anti-bot (403). Passare a OpenData.',
-        isWafBlock: true 
-      });
+    if (!response.ok) {
+      throw new Error('Errore nel recupero del database comuni Open Data');
     }
 
-    const $ = cheerio.load(html);
-    const results: any[] = [];
+    const comuni = await response.json();
+    
+    // Pulizia e ricerca case-insensitive
+    const targetComune = comune.toLowerCase().trim().replace(/[`´’‘]/g, "'");
+    const comuneTrovato = comuni.find((c: any) => c.nome.toLowerCase() === targetComune);
 
-    // CASO A: Risultati Multipli
-    if ($('.box-dis__item').length > 0) {
-      $('.box-dis__item').each((i, el) => {
-        const istat = $(el).find('span.result-cap').text().trim();
-        const localita = $(el).find('.result-localita').text().trim() || comune;
-        if (istat && /^\d{6}$/.test(istat)) {
-          results.push({ istat, localita });
-        }
-      });
-    } 
-    // CASO B: Risultato Singolo
-    else {
-      const istat = $('span.result-cap').first().text().trim();
-      let localita = "";
-      const parentText = $('span.result-cap').first().parent().text();
-      if (parentText.includes('Località:')) {
-        localita = parentText.split('Località:')[1].trim();
-      }
-      if (istat && /^\d{6}$/.test(istat)) {
-        results.push({ istat, localita: localita || comune });
-      }
-    }
-
-    console.log(`[RESULTS FOUND]: ${results.length}`);
-    console.log(`================== [LOGISTA REQUEST END] ==================\n`);
-
-    if (results.length > 0) {
-      res.json({ results });
+    if (comuneTrovato && comuneTrovato.codice) {
+      console.log(`[LOGISTA] Trovato codice ISTAT: ${comuneTrovato.codice}`);
+      res.json({ results: [{ istat: comuneTrovato.codice, localita: comuneTrovato.nome }] });
     } else {
-      res.status(404).json({ error: `Nessun comune trovato per: ${comune}` });
+      console.warn(`[LOGISTA] Codice non trovato per: ${comune}`);
+      res.status(404).json({ error: `Codice ISTAT non trovato per: ${comune}` });
     }
-
   } catch (error: any) {
-    console.error(`\n[LOGISTA ERROR] :`, error);
-    console.log(`================== [LOGISTA REQUEST FAILED] ==================\n`);
-    res.status(500).json({ error: 'Errore interno del server', details: error.message });
+    console.error('Errore /api/logista Open Data:', error);
+    res.status(500).json({ error: 'Errore interno del server durante la ricerca ISTAT' });
   }
 });
 
