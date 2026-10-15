@@ -775,29 +775,68 @@ app.post('/api/gemini-chat', async (req, res) => {
   }
 });
 
-// --- NUOVA ROTTA SANDBOX: CODICE ISTAT PAGINE BIANCHE (CORRETTA) ---
+// --- ROTTA LOGISTA CON STEALTH HEADERS E FULL-TRACE LOGGING ---
+const STEALTH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Referer': 'https://www.paginebianche.it/',
+  'Cache-Control': 'max-age=0'
+};
+
 app.post('/api/logista', async (req, res) => {
   const { comune } = req.body;
   if (!comune) return res.status(400).json({ error: 'Comune mancante' });
 
+  const targetUrl = `https://www.paginebianche.it/codice-istat?dv=${encodeURIComponent(comune)}`;
+  const startTime = Date.now();
+
+  console.log(`\n================== [LOGISTA REQUEST START] ==================`);
+  console.log(`[TARGET URL]   : ${targetUrl}`);
+  console.log(`[PARAM COMUNE] : "${comune}"`);
+
   try {
-    const url = `https://www.paginebianche.it/codice-istat?dv=${encodeURIComponent(comune)}`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    const response = await fetch(targetUrl, {
+      method: 'GET',
+      headers: STEALTH_HEADERS,
+      redirect: 'follow'
     });
 
-    console.log(`[DEBUG LOGISTA] Richiesta per comune: ${comune}`);
-    console.log(`[DEBUG LOGISTA] Status HTTP Pagine Bianche: ${response.status}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`\n------------------ [RESPONSE DIAGNOSTICS] ------------------`);
+    console.log(`[HTTP STATUS]  : ${response.status} ${response.statusText} (${elapsed}ms)`);
+    console.log(`[FINAL URL]    : ${response.url}`);
+    
+    const respHeadersObj: Record<string, string> = {};
+    response.headers.forEach((val, key) => { respHeadersObj[key] = val; });
+    console.log(`[RESP HEADERS] :`, JSON.stringify(respHeadersObj, null, 2));
 
     const html = await response.text();
-    
-    // Stampiamo i primi 300 caratteri della pagina per capire se è un CAPTCHA o blocco
-    console.log(`[DEBUG LOGISTA] Snippet HTML ricevuto: ${html.substring(0, 300)}`);
-    
-    const $ = cheerio.load(html);
-    const results = [];
+    const bodySnippet = html.substring(0, 500).replace(/\r?\n|\r/g, ' ');
+    console.log(`[BODY SNIPPET] : ${bodySnippet}`);
+    console.log(`[BODY LENGTH]  : ${html.length} caratteri`);
 
-    // CASO A: Risultati Multipli (Lista)
+    if (response.status === 403 || html.includes('cf-browser-verification') || html.includes('Attention Required! | Cloudflare')) {
+      console.warn(`[WAF DETECTED] : Blocco WAF/Cloudflare ancora attivo.`);
+      return res.status(502).json({ 
+        error: 'Sorgente bloccata dal firewall anti-bot (403). Passare a OpenData.',
+        isWafBlock: true 
+      });
+    }
+
+    const $ = cheerio.load(html);
+    const results: any[] = [];
+
+    // CASO A: Risultati Multipli
     if ($('.box-dis__item').length > 0) {
       $('.box-dis__item').each((i, el) => {
         const istat = $(el).find('span.result-cap').text().trim();
@@ -807,7 +846,7 @@ app.post('/api/logista', async (req, res) => {
         }
       });
     } 
-    // CASO B: Risultato Singolo (Pagina Diretta)
+    // CASO B: Risultato Singolo
     else {
       const istat = $('span.result-cap').first().text().trim();
       let localita = "";
@@ -820,13 +859,19 @@ app.post('/api/logista', async (req, res) => {
       }
     }
 
+    console.log(`[RESULTS FOUND]: ${results.length}`);
+    console.log(`================== [LOGISTA REQUEST END] ==================\n`);
+
     if (results.length > 0) {
       res.json({ results });
     } else {
       res.status(404).json({ error: `Nessun comune trovato per: ${comune}` });
     }
-  } catch (error) {
-    res.status(500).json({ error: 'Errore interno del server' });
+
+  } catch (error: any) {
+    console.error(`\n[LOGISTA ERROR] :`, error);
+    console.log(`================== [LOGISTA REQUEST FAILED] ==================\n`);
+    res.status(500).json({ error: 'Errore interno del server', details: error.message });
   }
 });
 
