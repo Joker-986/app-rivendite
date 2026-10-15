@@ -578,9 +578,9 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
   // --- CASCATA MULTI-MODELLO (Stringhe Ufficiali Validate Google AI) ---
   const waterfallModels = [
-    { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
-    { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" }
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", useSearch: true },
+    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", useSearch: true },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Base)", useSearch: false }
   ];
 
   let finalJson: any = null;
@@ -594,12 +594,11 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
       console.log(`[AI Enrich] Tentativo ${i + 1}/${waterfallModels.length} con: ${currentModel.name}`);
       
       const aiConfig: any = {
-        systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }]
+        systemInstruction: systemPrompt
       };
 
-      if (currentModel.id.includes("3.5-flash-lite") || currentModel.id.includes("3.6-flash")) {
-        aiConfig.thinkingConfig = { thinkingLevel: "MINIMAL" };
+      if (currentModel.useSearch) {
+        aiConfig.tools = [{ googleSearch: {} }];
       }
 
       const response = await ai.models.generateContent({
@@ -717,17 +716,31 @@ app.post('/api/followup', async (req, res) => {
 
     const finalPrompt = `Scrivi il messaggio WhatsApp seguendo alla lettera le istruzioni di sistema e usando questi dati per il contesto (se richiesti):\nDati Rivendita: ${JSON.stringify(rivendita)}\nNote: ${noteLibere}`;
 
-    // 2. CHIAMATA A GEMINI
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: finalPrompt,
-      config: {
-        systemInstruction: systemInstructions
-      }
-    });
+    // 2. CHIAMATA A GEMINI (3.7 Flash primario, 2.5 Flash fallback resiliente)
+    let responseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: finalPrompt,
+        config: {
+          systemInstruction: systemInstructions
+        }
+      });
+      responseText = response.text || '';
+    } catch (modelErr: any) {
+      console.warn("Fallback /api/followup a gemini-2.5-flash:", modelErr.status || modelErr.message);
+      const fallbackResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: finalPrompt,
+        config: {
+          systemInstruction: systemInstructions
+        }
+      });
+      responseText = fallbackResponse.text || '';
+    }
 
-    if (response.text) {
-      res.json({ message: response.text });
+    if (responseText) {
+      res.json({ message: responseText });
     } else {
       res.status(500).json({ error: 'Nessuna risposta dal modello AI.' });
     }
@@ -759,13 +772,24 @@ app.post('/api/gemini-chat', async (req, res) => {
       }
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-    });
+    let chatResponseText = '';
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: prompt,
+      });
+      chatResponseText = response.text || '';
+    } catch (chatErr: any) {
+      console.warn("Fallback /api/gemini-chat a gemini-2.5-flash:", chatErr.status || chatErr.message);
+      const fallbackResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+      chatResponseText = fallbackResponse.text || '';
+    }
 
-    if (response.text) {
-      res.json({ response: response.text });
+    if (chatResponseText) {
+      res.json({ response: chatResponseText });
     } else {
       res.status(500).json({ error: "Nessuna risposta ricevuta dall'AI." });
     }
