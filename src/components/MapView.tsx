@@ -51,7 +51,7 @@ export default function MapView({ results }: MapViewProps) {
     isGeocoding.current = true;
 
     const run = async () => {
-      const CACHE_KEY = 'tgest_geo_v30';
+      const CACHE_KEY = 'tgest_geo_photon_v1';
       const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
       const successful: any[] = [];
       const failed: any[] = [];
@@ -64,22 +64,21 @@ export default function MapView({ results }: MapViewProps) {
           successful.push({ ...res, lat: cache[id].lat, lon: cache[id].lon });
         } else {
           try {
-            // Pulizia indirizzo per migliorare precisione
-            const cleanAddr = res['Indirizzo'].split('-')[0].split('(')[0].trim();
-            const query = encodeURIComponent(`${cleanAddr}, ${res['Comune']}, ${res['Prov.']}, Italy`);
-            
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&addressdetails=1`);
+            const query = encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`);
+            const response = await fetch(`https://photon.komoot.io/api/?q=${query}&limit=1`);
             const data = await response.json();
 
-            if (data && data[0]) {
-              const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+            if (data && data.features && data.features.length > 0) {
+              const [lon, lat] = data.features[0].geometry.coordinates;
+              const coords = { lat, lon };
               cache[id] = coords;
               localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
               successful.push({ ...res, ...coords });
             } else {
               failed.push(res);
             }
-            await new Promise(r => setTimeout(r, 1100));
+            // Throttling ridotto grazie alle performance di Photon
+            await new Promise(r => setTimeout(r, 150));
           } catch (e) {
             failed.push(res);
           }
@@ -111,7 +110,10 @@ export default function MapView({ results }: MapViewProps) {
 
       <div className="h-[450px] w-full rounded-3xl overflow-hidden border-2 border-white shadow-xl relative z-0">
         <MapContainer center={[41.9, 12.5]} zoom={6} style={{ height: '100%', width: '100%' }}>
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+          <TileLayer 
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
           <MarkerClusterGroup>
             {geocodedResults.map((m, idx) => (
               <Marker key={idx} position={[m.lat, m.lon]}>

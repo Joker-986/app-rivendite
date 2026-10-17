@@ -42,7 +42,18 @@ export function usePersistence({
 
   const handleExportData = () => {
     try {
+      const allData: Record<string, any> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const val = localStorage.getItem(key);
+          try { allData[key] = val ? JSON.parse(val) : null; } 
+          catch { allData[key] = val; }
+        }
+      }
+      
       const data = {
+        ...allData,
         giroVisite,
         crmAnagrafiche,
         stores,
@@ -87,10 +98,13 @@ export function usePersistence({
         
         if (typeof data !== 'object' || data === null) throw new Error('Formato non valido');
         
-        if (data.giroVisite) localStorage.setItem('giroVisite', JSON.stringify(data.giroVisite));
-        if (data.crmAnagrafiche) localStorage.setItem('crmAnagrafiche', JSON.stringify(data.crmAnagrafiche));
-        if (data.stores) localStorage.setItem('stores', JSON.stringify(data.stores));
-        if (data.rubrica) localStorage.setItem('rubrica', JSON.stringify(data.rubrica));
+        Object.keys(data).forEach(key => {
+          if (key !== 'version' && key !== 'exportedAt') {
+            const value = typeof data[key] === 'string' ? data[key] : JSON.stringify(data[key]);
+            localStorage.setItem(key, value);
+          }
+        });
+        
         if (data.version) localStorage.setItem('app_data_version', data.version);
         
         showToast('Backup ripristinato con successo! L\'app verrà ricaricata.');

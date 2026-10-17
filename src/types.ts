@@ -210,3 +210,9 @@ export interface ArchiveEntry {
 }
 
 export type RubricaData = Record<string, RivenditaExtra>;
+
+export interface TgesTFullBackup {
+  version: string;
+  exportedAt: string;
+  [key: string]: any;
+}
