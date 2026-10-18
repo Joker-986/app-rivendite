@@ -55,3 +55,18 @@ export async function generateFollowUpMessage(rivendita: any, extra: any, noteLi
     return "⚠️ Impossibile contattare l'Intelligenza Artificiale. Verifica la connessione o riprova più tardi.";
   }
 }
+
+export async function scanDocumentWithAI(imageBase64: string): Promise<any> {
+  try {
+    const response = await fetch('/api/ocr-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64 })
+    });
+    if (!response.ok) throw new Error('Errore OCR server');
+    return await response.json();
+  } catch (error) {
+    console.error("Errore scanDocumentWithAI:", error);
+    throw error;
+  }
+}

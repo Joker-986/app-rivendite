@@ -51,7 +51,7 @@ export default function MapView({ results }: MapViewProps) {
     isGeocoding.current = true;
 
     const run = async () => {
-      const CACHE_KEY = 'tgest_geo_photon_v1';
+      const CACHE_KEY = 'tgest_geo_nominatim_struct_v1';
       const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
       const successful: any[] = [];
       const failed: any[] = [];
@@ -64,21 +64,32 @@ export default function MapView({ results }: MapViewProps) {
           successful.push({ ...res, lat: cache[id].lat, lon: cache[id].lon });
         } else {
           try {
-            const query = encodeURIComponent(`${res['Indirizzo']}, ${res['Comune']}, ${res['Prov.']}, Italy`);
-            const response = await fetch(`https://photon.komoot.io/api/?q=${query}&limit=1`);
+            // Pulizia preventiva da acronimi che bloccano il matching strutturato di Nominatim
+            const cleanStreet = res['Indirizzo'].replace(/SNC|snc|S\.N\.C\.|Km \d+/gi, '').trim();
+            
+            // Creazione dei parametri per la Ricerca Strutturata
+            const params = new URLSearchParams({
+              format: 'json',
+              street: cleanStreet,
+              city: res['Comune'],
+              county: res['Prov.'],
+              country: 'Italy',
+              limit: '1'
+            });
+            
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
             const data = await response.json();
 
-            if (data && data.features && data.features.length > 0) {
-              const [lon, lat] = data.features[0].geometry.coordinates;
-              const coords = { lat, lon };
+            if (data && data.length > 0) {
+              const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
               cache[id] = coords;
               localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
               successful.push({ ...res, ...coords });
             } else {
               failed.push(res);
             }
-            // Throttling ridotto grazie alle performance di Photon
-            await new Promise(r => setTimeout(r, 150));
+            // Throttling obbligatorio di 1.1s ripristinato per rispettare le policy di Nominatim
+            await new Promise(r => setTimeout(r, 1100));
           } catch (e) {
             failed.push(res);
           }

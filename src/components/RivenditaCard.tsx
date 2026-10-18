@@ -4,7 +4,8 @@ import {
   Copy, Check, Trash2, BookOpen, ChevronDown, ChevronUp, 
   Calendar, CheckCircle2, X, ClipboardList, Database, 
   Target, Activity, CalendarClock, UserCheck, Edit3, 
-  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag, MoreVertical, RefreshCw
+  TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag, MoreVertical, RefreshCw,
+  Camera, ScanText
 } from 'lucide-react';
 import OrderModule from './OrderModule';
 import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData, OrderItem } from '../types';
@@ -34,6 +35,7 @@ export interface RivenditaCardProps {
   removeStore: (res: SearchResult) => void;
   initiateVisitToggle: (id: string) => void;
   handleRubricaUpdate: (id: string, field: keyof RivenditaExtra, value: any) => void;
+  handleRubricaMultiUpdate: (id: string, updates: Partial<RivenditaExtra>) => void;
   handleActivitySave: (id: string, type: 'VISITA' | 'ORDINE' | 'HOSTESS' | 'ORDINE_LOGISTA', notes: string, amount?: number, items?: OrderItem[], dataEvasione?: string, visitaInizio?: string, visitaFine?: string, paymentMethod?: string) => void;
   toggleExpandCard: (id: string) => void;
   handleEnrich: (id: string, res: SearchResult) => void;
@@ -280,6 +282,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   removeStore,
   initiateVisitToggle,
   handleRubricaUpdate,
+  handleRubricaMultiUpdate,
   handleActivitySave,
   toggleExpandCard,
   handleEnrich,
@@ -328,6 +331,82 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const [showTimeline, setShowTimeline] = useState(false);
   const [tornoPiuTardi, setTornoPiuTardi] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [selectedOcrFields, setSelectedOcrFields] = useState<Record<string, boolean>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsScanning(true);
+    setIsMenuOpen(false);
+    showToast('Lettura documento in corso...', 'info');
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        const { scanDocumentWithAI } = await import('../services/geminiService');
+        const data = await scanDocumentWithAI(base64String);
+        
+        // Verifica se c'è almeno un dato valido
+        if (!data.pIva && !data.titolare && (!data.telefoni || data.telefoni.length === 0) && !data.mail && !data.pec && !data.codiceUnivoco && !data.orari) {
+           showToast('Nessun dato utile trovato nell\'immagine', 'warning');
+           return;
+        }
+
+        setExtractedData(data);
+        const initialSelected: Record<string, boolean> = {
+          pIva: !!data.pIva,
+          codiceUnivoco: !!data.codiceUnivoco,
+          titolare: !!data.titolare,
+          mail: !!data.mail,
+          pec: !!data.pec,
+          orari: !!data.orari
+        };
+        if (data.telefoni) {
+          data.telefoni.forEach((_: any, i: number) => {
+            initialSelected[`tel_${i}`] = true;
+          });
+        }
+        setSelectedOcrFields(initialSelected);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      showToast('Errore durante la scansione', 'error');
+    } finally {
+      setIsScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleApplyOcrData = () => {
+    if (!extractedData) return;
+    const updates: Partial<RivenditaExtra> = {};
+    
+    if (selectedOcrFields.pIva && extractedData.pIva) updates.pIva = extractedData.pIva;
+    if (selectedOcrFields.codiceUnivoco && extractedData.codiceUnivoco) updates.codiceUnivoco = extractedData.codiceUnivoco;
+    if (selectedOcrFields.titolare && extractedData.titolare) updates.riferimento = extractedData.titolare;
+    if (selectedOcrFields.mail && extractedData.mail) updates.mail = extractedData.mail;
+    if (selectedOcrFields.pec && extractedData.pec) updates.pec = extractedData.pec;
+    if (selectedOcrFields.orari && extractedData.orari) {
+      const currentNotes = extra.note || '';
+      updates.note = currentNotes ? `${currentNotes}\nOrari: ${extractedData.orari}` : `Orari: ${extractedData.orari}`;
+    }
+    if (extractedData.telefoni && Array.isArray(extractedData.telefoni)) {
+      const selectedTels = extractedData.telefoni.filter((_: any, i: number) => selectedOcrFields[`tel_${i}`]);
+      if (selectedTels.length > 0) {
+        updates.telefono = selectedTels.join(' - ');
+      }
+    }
+
+    handleRubricaMultiUpdate(id, updates);
+    if (!res.isStore && activeTab === 'search') addToCrm(res);
+    
+    setExtractedData(null);
+    showToast('Dati salvati correttamente!', 'success');
+  };
   
   // Estrazione sicura dell'ultima nota (Priorità: Ultima in History -> Root extra -> Rubrica)
   const displayNote = React.useMemo(() => {
@@ -495,6 +574,15 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                 >
                   <Share2 className="w-4 h-4" /> Condividi
                 </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                  disabled={isScanning}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />} 
+                  {isScanning ? 'Scansione in corso...' : 'Scansiona Foto/Doc'}
+                </button>
+                <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleScanDocument} />
                 <button
                   onClick={() => { setIsMenuOpen(false); toggleSave(res); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
@@ -1618,6 +1706,73 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* OCR Staging Modal */}
+      {extractedData && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setExtractedData(null)}>
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-600"><ScanText className="w-5 h-5"/></div>
+              <div>
+                <h3 className="font-black text-slate-800">Dati Rilevati</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Seleziona cosa salvare</p>
+              </div>
+            </div>
+            
+            <div className="p-4 space-y-3 overflow-y-auto max-h-[60vh]">
+              {['pIva', 'codiceUnivoco', 'titolare', 'mail', 'pec', 'orari'].map(field => {
+                if (!extractedData[field]) return null;
+                const labels: any = { 
+                  pIva: 'Partita IVA', 
+                  codiceUnivoco: 'Codice SDI',
+                  titolare: 'Referente / Insegna', 
+                  mail: 'Email', 
+                  pec: 'PEC',
+                  orari: 'Orari (salvati nelle note)' 
+                };
+                return (
+                  <label key={field} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedOcrFields[field] ? 'bg-brand-50 border-brand-200' : 'bg-white border-slate-200 opacity-60'}`}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedOcrFields[field] || false} 
+                      onChange={(e) => setSelectedOcrFields(prev => ({...prev, [field]: e.target.checked}))}
+                      className="mt-0.5 w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500 shrink-0"
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{labels[field]}</span>
+                      <span className="text-sm font-bold text-slate-800 break-words">{extractedData[field]}</span>
+                    </div>
+                  </label>
+                );
+              })}
+              
+              {extractedData.telefoni && Array.isArray(extractedData.telefoni) && extractedData.telefoni.map((tel: string, i: number) => (
+                  <label key={`tel_${i}`} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedOcrFields[`tel_${i}`] ? 'bg-brand-50 border-brand-200' : 'bg-white border-slate-200 opacity-60'}`}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedOcrFields[`tel_${i}`] || false} 
+                      onChange={(e) => setSelectedOcrFields(prev => ({...prev, [`tel_${i}`]: e.target.checked}))}
+                      className="mt-0.5 w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500 shrink-0"
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Telefono {i + 1}</span>
+                      <span className="text-sm font-bold text-slate-800 break-words">{tel}</span>
+                    </div>
+                  </label>
+              ))}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+              <button onClick={() => setExtractedData(null)} className="flex-1 py-3 text-slate-600 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-all text-sm">
+                Annulla
+              </button>
+              <button onClick={handleApplyOcrData} className="flex-1 py-3 text-white font-bold bg-brand-600 border-brand-700 border-b-2 rounded-xl active:translate-y-[2px] active:border-b-0 hover:brightness-110 transition-all text-sm shadow-sm">
+                Salva Selezionati
+              </button>
+            </div>
           </div>
         </div>
       )}
