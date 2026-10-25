@@ -666,13 +666,21 @@ Restituisci ESCLUSIVAMENTE un JSON: {openingHours, phone, zona, notes, confidenc
 
 // --- NUOVA ROTTA OCR MULTIMODALE GEMINI ---
 app.post('/api/ocr-scan', async (req, res) => {
+  console.log('[OCR] 📡 Nuova richiesta di scansione ricevuta.');
   try {
     const { imageBase64 } = req.body;
-    if (!imageBase64) return res.status(400).json({ error: 'Nessuna immagine fornita' });
-    if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'API Key mancante' });
+    if (!imageBase64) {
+      console.warn('[OCR] ⚠️ Errore: Nessuna immagine fornita dal client.');
+      return res.status(400).json({ error: 'Nessuna immagine fornita' });
+    }
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('[OCR] ❌ Errore: API Key Gemini mancante nel server.');
+      return res.status(500).json({ error: 'API Key mancante' });
+    }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    console.log(`[OCR] 🧠 Immagine pronta (dimensione Base64: ${base64Data.length} caratteri). Invio a Gemini...`);
 
     const prompt = `Sei un estrattore dati specializzato in documenti commerciali e fiscali italiani (licenze ADM, scontrini RT, biglietti da visita).
 Estrai i dati dall'immagine e restituisci ESCLUSIVAMENTE un JSON valido con questa struttura esatta. Se un dato non è presente, usa una stringa vuota "". Non inventare nulla.
@@ -704,9 +712,10 @@ Estrai i dati dall'immagine e restituisci ESCLUSIVAMENTE un JSON valido con ques
         .filter((t: string) => t.length > 0);
     }
 
+    console.log('[OCR] ✅ Estrazione completata con successo:', JSON.stringify(extractedData));
     res.json(extractedData);
   } catch (error: any) {
-    console.error('Errore OCR:', error);
+    console.error('[OCR] ❌ Errore critico durante la scansione:', error);
     res.status(500).json({ error: 'Errore OCR', details: error.message });
   }
 });

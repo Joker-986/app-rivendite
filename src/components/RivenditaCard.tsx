@@ -335,48 +335,51 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const [extractedData, setExtractedData] = useState<any>(null);
   const [selectedOcrFields, setSelectedOcrFields] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     setIsScanning(true);
     setIsMenuOpen(false);
-    showToast('Lettura documento in corso...', 'info');
+    
+    abortControllerRef.current = new AbortController();
 
     try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        const { scanDocumentWithAI } = await import('../services/geminiService');
-        const data = await scanDocumentWithAI(base64String);
-        
-        // Verifica se c'è almeno un dato valido
-        if (!data.pIva && !data.titolare && (!data.telefoni || data.telefoni.length === 0) && !data.mail && !data.pec && !data.codiceUnivoco && !data.orari) {
-           showToast('Nessun dato utile trovato nell\'immagine', 'warning');
-           return;
-        }
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
 
-        setExtractedData(data);
-        const initialSelected: Record<string, boolean> = {
-          pIva: !!data.pIva,
-          codiceUnivoco: !!data.codiceUnivoco,
-          titolare: !!data.titolare,
-          mail: !!data.mail,
-          pec: !!data.pec,
-          orari: !!data.orari
-        };
-        if (data.telefoni) {
-          data.telefoni.forEach((_: any, i: number) => {
-            initialSelected[`tel_${i}`] = true;
-          });
-        }
-        setSelectedOcrFields(initialSelected);
+      const { scanDocumentWithAI } = await import('../services/geminiService');
+      const data = await scanDocumentWithAI(base64String, abortControllerRef.current.signal);
+      
+      if (!data.pIva && !data.titolare && (!data.telefoni || data.telefoni.length === 0) && !data.mail && !data.pec && !data.codiceUnivoco && !data.orari) {
+         showToast('Nessun dato utile trovato nell\'immagine', 'warning');
+         return;
+      }
+
+      setExtractedData(data);
+      const initialSelected: Record<string, boolean> = {
+        pIva: !!data.pIva, codiceUnivoco: !!data.codiceUnivoco, titolare: !!data.titolare,
+        mail: !!data.mail, pec: !!data.pec, orari: !!data.orari
       };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      showToast('Errore durante la scansione', 'error');
+      if (data.telefoni) {
+        data.telefoni.forEach((_: any, i: number) => { initialSelected[`tel_${i}`] = true; });
+      }
+      setSelectedOcrFields(initialSelected);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        showToast('Scansione annullata', 'info');
+      } else {
+        showToast('Errore durante la scansione', 'error');
+      }
     } finally {
       setIsScanning(false);
+      abortControllerRef.current = null;
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -582,7 +585,7 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />} 
                   {isScanning ? 'Scansione in corso...' : 'Scansiona Foto/Doc'}
                 </button>
-                <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleScanDocument} />
+                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleScanDocument} />
                 <button
                   onClick={() => { setIsMenuOpen(false); toggleSave(res); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
@@ -1706,6 +1709,25 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Loading Overlay Scansione OCR */}
+      {isScanning && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95">
+            <Loader2 className="w-12 h-12 text-brand-600 animate-spin" />
+            <div className="text-center">
+              <h3 className="font-black text-slate-800 text-lg">Elaborazione in corso...</h3>
+              <p className="text-[11px] text-slate-500 font-bold mt-1 uppercase tracking-wider mb-4">L'Intelligenza Artificiale sta leggendo i dati</p>
+              <button 
+                onClick={() => abortControllerRef.current?.abort()} 
+                className="px-6 py-2 bg-red-50 text-red-600 font-bold rounded-xl border border-red-200 hover:bg-red-100 transition-colors"
+              >
+                Annulla
+              </button>
+            </div>
           </div>
         </div>
       )}

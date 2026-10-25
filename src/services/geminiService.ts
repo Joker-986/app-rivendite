@@ -56,12 +56,13 @@ export async function generateFollowUpMessage(rivendita: any, extra: any, noteLi
   }
 }
 
-export async function scanDocumentWithAI(imageBase64: string): Promise<any> {
+export async function scanDocumentWithAI(imageBase64: string, signal?: AbortSignal): Promise<any> {
   try {
     const response = await fetch('/api/ocr-scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64 })
+      body: JSON.stringify({ imageBase64 }),
+      signal
     });
     if (!response.ok) throw new Error('Errore OCR server');
     return await response.json();
