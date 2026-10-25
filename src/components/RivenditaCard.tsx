@@ -5,7 +5,7 @@ import {
   Calendar, CheckCircle2, X, ClipboardList, Database, 
   Target, Activity, CalendarClock, UserCheck, Edit3, 
   TrendingDown, TrendingUp, Package, Share2, Loader2, Zap, ShoppingBag, MoreVertical, RefreshCw,
-  Camera, ScanText
+  Camera, ScanText, Image as ImageIcon
 } from 'lucide-react';
 import OrderModule from './OrderModule';
 import { SearchResult, RivenditaHistoryEntry, RivenditaExtra, RubricaData, OrderItem } from '../types';
@@ -334,7 +334,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
   const [isScanning, setIsScanning] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [selectedOcrFields, setSelectedOcrFields] = useState<Record<string, boolean>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -380,7 +381,8 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
     } finally {
       setIsScanning(false);
       abortControllerRef.current = null;
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
     }
   };
 
@@ -578,14 +580,23 @@ const RivenditaCard = React.memo<RivenditaCardProps>(({
                   <Share2 className="w-4 h-4" /> Condividi
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                  onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); }}
                   disabled={isScanning}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors disabled:opacity-50"
                 >
                   {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />} 
-                  {isScanning ? 'Scansione in corso...' : 'Scansiona Foto/Doc'}
+                  {isScanning ? 'Scansione...' : 'Scatta Foto (OCR)'}
                 </button>
-                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleScanDocument} />
+                <button
+                  onClick={(e) => { e.stopPropagation(); galleryInputRef.current?.click(); }}
+                  disabled={isScanning}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-teal-600 hover:bg-teal-50 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />} 
+                  {isScanning ? 'Scansione...' : 'Da Galleria (OCR)'}
+                </button>
+                <input type="file" accept="image/*" capture="environment" className="hidden" ref={cameraInputRef} onChange={handleScanDocument} />
+                <input type="file" accept="image/*" className="hidden" ref={galleryInputRef} onChange={handleScanDocument} />
                 <button
                   onClick={() => { setIsMenuOpen(false); toggleSave(res); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-brand-600 hover:bg-brand-50 rounded-xl transition-colors"
