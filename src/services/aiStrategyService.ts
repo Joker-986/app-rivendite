@@ -80,12 +80,12 @@ Genera un "Briefing Mattutino" in 3 sezioni chiare (usa il markdown, grassetti e
 
 Sii conciso, professionale, in italiano. Non spiegare come hai fatto i calcoli, dammi solo l'output tattico.`;
 
-  // 3. CHIAMATA ALLE API DI GEMINI
+  // 3. CHIAMATA ALLE API DI GEMINI / OPENROUTER
   try {
     const response = await fetch('/api/gemini-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, openRouterModel: localStorage.getItem('openRouterModel') || '' })
     });
     
     const data = await response.json();

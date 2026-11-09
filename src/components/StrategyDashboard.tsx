@@ -58,10 +58,13 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     isOpen: boolean;
     mapping: { vendorCol: string; vendorName: string; codeCol: string; targetCol: string; displayCol: string; };
     selectedDate: string;
+    importType?: 'LOGISTA' | 'TARGET';
+    missionId?: string;
   }>({
     rows: [], columns: [], isOpen: false,
     mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' },
-    selectedDate: new Date().toISOString().split('T')[0]
+    selectedDate: new Date().toISOString().split('T')[0],
+    importType: 'LOGISTA'
   });
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,14 +76,44 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet);
+      // Il parametro defval assicura che tutte le intestazioni diventino chiavi dell'oggetto, anche se la cella è vuota
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
 
       if (rows.length > 0) {
         const columns = Object.keys(rows[0]);
         setExcelState(prev => ({
           ...prev, rows, columns, isOpen: true,
           mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' },
-          selectedDate: new Date().toISOString().split('T')[0]
+          selectedDate: new Date().toISOString().split('T')[0],
+          importType: 'LOGISTA'
+        }));
+      }
+    } catch (err) {
+      alert("Errore durante la lettura dell'Excel. Formato non supportato.");
+    }
+    e.target.value = '';
+  };
+
+  const handleExcelUploadTarget = async (e: React.ChangeEvent<HTMLInputElement>, missionId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const XLSX = await import('xlsx');
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      // Il parametro defval assicura che tutte le intestazioni diventino chiavi dell'oggetto, anche se la cella è vuota
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+
+      if (rows.length > 0) {
+        const columns = Object.keys(rows[0]);
+        setExcelState(prev => ({
+          ...prev, rows, columns, isOpen: true,
+          mapping: { vendorCol: '', vendorName: '', codeCol: '', targetCol: '', displayCol: '' },
+          selectedDate: new Date().toISOString().split('T')[0],
+          importType: 'TARGET',
+          missionId
         }));
       }
     } catch (err) {
@@ -90,7 +123,69 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
   };
 
   const processExcelData = () => {
-    const { rows, mapping } = excelState;
+    const { rows, mapping, importType, missionId } = excelState;
+
+    if (importType === 'TARGET') {
+      if (!mapping.vendorCol || !mapping.vendorName || !mapping.codeCol || !mapping.targetCol) {
+        alert("Compila i campi: Venditore, Nome, Codice Logista ed Eleggibilità prima di procedere.");
+        return;
+      }
+
+      let assignedCount = 0;
+      let alreadyAssignedCount = 0;
+
+      rows.forEach((row: any) => {
+        const rowVendor = String(row[mapping.vendorCol] || '').trim().toUpperCase();
+        const targetVendor = mapping.vendorName.trim().toUpperCase();
+
+        if (rowVendor === targetVendor) {
+          const rawTargetVal = row[mapping.targetCol];
+          const isEligible = rawTargetVal === 0 || rawTargetVal === '0';
+
+          if (isEligible) {
+            const excelCode = String(row[mapping.codeCol] || '').trim();
+            if (excelCode) {
+              let matchedId = null;
+              // combinedRivendite contiene sia CRM che Store (compresi i RIP)
+              for (const r of combinedRivendite) {
+                const id = getRivenditaId(r);
+                const rExtra = rubrica[id] || {};
+                
+                // Genera il codice di confronto: SVAPO(numero) per gli Store, Codice Logista per le rivendite
+                const compareCode = r.isStore 
+                  ? `SVAPO(${r.storeNumber || r['Num. Rivendita']})`.toUpperCase() 
+                  : String(rExtra.codiceLogista || '').trim().toUpperCase();
+
+                if (compareCode === excelCode.toUpperCase()) {
+                  matchedId = id;
+                  break;
+                }
+              }
+
+              if (matchedId && missionId) {
+                const currentTargets = rubrica[matchedId].targetIdoneo || [];
+                if (!currentTargets.includes(missionId)) {
+                  handleRubricaUpdate(matchedId, 'targetIdoneo', [...currentTargets, missionId]);
+                  assignedCount++;
+                } else {
+                  alreadyAssignedCount++;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      setExcelState(prev => ({ ...prev, isOpen: false }));
+      
+      openConfirm({
+        title: 'Assegnazione Target Completata',
+        message: `✅ Nuovi target assegnati: ${assignedCount} clienti.\nℹ️ Già assegnati in precedenza (mantenuti): ${alreadyAssignedCount} clienti.`,
+        onConfirm: () => {}
+      });
+      return;
+    }
+
     if (!mapping.vendorCol || !mapping.vendorName || !mapping.codeCol || !mapping.targetCol || !mapping.displayCol) {
       alert("Compila tutti i campi di mappatura prima di procedere.");
       return;
@@ -112,11 +207,16 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
 
           if (excelCode) {
             let matchedId = null;
-            // Match tramite codiceLogista presente in rubrica
+            // Match ibrido tramite codiceLogista (CRM) o SVAPO(numero) (Store)
             for (const r of combinedRivendite) {
               const id = getRivenditaId(r);
-              const rExtra = rubrica[id];
-              if (rExtra && String(rExtra.codiceLogista || '').trim() === excelCode) {
+              const rExtra = rubrica[id] || {};
+              
+              const compareCode = r.isStore 
+                ? `SVAPO(${r.storeNumber || r['Num. Rivendita']})`.toUpperCase() 
+                : String(rExtra.codiceLogista || '').trim().toUpperCase();
+
+              if (compareCode === excelCode.toUpperCase()) {
                 matchedId = id;
                 break;
               }
@@ -287,6 +387,8 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
     .filter(m => m.stato !== 'ARCHIVIATA')
     .sort((a, b) => a.id === 'm1' ? -1 : b.id === 'm1' ? 1 : 0);
   const archivedMissions = missions.filter(m => m.stato === 'ARCHIVIATA');
+
+  const hasOrdinantiOrAttivazione = activeMissions.some(m => m.tipo === 'ORDINANTI' || m.tipo === 'ATTIVAZIONE');
   
   const totalWeight = activeMissions.reduce((acc, m) => acc + m.pesoPercentuale, 0);
   const isWeightValid = totalWeight >= 99 && totalWeight <= 101;
@@ -1424,17 +1526,25 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
                   
                   {/* Badge Motivazionale / Completamento e Azioni Extra */}
                   <div className="flex items-center gap-2">
-                    {(mission.tipo === 'ORDINANTI' || mission.tipo === 'ATTIVAZIONE') && (
-                       <div className="flex items-center gap-1">
-                         <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Importa Ordinanti da Excel">
-                           <Upload className="w-3 h-3" /> EXCEL
-                           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
+                    <div className="flex items-center gap-1">
+                      {mission.id !== 'm1' && mission.tipo !== 'ORDINANTI' && mission.tipo !== 'ATTIVAZIONE' && mission.tipo !== 'FATTURATO' && (
+                         <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Assegna Target da Excel">
+                           <Target className="w-3 h-3" /> TARGET
+                           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleExcelUploadTarget(e, mission.id)} />
                          </label>
-                         <button onClick={(e) => { e.stopPropagation(); handleResetExcelLogista(); }} className="bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-slate-400 p-1.5 rounded-lg transition-colors shadow-sm" title="Rimuovi tutti gli import Logista del mese">
-                           <Trash2 className="w-3 h-3" />
-                         </button>
-                       </div>
-                    )}
+                      )}
+                      {(mission.tipo === 'ORDINANTI' || mission.tipo === 'ATTIVAZIONE' || (mission.id === 'm1' && !hasOrdinantiOrAttivazione)) && (
+                         <>
+                           <label onClick={(e) => e.stopPropagation()} className="cursor-pointer bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-[9px] font-black uppercase px-2 py-1 rounded-lg flex items-center gap-1 transition-colors shadow-sm" title="Importa Dati Logista da Excel">
+                             <Upload className="w-3 h-3" /> EXCEL
+                             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
+                           </label>
+                           <button onClick={(e) => { e.stopPropagation(); handleResetExcelLogista(); }} className="bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-slate-400 p-1.5 rounded-lg transition-colors shadow-sm" title="Rimuovi tutti gli import Logista del mese">
+                             <Trash2 className="w-3 h-3" />
+                           </button>
+                         </>
+                      )}
+                    </div>
                     {(() => {
                       if (mission.tipo === 'FATTURATO' && mission.target > 0) {
                         const ratio = mission.progressoAttuale / mission.target;
@@ -1627,7 +1737,9 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setExcelState(prev => ({ ...prev, isOpen: false }))}>
           <div className="p-5 bg-white rounded-3xl space-y-4 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-3">
-              <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">Mappatura Excel</h4>
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-800">
+                {excelState.importType === 'TARGET' ? 'Assegna Target Missione' : 'Mappatura Excel'}
+              </h4>
               <button onClick={() => setExcelState(prev => ({ ...prev, isOpen: false }))} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
             </div>
             
@@ -1657,33 +1769,49 @@ const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase">3. Colonna Target (Fatturato &gt; 0)</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase">
+                  {excelState.importType === 'TARGET' ? '3. Colonna Eleggibilità (Es: Prime)' : '3. Colonna Target (Fatturato > 0)'}
+                </label>
                 <select value={excelState.mapping.targetCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, targetCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
                   <option value="">Seleziona colonna...</option>
                   {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase">4. Colonna Display (Per i mancanti)</label>
-                <select value={excelState.mapping.displayCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, displayCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
-                  <option value="">Seleziona colonna...</option>
-                  {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+              {excelState.importType !== 'TARGET' && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">4. Colonna Display (Per i mancanti)</label>
+                    <select value={excelState.mapping.displayCol} onChange={e => setExcelState(prev => ({...prev, mapping: {...prev.mapping, displayCol: e.target.value}}))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700">
+                      <option value="">Seleziona colonna...</option>
+                      {excelState.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
 
-              <div className="space-y-1 mt-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Calendar className="w-3 h-3"/> Data Importazione</label>
-                <input 
-                  type="date" 
-                  value={excelState.selectedDate} 
-                  onChange={e => setExcelState(prev => ({...prev, selectedDate: e.target.value}))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700"
-                />
-              </div>
+                  <div className="space-y-1 mt-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Calendar className="w-3 h-3"/> Data Importazione</label>
+                    <input 
+                      type="date" 
+                      value={excelState.selectedDate} 
+                      onChange={e => setExcelState(prev => ({...prev, selectedDate: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-bold text-slate-700"
+                    />
+                  </div>
+                </>
+              )}
 
-              <button onClick={processExcelData} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black text-sm transition-all mt-4 shadow-md">
-                ELABORA E AGGIORNA
+              {excelState.importType === 'TARGET' && (
+                <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl mt-2">
+                  <p className="text-[10px] text-indigo-800 font-bold leading-tight">
+                    <strong className="text-indigo-900 block mb-1">Regola di Assegnazione (Add-Only):</strong>
+                    Se la colonna eleggibilità contiene <strong>0</strong>, il target viene assegnato.<br/>
+                    Se contiene <strong>1</strong> o è vuota, la rivendita viene ignorata (gli storici sono salvi).
+                  </p>
+                </div>
+              )}
+
+              <button onClick={processExcelData} className={`w-full py-4 text-white rounded-2xl font-black text-sm transition-all mt-4 shadow-md ${excelState.importType === 'TARGET' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-brand-600 hover:bg-brand-700'}`}>
+                {excelState.importType === 'TARGET' ? 'ASSEGNA TARGET (0)' : 'ELABORA E AGGIORNA'}
               </button>
             </div>
           </div>

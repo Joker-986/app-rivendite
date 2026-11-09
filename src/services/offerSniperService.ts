@@ -66,12 +66,12 @@ Devi restituire ESATTAMENTE E SOLO un array JSON valido in questo formato, senza
   { "tipo": "Relazionale", "testo": "..." }
 ]`;
 
-  // 3. CHIAMATA ALLE API DI GEMINI
+  // 3. CHIAMATA ALLE API DI GEMINI / OPENROUTER
   try {
     const response = await fetch('/api/gemini-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, openRouterModel: localStorage.getItem('openRouterModel') || '' })
     });
 
     const resData = await response.json();

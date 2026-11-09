@@ -46,7 +46,7 @@ Non usare blocchi markdown \`\`\`json. Solo la stringa JSON. Sii conciso e profe
     const response = await fetch('/api/gemini-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, openRouterModel: localStorage.getItem('openRouterModel') || '' })
     });
 
     const resData = await response.json();

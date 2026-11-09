@@ -810,13 +810,42 @@ app.post('/api/followup', async (req, res) => {
 // --- NUOVA ROTTA AI WAR ROOM: BRIEFING, OFFER SNIPER, ORACOLO ---
 app.post('/api/gemini-chat', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, openRouterModel } = req.body;
     if (!prompt) {
       return res.status(400).json({ error: "Prompt mancante" });
     }
+
+    // TENTATIVO 1: OPENROUTER (Se configurato sia nel client che nel server)
+    if (openRouterModel && process.env.OPENROUTER_API_KEY) {
+      try {
+        console.log(`[AI Copilot] Instradamento a OpenRouter con modello: ${openRouterModel}`);
+        const orResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: openRouterModel,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        
+        const orData = await orResponse.json();
+        if (orData.choices && orData.choices[0] && orData.choices[0].message) {
+          return res.json({ response: orData.choices[0].message.content });
+        } else {
+          console.warn("[AI Copilot] Risposta OpenRouter vuota o in errore. Tento fallback Gemini.", orData);
+        }
+      } catch (orErr) {
+        console.error("[AI Copilot] Errore di rete OpenRouter. Tento fallback Gemini.", orErr);
+      }
+    }
+
+    // TENTATIVO 2: FALLBACK NATIVO GOOGLE GEMINI
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: "GEMINI_API_KEY non configurata." });
+      return res.status(500).json({ error: "API Key AI non configurate sul server." });
     }
 
     const ai = new GoogleGenAI({ 
