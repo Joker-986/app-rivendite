@@ -22,44 +22,97 @@ export const generateTailoredOffers = async (
 
   const nome = rivendita.isStore ? rivendita.storeName : `Rivendita ${rivendita['Num. Rivendita']} (${rivendita.Comune})`;
 
-  const validOrders = (data.history || [])
+  const allOrders = data.history || [];
+  const directOrders = allOrders
     .filter((h: any) => h.tipo === 'ORDINE' && h.isEseguito === true)
     .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  const logistaOrders = allOrders
+    .filter((h: any) => h.tipo === 'ORDINE_LOGISTA')
+    .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
-  let ltv = 0;
+  const ltvDiretto = directOrders.reduce((acc: number, curr: any) => acc + (Number(curr.importo) || 0), 0);
+  const ltvLogista = Number(data.importoLogista) || logistaOrders.reduce((acc: number, curr: any) => acc + (Number(curr.importo) || 0), 0);
+
+  const unifiedOrders = [...directOrders, ...logistaOrders]
+    .sort((a: any, b: any) => new Date(b.data).getTime() - new Date(a.data).getTime());
+
   let lastOrderDays = -1;
-  let noteOrdiniPrecedenti = "Nessuno storico dettagliato";
-
-  if (validOrders.length > 0) {
-    ltv = validOrders.reduce((acc: number, curr: any) => acc + (Number(curr.importo) || 0), 0);
-    const lastOrderDate = new Date(validOrders[0].data).getTime();
-    lastOrderDays = Math.floor((new Date().getTime() - lastOrderDate) / (1000 * 3600 * 24));
-    noteOrdiniPrecedenti = validOrders.slice(0, 3).map((o: any) => o.note || '').join(" | ");
+  if (unifiedOrders.length > 0) {
+    const lastDate = new Date(unifiedOrders[0].data).getTime();
+    lastOrderDays = Math.max(0, Math.floor((new Date().getTime() - lastDate) / (1000 * 3600 * 24)));
   }
 
-  // Comprimiamo le informazioni per risparmiare token
-  const minifiedData = {
-    n: nome,
-    z: data.zona || '',
-    r: lastOrderDays, // giorni dall'ultimo ordine
-    v: ltv, // fatturato totale
-    storico: noteOrdiniPrecedenti.substring(0, 300) // max 300 char
+  // Controllo incrociato ordini diretti: aggregazione acquisti per SKU/prodotto
+  const productConsumptionMap = new Map<string, { nome: string; quantitaTotale: number; ordiniCount: number; ultimaData: string }>();
+
+  directOrders.forEach((order: any) => {
+    (order.items || []).forEach((item: any) => {
+      const key = (item.descrizione || item.codice || '').trim();
+      if (!key) return;
+
+      const current = productConsumptionMap.get(key) || {
+        nome: item.descrizione || item.codice,
+        quantitaTotale: 0,
+        ordiniCount: 0,
+        ultimaData: order.data
+      };
+
+      current.quantitaTotale += Number(item.quantita) || 1;
+      current.ordiniCount += 1;
+      if (new Date(order.data).getTime() > new Date(current.ultimaData).getTime()) {
+        current.ultimaData = order.data;
+      }
+      productConsumptionMap.set(key, current);
+    });
+  });
+
+  const oggi = new Date().getTime();
+  const prodottiAnalizzati = Array.from(productConsumptionMap.values()).map(p => {
+    const giorniDaUltimoAcquisto = Math.max(0, Math.floor((oggi - new Date(p.ultimaData).getTime()) / (1000 * 3600 * 24)));
+    const probabilitaEsaurito = lastOrderDays > 20 || giorniDaUltimoAcquisto > 25;
+    return {
+      prodotto: p.nome,
+      pezziTotaliStorici: p.quantitaTotale,
+      frequenzaAcquisto: `${p.ordiniCount} ordini`,
+      ultimoAcquisto: `${p.ultimaData} (${giorniDaUltimoAcquisto} gg fa)`,
+      statoScortePresunto: probabilitaEsaurito ? 'IN ESAURIMENTO / SCORTE CRITICHE' : 'REGOLARE'
+    };
+  });
+
+  const storicoArticoliRecenti = directOrders.slice(0, 3).map((o: any) => {
+    const carrello = (o.items || []).map((i: any) => `${i.quantita}x ${i.descrizione || i.codice}`).join(', ');
+    return `[${o.data} - €${o.importo}] ${carrello || o.note || 'Ordine registrato'}`;
+  }).join(' | ');
+
+  const storicoLogista = logistaOrders.slice(0, 3).map((o: any) => `[${o.data} - €${o.importo}]`).join(' | ');
+
+  const payload = {
+    insegna: nome,
+    referente: data.riferimento || '',
+    zona: data.zona || '',
+    giorniDallUltimoOrdineGlobale: lastOrderDays,
+    spesaTotaleDiretta: ltvDiretto,
+    spesaTotaleLogista: ltvLogista,
+    analisiConsumiEStimaEsaurimento: prodottiAnalizzati.slice(0, 5),
+    ultimiOrdiniDirettiDettagliati: storicoArticoliRecenti || 'Nessun ordine diretto recente',
+    ultimiOrdiniLogista: storicoLogista || 'Nessun ordine Logista recente'
   };
 
-  // 2. FASE DI PROMPT ENGINEERING (Il Sarto)
-  const prompt = `Sei un venditore B2B spietato ma empatico. Il tuo obiettivo è far riordinare il cliente tramite un messaggio WhatsApp.
-Ecco i dati compressi del cliente: ${JSON.stringify(minifiedData)} 
-Legenda: n=Nome, z=Zona, r=Giorni da ultimo ordine, v=Spesa totale storica, storico=Note degli ultimi 3 ordini.
+  // 2. FASE DI PROMPT ENGINEERING ORIENTATO AL REASONING
+  const prompt = `Sei un consulente commerciale senior B2B esperto nel mercato tabaccherie.
+Analizza con attenzione l'incrocio tra storico ordini diretti, volumi Logista e i consumi per prodotto del cliente:
+${JSON.stringify(payload, null, 2)}
 
-Scrivi 3 proposte di messaggi WhatsApp.
-Regole TASSATIVE:
-- I messaggi devono essere persuasivi, brevi (max 3-4 righe) e includere emoji.
-- Usa un tono colloquiale ma professionale ("Ciao Marco", "Buongiorno"). Usa il nome del cliente se presente o riferimenti alla zona.
-- Variante 1: "Riassortimento Diretto" (Punta al fatto che è passato del tempo dall'ultimo ordine).
-- Variante 2: "Cross-Selling" (Proponi una novità o un prodotto affine basandoti sullo storico se c'è, altrimenti inventa un "nuovo arrivo imperdibile").
-- Variante 3: "Relazionale" (Tono amichevole, scusa per passare a salutarlo e offrigli un supporto dedicato).
+OBIETTIVO:
+Genera 3 messaggi WhatsApp personalizzati, altamente professionali, naturali e privi di formule burocratiche o forzate. Massimo 3-4 righe per messaggio.
 
-Devi restituire ESATTAMENTE E SOLO un array JSON valido in questo formato, senza formattazione markdown (niente \`\`\`json):
+GUIDA DI GENERAZIONE:
+- Se 'referente' è presente, inizia salutando la persona per nome in modo naturale (es. "Ciao Marco,"). Non menzionare il nome della concessionaria o formule come "Gentile Cliente".
+- Variante 1 "Riassortimento Diretto": Fai leva esplicita sul prodotto indicato come 'IN ESAURIMENTO' o più acquistato in 'analisiConsumiEStimaEsaurimento', chiedendo se le scorte sono terminate.
+- Variante 2 "Cross-Selling": Valorizza il profilo del punto vendita (considerando anche i volumi Logista) proponendo un prodotto complementare coerente o un riordino di fascia alta.
+- Variante 3 "Relazionale": Tono cordiale e collaborativo, offrendo supporto diretto per una verifica rapida di persona o telefonica.
+
+Devi restituire ESCLUSIVAMENTE un array JSON valido in questo formato esatto, senza blocchi markdown \`\`\`json:
 [
   { "tipo": "Riassortimento Diretto", "testo": "..." },
   { "tipo": "Cross-Selling", "testo": "..." },

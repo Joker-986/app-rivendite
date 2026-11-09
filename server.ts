@@ -815,7 +815,7 @@ app.post('/api/gemini-chat', async (req, res) => {
       return res.status(400).json({ error: "Prompt mancante" });
     }
 
-    // TENTATIVO 1: OPENROUTER (Se configurato sia nel client che nel server)
+    // TENTATIVO 1: OPENROUTER (Se configurato sia nel client che nel server con supporto Reasoning)
     if (openRouterModel && process.env.OPENROUTER_API_KEY) {
       try {
         console.log(`[AI Copilot] Instradamento a OpenRouter con modello: ${openRouterModel}`);
@@ -823,20 +823,26 @@ app.post('/api/gemini-chat', async (req, res) => {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://tgest.app',
+            'X-Title': 'TgesT AI Copilot'
           },
           body: JSON.stringify({
             model: openRouterModel,
-            messages: [{ role: 'user', content: prompt }]
+            messages: [{ role: 'user', content: prompt }],
+            reasoning: { effort: 'medium' },
+            temperature: 0.4
           })
         });
         
         const orData = await orResponse.json();
         if (orData.choices && orData.choices[0] && orData.choices[0].message) {
-          return res.json({ response: orData.choices[0].message.content });
-        } else {
-          console.warn("[AI Copilot] Risposta OpenRouter vuota o in errore. Tento fallback Gemini.", orData);
+          const content = orData.choices[0].message.content || orData.choices[0].message.reasoning || '';
+          if (content) {
+            return res.json({ response: content });
+          }
         }
+        console.warn("[AI Copilot] Risposta OpenRouter vuota o non valida. Tento fallback Gemini.", orData);
       } catch (orErr) {
         console.error("[AI Copilot] Errore di rete OpenRouter. Tento fallback Gemini.", orErr);
       }
