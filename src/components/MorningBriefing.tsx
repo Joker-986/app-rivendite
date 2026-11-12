@@ -167,8 +167,29 @@ const MorningBriefing: React.FC<MorningBriefingProps> = ({ rubrica, crmAnagrafic
       if (trimmed.startsWith('SKU_ROW:')) {
         const cleanContent = trimmed.replace(/^SKU_ROW:\s*/, '');
         const parts = cleanContent.split('|').map(p => p.trim());
+        let rawName = parts[0] || '';
+
+        // Pulizia deterministica: rimuove dal nome prodotto eventuali prefissi ridondanti già presenti nella categoria
+        if (currentCategory && rawName) {
+          const catClean = currentCategory.replace(/[\[\]]/g, '').trim();
+          const catWords = catClean.toUpperCase().split(/\s+/).filter(Boolean);
+          const nameWords = rawName.split(/\s+/);
+
+          // Rimuove le parole iniziali del nome prodotto se appartengono al set di parole della categoria (es. "ESSENTIAL 2 STARTER KIT" vs "STARTER KIT ESSENTIAL 2")
+          let cutIndex = 0;
+          while (
+            cutIndex < nameWords.length - 1 &&
+            catWords.includes(nameWords[cutIndex].toUpperCase())
+          ) {
+            cutIndex++;
+          }
+          if (cutIndex > 0) {
+            rawName = nameWords.slice(cutIndex).join(' ').replace(/^[-–:]+\s*/, '').trim();
+          }
+        }
+
         currentSkus.push({
-          name: parts[0] || '',
+          name: rawName,
           qta: parts[1] || '',
           motivo: parts[2] || ''
         });

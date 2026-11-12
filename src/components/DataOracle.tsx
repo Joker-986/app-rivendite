@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Sparkles, Loader2, MapPin, Store, History, Trash2, Bot, User } from 'lucide-react';
-import { RubricaData, SearchResult } from '../types';
+import { Search, Sparkles, Loader2, MapPin, Store, History, Trash2, Bot, User, RefreshCw, Download } from 'lucide-react';
+import { RubricaData, SearchResult, Product } from '../types';
 import { getRivenditaId } from '../utils/helpers';
-import { executeOracleQuery } from '../services/oracleService';
+import { executeOracleQuery, syncSecondBrain } from '../services/oracleService';
 
 interface DataOracleProps {
   rubrica: RubricaData;
   crmAnagrafiche: SearchResult[];
   stores: SearchResult[];
+  prodotti: Product[];
 }
 
 interface UIMessage {
@@ -17,7 +18,7 @@ interface UIMessage {
   results?: SearchResult[] | null;
 }
 
-const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores }) => {
+const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores, prodotti }) => {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,26 +29,45 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
+
+  const handleSyncKB = async () => {
+    if (syncProgress !== null) return;
+    setSyncProgress(0);
+    try {
+      const combined = [...crmAnagrafiche, ...stores];
+      await syncSecondBrain(rubrica, combined, prodotti, (p) => setSyncProgress(p));
+      await new Promise(r => setTimeout(r, 800)); // Breve pausa visiva a completamento avvenuto
+      setSyncProgress(null);
+    } catch (err: any) {
+      console.error("Errore sincronizzazione KB", err);
+      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+        alert("Spazio di archiviazione esaurito. Libera spazio sul dispositivo o disabilita la navigazione in incognito/privata.");
+      } else {
+        alert("Errore durante il salvataggio della Knowledge Base su IndexedDB.");
+      }
+      setSyncProgress(null);
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || isLoading) return;
+    if (!query.trim() || isLoading || syncProgress !== null) return;
     
     const userText = query.trim();
-    setQuery(''); // Pulisce l'input
+    setQuery('');
     
-    // Aggiunge il messaggio dell'utente alla UI
     const newUserMsg: UIMessage = { id: Date.now().toString(), role: 'user', content: userText };
     setMessages(prev => [...prev, newUserMsg]);
     setIsLoading(true);
     
     try {
       const combined = [...crmAnagrafiche, ...stores];
-      // Prepara lo storico per il servizio logico (escludendo i risultati per risparmiare spazio)
       const historyForService = messages.map(m => ({ role: m.role, content: m.content }));
+      const activeModel = localStorage.getItem('openRouterModel') || '';
       
-      const result = await executeOracleQuery(userText, historyForService, rubrica, combined);
+      const result = await executeOracleQuery(userText, historyForService, combined, activeModel);
       
-      // Aggiunge la risposta dell'AI alla UI
       const newAiMsg: UIMessage = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
@@ -79,27 +99,93 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
     }
   };
 
+  const handleExportChat = () => {
+    if (messages.length === 0) return;
+    
+    let chatText = "=== EXPORT CHAT ORACOLO (TgesT) ===\n";
+    chatText += `Data: ${new Date().toLocaleString('it-IT')}\n\n`;
+    
+    messages.forEach(msg => {
+      const roleName = msg.role === 'user' ? 'TU' : 'ORACOLO';
+      chatText += `[${roleName}]\n${msg.content}\n\n`;
+      
+      if (msg.results && msg.results.length > 0) {
+        chatText += `>> Clienti menzionati/suggeriti:\n`;
+        msg.results.forEach(res => {
+           const nome = res.isStore ? res.storeName : `Rivendita ${res['Num. Rivendita']}`;
+           chatText += `   - ${nome} (${res.Comune})\n`;
+        });
+        chatText += `\n`;
+      }
+      chatText += `----------------------------------------\n\n`;
+    });
+
+    const blob = new Blob([chatText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const safeDate = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+    link.href = url;
+    link.download = `tgest_chat_oracolo_${safeDate}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 relative animate-in fade-in zoom-in-95 duration-300">
       
-      {/* HEADER DELLA CHAT */}
-      <div className="flex items-center justify-between p-3 bg-white border-b border-slate-200 shadow-sm z-10 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-             <Bot className="w-5 h-5 text-indigo-600" />
+      {/* HEADER DELLA CHAT E SYNC */}
+      <div className="flex flex-col bg-white border-b border-slate-200 shadow-sm z-10 shrink-0">
+        <div className="flex items-center justify-between p-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+               <Bot className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest truncate">Second Brain</h3>
+              <p className="text-[10px] font-bold text-slate-400 truncate">Knowledge Base Locale</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Oracolo AI</h3>
-            <p className="text-[10px] font-bold text-slate-400">Memoria contestuale attiva</p>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleSyncKB}
+              disabled={syncProgress !== null}
+              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncProgress !== null ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{syncProgress !== null ? 'Sincronizzo...' : 'Aggiorna KB'}</span>
+            </button>
+            <button
+              onClick={handleExportChat}
+              disabled={messages.length === 0}
+              title="Esporta Chat"
+              aria-label="Esporta chat"
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={clearChat}
+              disabled={messages.length === 0}
+              title="Azzera Chat"
+              aria-label="Azzera chat"
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
-        <button 
-          onClick={clearChat}
-          disabled={messages.length === 0}
-          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {/* PROGRESS BAR SINCRONIZZAZIONE */}
+        {syncProgress !== null && (
+          <div className="w-full h-1 bg-slate-100">
+            <div 
+              className="h-full bg-indigo-500 transition-all duration-200 ease-out"
+              style={{ width: `${syncProgress}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* AREA MESSAGGI (STORICO CHAT) */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Target, Search, Coffee, Settings2, X, Trash2, Plus } from 'lucide-react';
 import { RubricaData, SearchResult } from '../types';
+import { useProducts } from '../contexts/ProductContext';
 import MorningBriefing from './MorningBriefing';
 import OfferSniper from './OfferSniper';
 import DataOracle from './DataOracle';
@@ -12,6 +13,7 @@ interface AiWarRoomTabProps {
 }
 
 const AiWarRoomTab: React.FC<AiWarRoomTabProps> = ({ rubrica, crmAnagrafiche, stores }) => {
+  const { products } = useProducts();
   const [activeModule, setActiveModule] = useState<'briefing' | 'sniper' | 'oracle'>('briefing');
   
   const DEFAULT_MODEL = 'openrouter/free';
@@ -170,7 +172,7 @@ const AiWarRoomTab: React.FC<AiWarRoomTabProps> = ({ rubrica, crmAnagrafiche, st
 
         {activeModule === 'oracle' && (
           <div className="h-full">
-            <DataOracle rubrica={rubrica} crmAnagrafiche={crmAnagrafiche} stores={stores} />
+            <DataOracle rubrica={rubrica} crmAnagrafiche={crmAnagrafiche} stores={stores} prodotti={products} />
           </div>
         )}
 

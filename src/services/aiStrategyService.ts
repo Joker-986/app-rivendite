@@ -343,7 +343,7 @@ Due frasi secche: fatturato reale vs potenziale mensile e totale valore bloccato
 
 REGOLE TASSATIVE SUL RAGGRUPPAMENTO E SULLE QUANTITÀ:
 - Raggruppa SEMPRE gli articoli consigliati sotto la rispettiva macro-categoria usando il prefisso 'CAT_GROUP: ' una sola volta per gruppo.
-- Sotto ciascun 'CAT_GROUP:', elenca i singoli prodotti con il prefisso 'SKU_ROW: ' seguito dai 3 campi separati da barra verticale (|): Nome Prodotto | Quantità con sigla ST o PZ | Motivo sintetico.
+- Sotto ciascun 'CAT_GROUP:', elenca i singoli prodotti con il prefisso 'SKU_ROW: ' seguito dai 3 campi separati da barra verticale (|): Nome Prodotto (solo gusto/variante, OMETTENDO il nome della categoria già scritta in CAT_GROUP) | Quantità con sigla ST o PZ | Motivo sintetico.
 - Usa SOLO le sigle 'ST' (per Stecche) e 'PZ' (per Pezzi), mai le parole per esteso.
 - È SEVERAMENTE VIETATO includere 'Note di Credito', storni o importi negativi.
 - Usa SOLO quantità realistiche coerenti con la media per ordine del paniere.
