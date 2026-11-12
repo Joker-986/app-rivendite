@@ -45,7 +45,7 @@ const AiWarRoomTab: React.FC<AiWarRoomTabProps> = ({ rubrica, crmAnagrafiche, st
   };
 
   const handleDeleteModel = () => {
-    if (openRouterModel === DEFAULT_MODEL) return;
+    if (!openRouterModel || openRouterModel === DEFAULT_MODEL) return;
     const newModels = savedModels.filter(m => m !== openRouterModel);
     setSavedModels(newModels);
     localStorage.setItem('openRouterSavedModels', JSON.stringify(newModels));
@@ -82,19 +82,20 @@ const AiWarRoomTab: React.FC<AiWarRoomTabProps> = ({ rubrica, crmAnagrafiche, st
             </div>
             
             {/* Selettore e Cestino */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <select 
                 value={openRouterModel}
                 onChange={(e) => handleModelChange(e.target.value)}
-                className="flex-1 h-9 px-3 bg-white border border-indigo-200 rounded-lg outline-none text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-400 shadow-sm"
+                className="flex-1 min-w-0 h-9 px-2 bg-white border border-indigo-200 rounded-lg outline-none text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-400 shadow-sm truncate"
               >
+                <option value="">🤖 Usa Google Gemini (Nativo)</option>
                 {savedModels.map(model => (
                   <option key={model} value={model}>{model}</option>
                 ))}
               </select>
               <button 
                 onClick={handleDeleteModel}
-                disabled={openRouterModel === DEFAULT_MODEL || savedModels.length <= 1}
+                disabled={!openRouterModel || openRouterModel === DEFAULT_MODEL || savedModels.length <= 1}
                 className="w-9 h-9 flex items-center justify-center bg-white border border-red-200 text-red-500 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors shadow-sm shrink-0"
                 title="Elimina Modello Selezionato"
               >
@@ -103,13 +104,13 @@ const AiWarRoomTab: React.FC<AiWarRoomTabProps> = ({ rubrica, crmAnagrafiche, st
             </div>
 
             {/* Aggiunta Nuovo Modello */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <input 
                 type="text" 
                 value={newModelInput}
                 onChange={(e) => setNewModelInput(e.target.value)}
                 placeholder="Nuovo modello (es. mistralai/mistral...)"
-                className="flex-1 h-9 px-3 bg-white border border-indigo-200 rounded-lg outline-none text-[11px] font-medium text-slate-700 focus:ring-2 focus:ring-indigo-400 shadow-sm"
+                className="flex-1 min-w-0 h-9 px-3 bg-white border border-indigo-200 rounded-lg outline-none text-[11px] font-medium text-slate-700 focus:ring-2 focus:ring-indigo-400 shadow-sm truncate"
               />
               <button 
                 onClick={handleAddModel}

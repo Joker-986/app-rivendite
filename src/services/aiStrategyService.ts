@@ -1,11 +1,44 @@
-import { RubricaData, SearchResult } from '../types';
+import { RubricaData, SearchResult, Product } from '../types';
 import { getRivenditaId } from '../utils/helpers';
 
 
 export const generateMorningBriefing = async (
   rubrica: RubricaData, 
-  anagrafiche: SearchResult[]
-): Promise<string> => {
+  anagrafiche: SearchResult[],
+  catalogProducts?: Product[]
+): Promise<{ testo: string, idSuggeriti: string[] }> => {
+  // Catalogo magazzino con fallback headless su localStorage
+  let warehouseCatalog: Product[] = [];
+  if (catalogProducts && catalogProducts.length > 0) {
+    warehouseCatalog = catalogProducts;
+  } else {
+    try {
+      const rawCat = localStorage.getItem('tgest_magazzino');
+      if (rawCat) warehouseCatalog = JSON.parse(rawCat);
+    } catch {
+      warehouseCatalog = [];
+    }
+  }
+
+  // Lookup rapido prodotti da magazzino per codice o descrizione normalizzata
+  const productCatalogMap = new Map<string, Product>();
+  warehouseCatalog.forEach(p => {
+    if (p.codice) productCatalogMap.set(p.codice.trim().toUpperCase(), p);
+    if (p.descrizione) productCatalogMap.set(p.descrizione.trim().toUpperCase(), p);
+  });
+
+  const getProductInfo = (identifier: string): { unit: string, price: number, cat: string } => {
+    const cleanId = (identifier || '').trim().toUpperCase();
+    const found = productCatalogMap.get(cleanId);
+    if (found) {
+      return {
+        unit: found.unita === 'Stecche' ? 'ST' : 'PZ',
+        price: Number(found.prezzoUnita) || 0,
+        cat: (found.categoria || '').trim().toUpperCase()
+      };
+    }
+    return { unit: 'PZ', price: 0, cat: '' };
+  };
   
   // 1. ELABORAZIONE CLUSTER SECONDO LA LOGICA MASTER (REALI, MANCANTI, FANTASMI)
   const anagraficheMap = new Map();
@@ -64,9 +97,17 @@ export const generateMorningBriefing = async (
     return { stimaMensile, currentMonthTotal, orderedCurrentMonth };
   };
 
+  // Lettura blacklist Snooze
+  const rawSnooze = localStorage.getItem('tgest_briefing_snooze');
+  const snoozedClients = rawSnooze ? JSON.parse(rawSnooze) : {};
+  const now = new Date().getTime();
+
   const processedClients: any[] = [];
 
   Object.entries(rubrica).forEach(([id, extra]: [string, any]) => {
+    // Esclude clienti silenziati
+    if (snoozedClients[id] && snoozedClients[id] > now) return;
+
     const riv = anagraficheMap.get(id);
     if (!riv) return;
 
@@ -97,10 +138,116 @@ export const generateMorningBriefing = async (
 
     const nome = riv.isStore ? riv.storeName : `${riv.Comune || 'Sconosciuto'} (Riv. ${riv['Num. Rivendita'] || ''})`;
 
-    const directWithItems = crOrders.slice(0, 2).map((o: any) => {
-      const items = (o.items || []).map((i: any) => `${i.quantita}x ${i.descrizione || i.codice}`).join(', ');
-      return items ? `${o.data}: ${items}` : '';
-    }).filter(Boolean).join(' | ');
+    // ANALISI INTEGRALE PANIERE: Ultimi 3 ordini diretti senza tagli sul numero di referenze
+    const ultimi3OrdiniCR = crOrders.slice(0, 3);
+    const ultimoOrdineCR = ultimi3OrdiniCR[0] || null;
+    const ultimoOrdineCRTime = ultimoOrdineCR ? new Date(ultimoOrdineCR.data).getTime() : 0;
+
+    const skuPaniereMap = new Map<string, {
+      desc: string,
+      cat: string,
+      unit: string,
+      price: number,
+      presenzeSu3: number,
+      qtaTotale3Ordini: number,
+      qtaUltimoOrdine: number,
+      presenteNellUltimoOrdine: boolean,
+      lastDate: number
+    }>();
+
+    ultimi3OrdiniCR.forEach((o: any, orderIndex: number) => {
+      const orderTime = new Date(o.data).getTime();
+      (o.items || []).forEach((i: any) => {
+        const descUpper = (i.descrizione || '').toUpperCase();
+        // Esclusione righe contabili o amministrative (non sono prodotti di vendita)
+        if (
+          descUpper.includes('NOTA DI CREDITO') ||
+          descUpper.includes('STORNO') ||
+          descUpper.includes('ACCREDITO') ||
+          descUpper.includes('RESO') ||
+          (Number(i.prezzoUnitario) < 0) ||
+          (Number(i.quantita) < 0)
+        ) {
+          return;
+        }
+
+        const key = (i.descrizione || i.codice || '').trim();
+        if (!key) return;
+
+        const qta = Number(i.quantita) || 1;
+        const catalogInfo = getProductInfo(i.codice || i.descrizione);
+        const cat = catalogInfo.cat || (i.reparto || i.categoria || i.famiglia || i.tipo || '').toUpperCase();
+        const unit = catalogInfo.unit;
+        const price = catalogInfo.price || Number(i.prezzoUnitario) || 0;
+
+        if (skuPaniereMap.has(key)) {
+          const curr = skuPaniereMap.get(key)!;
+          curr.presenzeSu3 += 1;
+          curr.qtaTotale3Ordini += qta;
+          if (orderIndex === 0) {
+            curr.presenteNellUltimoOrdine = true;
+            curr.qtaUltimoOrdine = qta;
+          }
+          if (orderTime > curr.lastDate) curr.lastDate = orderTime;
+        } else {
+          skuPaniereMap.set(key, {
+            desc: i.descrizione || key,
+            cat,
+            unit,
+            price,
+            presenzeSu3: 1,
+            qtaTotale3Ordini: qta,
+            qtaUltimoOrdine: orderIndex === 0 ? qta : 0,
+            presenteNellUltimoOrdine: orderIndex === 0,
+            lastDate: orderTime
+          });
+        }
+      });
+    });
+
+    // Passiamo TUTTI gli SKU distinti degli ultimi 3 ordini senza limitazioni numeriche
+    const paniereRecente = Array.from(skuPaniereMap.values())
+      .sort((a, b) => b.presenzeSu3 - a.presenzeSu3 || b.qtaTotale3Ordini - a.qtaTotale3Ordini)
+      .map(p => {
+        const ggDaUltimo = Math.max(0, Math.floor((realToday.getTime() - p.lastDate) / (1000 * 3600 * 24)));
+        const catTag = p.cat ? `[${p.cat}] ` : '';
+        const mediaCiclo = Math.max(1, Math.round(p.qtaTotale3Ordini / p.presenzeSu3));
+        const statoUltimo = p.presenteNellUltimoOrdine 
+          ? `Preso ultimo ordine: ${p.qtaUltimoOrdine} ${p.unit} (${ggDaUltimo} gg fa)` 
+          : `ASSENTE ultimo ordine (preso ${ggDaUltimo} gg fa -> probabile stock-out)`;
+        return `${catTag}${p.desc} -> Freq: ${p.presenzeSu3}/${ultimi3OrdiniCR.length} ordini | Media: ${mediaCiclo} ${p.unit}/ordine | ${statoUltimo}`;
+      }).join(' | ');
+
+    // CONTROLLO TAMPONE LOGISTA: verifica ordini extra autonomi rispetto al canale diretto
+    let logistaRefillDeducibile = 'Nessun ordine Logista extra rilevato';
+    if (logistaOrders.length > 0) {
+      const lastLogista = logistaOrders[0];
+      const importoLogista = parseFloat(String(lastLogista.importo)) || 0;
+      const logistaTime = new Date(lastLogista.data).getTime();
+      const ggFaLogista = Math.max(0, Math.floor((realToday.getTime() - logistaTime) / (1000 * 3600 * 24)));
+
+      const isPosterioreADiretto = logistaTime > ultimoOrdineCRTime;
+      const timingNota = isPosterioreADiretto 
+        ? `Effettuato ${ggFaLogista} gg fa (DOPO l'ultimo ordine diretto)` 
+        : `Effettuato ${ggFaLogista} gg fa (precedente all'ultimo ordine diretto)`;
+
+      const deduzioniLogista: string[] = [];
+      const abituali = Array.from(skuPaniereMap.values()).filter(p => p.price > 0);
+
+      abituali.forEach(p => {
+        const ratio = importoLogista / p.price;
+        const roundRatio = Math.round(ratio);
+        if (roundRatio >= 1 && Math.abs(ratio - roundRatio) < 0.05) {
+          deduzioniLogista.push(`${roundRatio} ${p.unit} di ${p.desc}`);
+        }
+      });
+
+      const stimaDettaglio = deduzioniLogista.length > 0
+        ? `Importo pari al valore esatto di listino per: ${deduzioniLogista.slice(0, 2).join(' oppure ')}.`
+        : `Importo tampone non riconducibile a un singolo articolo abituale.`;
+
+      logistaRefillDeducibile = `Ultimo ordine €${importoLogista.toFixed(2)} (${timingNota}). ${stimaDettaglio}`;
+    }
 
     processedClients.push({
       nome,
@@ -113,7 +260,8 @@ export const generateMorningBriefing = async (
       frequenzaMediaGiorni: frequenzaGG,
       totaleSpesoStorico: totalSpeso,
       ordinatoQuestoMese: orderedCurrentMonth,
-      ultimiArticoliDiretti: directWithItems || 'N/D'
+      profiloConsumiStorico: paniereRecente || 'Nessun acquisto diretto registrato',
+      ultimoLogistaTampone: logistaRefillDeducibile
     });
   });
 
@@ -133,8 +281,8 @@ export const generateMorningBriefing = async (
   const fattoMeseTotale = processedClients.reduce((acc, c) => acc + c.fattoMeseCorrente, 0);
   const potenzialeMancante = mancanti.reduce((acc, c) => acc + c.stimaMensile, 0);
 
-  const topMancanti = mancanti.slice(0, 10);
-  const topFantasmiDaRecuperare = fantasmi.slice(0, 5);
+  const topMancanti = mancanti.slice(0, 5);
+  const topFantasmiDaRecuperare = fantasmi.slice(0, 1);
 
   const briefingPayload = {
     quadroGeneraleMese: {
@@ -149,27 +297,73 @@ export const generateMorningBriefing = async (
     fantasmiAltoValoreDaRecuperare: topFantasmiDaRecuperare
   };
 
-  // 2. PROMPT ESCLUSIVAMENTE DIRETTO ED ESECUTIVO (NO TESTI MACCHINOSI)
-  const prompt = `Sei il Direttore Vendite di una rete commerciale B2B. Parla direttamente all'agente in modo energico, asciutto e concreto. Zero formalismi, niente frasi ovvie o robotiche.
+  // Mappatura ID per la tendina Snooze
+  const idSuggeriti = [
+    ...topMancanti.map(c => {
+      const a = anagrafiche.find(a => (a.isStore ? a.storeName : `${a.Comune || 'Sconosciuto'} (Riv. ${a['Num. Rivendita'] || ''})`) === c.nome);
+      return a ? String(getRivenditaId(a)) : null;
+    }),
+    ...topFantasmiDaRecuperare.map(c => {
+      const a = anagrafiche.find(a => (a.isStore ? a.storeName : `${a.Comune || 'Sconosciuto'} (Riv. ${a['Num. Rivendita'] || ''})`) === c.nome);
+      return a ? String(getRivenditaId(a)) : null;
+    })
+  ].filter(Boolean) as string[];
 
-QUADRO MASTER CONSOLIDATO (DIRETTO + LOGISTA):
+  // 2. PROMPT OPERATIVO STRATEGICO (LAYOUT VERTICALE AD ALTA SCANSIONABILITÀ)
+  const prompt = `Sei il Direttore Vendite di una rete commerciale B2B. Fornisci un briefing analitico ed esecutivo per l'agente. Tono professionale, asciutto, verticale e schematico.
+
+DATI OPERATIVI (DIRETTO + LOGISTA):
 ${JSON.stringify(briefingPayload, null, 2)}
 
-Scrivi il Briefing Mattutino usando questo schema compatto:
+REGOLE DI FORMATTAZIONE TASSATIVE:
+- Usa il grassetto (**) ESCLUSIVAMENTE per i titoli di sezione e per le insegne dei clienti (es. **NAPOLI (Riv. 153)**).
+- NON inserire troppe informazioni sulla stessa riga. Separa sempre il nome del prodotto dalle quantità e dalle motivazioni andando a capo con un rientro (-).
+- È VIETATO generare testi virgolettati, simulazioni di saluti o bozze di messaggi chat: solo istruzioni operative per la chiamata vocale.
+- Separa SEMPRE ciascun blocco cliente con un doppio a capo per garantire respiro visivo.
+
+Segui rigorosamente questa struttura visuale:
 
 📊 **SITREP VELOCE**
-In 2 frasi: fatturato reale vs obiettivo potenziale del mese e quanto cassetto economico è bloccato nei clienti mancanti.
+Due frasi secche: fatturato reale vs potenziale mensile e totale valore bloccato nei mancanti.
 
-🎯 **PRIORITÀ D'ATTACCO (Top 3 Mancanti)**
-Per ciascuno dei 3 clienti con stima più alta non ancora ordinati:
-- **Insegna** (Referente se noto): Stima €X, ferma da Y giorni.
-- *Azione immediata*: Cosa proporgli al telefono (cita gli ultimi prodotti acquistati o la leva Logista).
+🎯 **PRIORITÀ D'ATTACCO (Top 5 Mancanti)**
+
+1. **Insegna Cliente**
+   Referente: Nome (se noto, altrimenti "Non indicato") | Stima: €X | Fermo da: Y giorni
+   Diagnosi: 1 sola frase su ciclo di riordino e se l'ordine Logista ha costituito un tampone recente tra l'ultimo diretto e oggi.
+   Paniere di Riassortimento Consigliato:
+   CAT_GROUP: NOME MACRO CATEGORIA
+   SKU_ROW: Nome Prodotto Completo | X ST (oppure X PZ) | Motivo sintetico
+   SKU_ROW: Nome Prodotto Completo | X ST (oppure X PZ) | Motivo sintetico
+   CAT_GROUP: SECONDA MACRO CATEGORIA
+   SKU_ROW: Nome Prodotto Completo | X ST (oppure X PZ) | Motivo sintetico
+   Gancio Telefonico: Una sola frase con l'argomento chiave per proporre a voce il riassortimento completo.
+
+(Ripeti la stessa identica struttura verticale per gli altri 4 clienti mancanti, separando ciascuno con un doppio a capo)
+
+REGOLE TASSATIVE SUL RAGGRUPPAMENTO E SULLE QUANTITÀ:
+- Raggruppa SEMPRE gli articoli consigliati sotto la rispettiva macro-categoria usando il prefisso 'CAT_GROUP: ' una sola volta per gruppo.
+- Sotto ciascun 'CAT_GROUP:', elenca i singoli prodotti con il prefisso 'SKU_ROW: ' seguito dai 3 campi separati da barra verticale (|): Nome Prodotto | Quantità con sigla ST o PZ | Motivo sintetico.
+- Usa SOLO le sigle 'ST' (per Stecche) e 'PZ' (per Pezzi), mai le parole per esteso.
+- È SEVERAMENTE VIETATO includere 'Note di Credito', storni o importi negativi.
+- Usa SOLO quantità realistiche coerenti con la media per ordine del paniere.
+
+REGOLE ANALITICHE SUL PANIERE:
+- Analizza liberamente tutto l'elenco di prodotti presenti in 'profiloConsumiStorico' (che riflette gli ultimi 3 ordini reali).
+- Proponi tutti gli articoli che ritieni strategicamente rilevanti per comporre un ordine bilanciato (senza limitarti a 2 o 3 gusti se il cliente acquista un assortimento ampio), rispettando sempre le quantità medie del singolo riordino.
 
 👻 **RECUPERO DORMIENTI**
-1 solo cliente dal gruppo Fantasmi con spesa storica rilevante: una mossa secca per riaprire il contatto oggi.
+
+**Insegna Cliente**
+Referente: Nome | Spesa Storica: €X | Ultimo Ordine: Y giorni fa
+Articolo Storico:
+• [CATEGORIA] Nome Prodotto Storico
+  - Quantità Consigliata: X stecche / pz
+  - Motivo: Prodotto con maggior volume nel suo storico
+Gancio Telefonico: Una sola frase con la leva commerciale per riaprire il canale oggi.
 
 ⚡ **FOCUS DI OGGI**
-Un ordine di servizio netto di una sola riga su cosa fare entro stasera.`;
+Direttiva prioritaria di una sola riga su cosa portare a casa entro stasera.`;
 
   // 3. CHIAMATA ALLE API DI GEMINI / OPENROUTER
   try {
@@ -183,10 +377,11 @@ Un ordine di servizio netto di una sola riga su cosa fare entro stasera.`;
     
     if (!response.ok) throw new Error(data.error || 'Errore API Gemini');
     
-    return data.response;
+    return { testo: data.response, idSuggeriti };
   } catch (err) {
     console.error("Errore Generazione Briefing:", err);
     // Fallback Mock per testare l'UI se l'API non è ancora collegata
-    return `⚠️ **SISTEMA DI BACKUP ATTIVO (API NON COLLEGATA)**\n\nHo identificato **${topMancanti.length} clienti prioritari mancanti** per un potenziale di €${Math.round(potenzialeMancante).toLocaleString('it-IT')}.\n\n🎯 **Bersagli Prioritari:**\n1. **${topMancanti[0]?.nome || 'Nessuno'}** (${topMancanti[0]?.referente || 'Senza referente'}): Stima €${Math.round(topMancanti[0]?.stimaMensile || 0)} (ritardo ${topMancanti[0]?.giorniDallUltimoOrdine || 0} gg).\n2. **${topMancanti[1]?.nome || 'N/A'}**: Stima €${Math.round(topMancanti[1]?.stimaMensile || 0)}.\n\n*Connetti l'endpoint API reale per l'analisi LLM avanzata.*`;
+    const fallbackTesto = `⚠️ **SISTEMA DI BACKUP ATTIVO (API NON COLLEGATA)**\n\nHo identificato **${topMancanti.length} clienti prioritari mancanti** per un potenziale di €${Math.round(potenzialeMancante).toLocaleString('it-IT')}.\n\n🎯 **Bersagli Prioritari:**\n1. **${topMancanti[0]?.nome || 'Nessuno'}** (${topMancanti[0]?.referente || 'Senza referente'}): Stima €${Math.round(topMancanti[0]?.stimaMensile || 0)} (ritardo ${topMancanti[0]?.giorniDallUltimoOrdine || 0} gg).\n\n2. **${topMancanti[1]?.nome || 'N/A'}**: Stima €${Math.round(topMancanti[1]?.stimaMensile || 0)}.\n\n*Connetti l'endpoint API reale per l'analisi LLM avanzata.*`;
+    return { testo: fallbackTesto, idSuggeriti };
   }
 };
