@@ -776,7 +776,7 @@ app.post('/api/followup', async (req, res) => {
     let responseText = '';
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+        model: "gemini-4-hydrogen",
         contents: finalPrompt,
         config: {
           systemInstruction: systemInstructions
@@ -864,7 +864,7 @@ app.post('/api/gemini-chat', async (req, res) => {
     let chatResponseText = '';
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+        model: "gemini-4-hydrogen",
         contents: prompt,
       });
       chatResponseText = response.text || '';

@@ -152,7 +152,8 @@ export const generateMorningBriefing = async (
       qtaTotale3Ordini: number,
       qtaUltimoOrdine: number,
       presenteNellUltimoOrdine: boolean,
-      lastDate: number
+      lastDate: number,
+      lastSeenOrderIndex: number
     }>();
 
     ultimi3OrdiniCR.forEach((o: any, orderIndex: number) => {
@@ -182,11 +183,14 @@ export const generateMorningBriefing = async (
 
         if (skuPaniereMap.has(key)) {
           const curr = skuPaniereMap.get(key)!;
-          curr.presenzeSu3 += 1;
+          if (curr.lastSeenOrderIndex !== orderIndex) {
+            curr.presenzeSu3 += 1;
+            curr.lastSeenOrderIndex = orderIndex;
+          }
           curr.qtaTotale3Ordini += qta;
           if (orderIndex === 0) {
             curr.presenteNellUltimoOrdine = true;
-            curr.qtaUltimoOrdine = qta;
+            curr.qtaUltimoOrdine += qta;
           }
           if (orderTime > curr.lastDate) curr.lastDate = orderTime;
         } else {
@@ -199,7 +203,8 @@ export const generateMorningBriefing = async (
             qtaTotale3Ordini: qta,
             qtaUltimoOrdine: orderIndex === 0 ? qta : 0,
             presenteNellUltimoOrdine: orderIndex === 0,
-            lastDate: orderTime
+            lastDate: orderTime,
+            lastSeenOrderIndex: orderIndex
           });
         }
       });

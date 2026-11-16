@@ -125,7 +125,9 @@ export const executeOracleQuery = async (
   query: string,
   history: ChatMessage[],
   anagrafiche: SearchResult[],
-  openRouterModel: string
+  openRouterModel: string,
+  rubrica: RubricaData,
+  selectedClientId?: string
 ): Promise<OracleResult> => {
   
   const historyText = history.map(msg => `${msg.role === 'user' ? 'Utente' : 'Oracolo'}: ${msg.content}`).join('\n');
@@ -141,9 +143,42 @@ export const executeOracleQuery = async (
     }
   }
 
-  const kbContext = kbData 
-    ? Object.values(kbData).join('\n') + '\n\n<NOMI_RIVENDITE_CRM>\n' + JSON.stringify(idToDisplayName) + '\n</NOMI_RIVENDITE_CRM>'
-    : 'Nessun dato locale sincronizzato.';
+  let kbContext = '';
+  if (selectedClientId && selectedClientId !== '') {
+    // APPROCCIO FOCALIZZATO: Deep Dossier in tempo reale dal vivo (bypass DB locale)
+    const cliente = anagrafiche.find(a => getRivenditaId(a) === selectedClientId);
+    const extra = rubrica[selectedClientId];
+    if (cliente && extra) {
+      const nome = cliente.isStore ? cliente.storeName : `${cliente.Comune} ${cliente['Num. Rivendita']}`;
+      let dossier = `[FOCUS CLIENTE SELEZIONATO: ${nome}]\n`;
+      dossier += `Indirizzo: ${cliente.Indirizzo} | Zona: ${extra.zona || 'N/D'} | Riferimento: ${extra.riferimento || 'N/D'} | Tel: ${extra.telefono || 'N/D'}\n`;
+      dossier += `Stato: ${extra.stato} | Giorno Levata: ${extra.giornoLevata || 'N/D'} | Target Mese: €${extra.targetMese || 0}\n`;
+      dossier += `Note Operative: ${extra.note || 'Nessuna'}\n\n`;
+      
+      dossier += `[STORICO ORDINI DETTAGLIATO]\n`;
+      const ordini = (extra.history || []).filter(h => h.tipo === 'ORDINE' && h.isEseguito).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()).slice(0, 5);
+      if (ordini.length === 0) {
+        dossier += `Nessun ordine diretto registrato.\n`;
+      } else {
+        ordini.forEach(o => {
+          dossier += `- Data: ${o.data} | Totale: €${o.importo}\n`;
+          if (o.items && o.items.length > 0) {
+            o.items.forEach(item => {
+               dossier += `   * ${item.quantita}x ${item.descrizione} a €${item.prezzoApplicato}\n`;
+            });
+          }
+        });
+      }
+      kbContext = dossier;
+    } else {
+      kbContext = "Dati del cliente selezionato non trovati.";
+    }
+  } else {
+    // APPROCCIO GLOBALE (Default)
+    kbContext = kbData 
+      ? Object.values(kbData).join('\n') + '\n\n<NOMI_RIVENDITE_CRM>\n' + JSON.stringify(idToDisplayName) + '\n</NOMI_RIVENDITE_CRM>'
+      : 'Nessun dato locale sincronizzato.';
+  }
 
   const prompt = `Sei l'"Oracolo", il "Second Brain" strategico di TgesT.
 Rispondi alle domande dell'utente analizzando il seguente database locale (Knowledge Base) e il Catalogo Prodotti:
@@ -164,13 +199,26 @@ REGOLE TASSATIVE:
 1. Rispondi SEMPRE E SOLO con un oggetto JSON valido (nessun blocco markdown \`\`\`json attorno).
 2. Formato JSON: { "rispostaTestuale": "...", "idSuggeriti": ["id1"], "aggiornamentiMemoria": [{"id": "...", "nota": "..."}] }
 3. CONCISEZZA: Rispondi in modo sintetico e diretto. Elenca SOLO le info strettamente necessarie alla domanda. Niente preamboli, riassunti non richiesti o dettagli superflui.
-4. FORMATTAZIONE ESTETICA TESTO: All'interno del campo "rispostaTestuale", usa i ritorni a capo (\\n) per spaziare i paragrafi. Quando elenchi prodotti, varianti o prezzi dal catalogo, usa SEMPRE elenchi puntati (es. \\n- **[SKU]** Nome: €Prezzo) ed evidenzia i dati chiave in **grassetto**. VIETATO restituire "muri di testo" continui.
-5. ESCAPING JSON OBBLIGATORIO: All'interno di "rispostaTestuale" escape SEMPRE virgolette (\\") e backslash (\\\\) secondo lo standard JSON (es. "Ha detto: \\"Ciao\\"").
-6. NOMI DISPLAY: Nel testo "rispostaTestuale" usa **esclusivamente i nomi completi visibili nel CRM** (es. "Rivendita 6 (SORRENTO)" o "Svapo felice (Napoli)"). È VIETATO usare ID tecnici (es. "NA_SORRENTO_6") nel testo. Gli ID tecnici vanno SOLO nell'array "idSuggeriti".
-7. ID SUGGERITI PERTINENTI: Inserisci in "idSuggeriti" SOLO rivendite strettamente rilevanti per la richiesta dell'utente.
+4. FORMATTAZIONE ELENCO ALLINEATO (NO TABELLE MARKDOWN): All'interno di "rispostaTestuale" usa **elenchi con spaziatura fissa** per dati tabellari — l'UI usa \`whitespace-pre-wrap\` e font monospace per colonne allineate:
+   - **Intestazioni sezioni**: \`## Titolo\` + riga vuota
+   - **Righe dati**: formato \`• **SKU**  Prodotto..................  Q.tà  €U.listino  €Totale\` (spazi per allineare colonne)
+   - **Esempio riga**: \`• **RKDEZ214**  DRIP Kit Peach Ice............  2     €12,50     €25,00\`
+   - **Totale**: \`• **TOTALE**........................................................  €XXX,XX\`
+   - **Elenco puntato semplice** per voci non tabellari (es. componenti bundle)
+   - **Grassetto \`**\`** per valori chiave (importi, date, SKU, stati)
+   - **Riga vuota (\`\\n\\n\`)** tra sezioni
+   - **VIETATO** tabelle markdown (\`| | |\`), VIETATO muro di testo continuo
+5. CATALOGO VINCOLANTE (ANTI-HALLUCINAZIONE): **USA ESCLUSIVAMENTE** prodotti, SKU e prezzi presenti in \`<CATALOGO_MAGAZZINO>\`.
+   - **VIETATO** inventare SKU, nomi prodotto, prezzi o quantità non presenti nel catalogo.
+   - Se un prodotto non è in catalogo, **NON proporlo**.
+   - Per proposte strategiche, calcola importi **solo** con prezzi del catalogo.
+   - Se il catalogo è vuoto/assente, dichiara: "Catalogo non disponibile, impossibile fare preventivi."
+6. ESCAPING JSON OBBLIGATORIO: All'interno di "rispostaTestuale" escape SEMPRE virgolette (\\") e backslash (\\\\) secondo lo standard JSON (es. "Ha detto: \\"Ciao\\"").
+7. NOMI DISPLAY: Nel testo "rispostaTestuale" usa **esclusivamente il formato "Comune Numero"** (es. "Napoli 153", "Milano 42"). È VIETATO usare "Rivendita X (Y)" o ID tecnici. Gli ID tecnici vanno SOLO nell'array "idSuggeriti".
+8. ID SUGGERITI PERTINENTI: Inserisci in "idSuggeriti" SOLO rivendite strettamente rilevanti per la richiesta dell'utente.
    - UTILE: utente chiede "chi ha comprato DRIP" → idSuggeriti con rivendite che hanno ordinato DRIP.
-   - INUTILE: utente chiede "cosa contiene il bundle" → idSuggeriti VUOTO []. **DEVI lasciare l'array vuoto [] per domande puramente informative.**
-8. TOOL CALLING (MEMORIA): Se ti viene chiesto di ricordare/annotare info su un cliente, inseriscile nell'array "aggiornamentiMemoria".`;
+   - INUTILE: utente chiede "cosa contiene il bundle" / "storico Napoli 153" / "profilo Milano 42" → idSuggeriti VUOTO []. **DEVI lasciare l'array vuoto [] per domande informative su singola rivendita o prodotti.**
+9. TOOL CALLING (MEMORIA): Se ti viene chiesto di ricordare/annotare info su un cliente, inseriscile nell'array "aggiornamentiMemoria".`;
 
   try {
     const response = await fetch('/api/gemini-chat', {

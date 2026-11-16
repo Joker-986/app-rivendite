@@ -22,7 +22,21 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [searchClient, setSearchClient] = useState('');
+  const [showClientMenu, setShowClientMenu] = useState(false);
+  const clientMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clientMenuRef.current && !clientMenuRef.current.contains(event.target as Node)) {
+        setShowClientMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Auto-scroll in fondo alla chat
   useEffect(() => {
@@ -66,7 +80,7 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
       const historyForService = messages.map(m => ({ role: m.role, content: m.content }));
       const activeModel = localStorage.getItem('openRouterModel') || '';
       
-      const result = await executeOracleQuery(userText, historyForService, combined, activeModel);
+      const result = await executeOracleQuery(userText, historyForService, combined, activeModel, rubrica, selectedClientId);
       
       const newAiMsg: UIMessage = {
         id: (Date.now() + 1).toString(),
@@ -112,8 +126,8 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
       if (msg.results && msg.results.length > 0) {
         chatText += `>> Clienti menzionati/suggeriti:\n`;
         msg.results.forEach(res => {
-           const nome = res.isStore ? res.storeName : `Rivendita ${res['Num. Rivendita']}`;
-           chatText += `   - ${nome} (${res.Comune})\n`;
+           const nome = res.isStore ? res.storeName : `${res.Comune.charAt(0).toUpperCase() + res.Comune.slice(1).toLowerCase()} ${res['Num. Rivendita']}`;
+           chatText += `   - ${nome}\n`;
         });
         chatText += `\n`;
       }
@@ -188,6 +202,72 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
         )}
       </div>
 
+      {/* SELETTORE FOCALIZZATO INTELLIGENTE */}
+      <div ref={clientMenuRef} className="bg-slate-50 border-b border-slate-200 p-2 shrink-0 relative z-20">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="🌐 Analisi Globale (Cerca un cliente per fare focus...)"
+            value={searchClient}
+            onChange={(e) => {
+              setSearchClient(e.target.value);
+              setShowClientMenu(true);
+              if (e.target.value === '') setSelectedClientId('');
+            }}
+            onFocus={() => setShowClientMenu(true)}
+            className="w-full h-9 pl-8 pr-8 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 placeholder:font-normal transition-all"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+          
+          {selectedClientId && (
+            <button 
+              onClick={() => {
+                setSelectedClientId('');
+                setSearchClient('');
+                setShowClientMenu(false);
+              }}
+              className="absolute right-2 top-2 p-0.5 text-slate-400 hover:text-red-500 bg-slate-100 rounded-md transition-colors"
+              title="Torna all'Analisi Globale"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+
+          {showClientMenu && searchClient.trim().length > 0 && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 shadow-xl rounded-lg max-h-48 overflow-y-auto z-50">
+              {[...crmAnagrafiche, ...stores]
+                .filter(a => {
+                  const rData = rubrica[getRivenditaId(a)];
+                  if (!rData || !rData.stato || rData.stato === 'Perso' || rData.stato === 'RIP') return false;
+                  const nomeFull = (a.isStore ? a.storeName : `${a.Comune} ${a['Num. Rivendita']}`) || '';
+                  return nomeFull.toLowerCase().includes(searchClient.toLowerCase());
+                })
+                .slice(0, 15) // Limita a 15 risultati per non appesantire il rendering
+                .map(a => {
+                  const id = getRivenditaId(a);
+                  const nome = a.isStore ? a.storeName : `${a.Comune} - Riv. ${a['Num. Rivendita']}`;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => {
+                        setSelectedClientId(id);
+                        setSearchClient(nome || '');
+                        setShowClientMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border-b border-slate-50 last:border-0 transition-colors"
+                    >
+                      🎯 Focus: {nome}
+                    </button>
+                  );
+                })}
+                <div className="px-3 py-2 text-[10px] text-slate-400 italic bg-slate-50">
+                  Mostrati i primi risultati. Digita per restringere.
+                </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* AREA MESSAGGI (STORICO CHAT) */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {messages.length === 0 ? (
@@ -200,48 +280,18 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
             <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} gap-2 w-full`}>
               
               {/* BOLLA DEL MESSAGGIO TESTUALE */}
-              <div className={`max-w-[85%] p-3 rounded-2xl shadow-sm text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm'}`}>
+              <div className={`max-w-[90%] p-3 rounded-2xl shadow-sm text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm'}`}>
                 <div className="flex items-center gap-2 mb-1 opacity-70">
                   {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
                   <span className="text-[9px] font-black uppercase tracking-wider">{msg.role === 'user' ? 'Tu' : 'Oracolo'}</span>
                 </div>
-                <div className="leading-relaxed whitespace-pre-wrap font-medium">
-                  {msg.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className="font-black">{part}</strong> : part)}
+                <div className="leading-relaxed whitespace-pre-wrap font-mono text-sm">
+                  {msg.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className="font-bold">{part}</strong> : part)}
                 </div>
               </div>
 
-              {/* RISULTATI DELLA RICERCA (CARD DEI CLIENTI) */}
-              {msg.role === 'ai' && msg.results && msg.results.length > 0 && (
-                <div className="w-full max-w-[90%] pl-2 space-y-2 mt-1">
-                  {msg.results.map((res) => {
-                    const id = getRivenditaId(res);
-                    const extra = rubrica[id];
-                    const nome = res.isStore ? res.storeName : `Rivendita ${res['Num. Rivendita']}`;
-                    const ordini = (extra?.history || []).filter((h:any) => h.tipo === 'ORDINE' && h.isEseguito);
-                    const lastOrder = ordini.length > 0 ? ordini[0].data : null;
-
-                    return (
-                      <div key={id} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between gap-2 animate-in slide-in-from-left-4 duration-300">
-                        <div className="flex flex-col min-w-0">
-                          <h4 className="text-sm font-bold text-slate-800 truncate flex items-center gap-1.5">
-                            <Store className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> {nome}
-                          </h4>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate flex items-center gap-1">
-                            <MapPin className="w-3 h-3" /> {res.Comune}
-                          </p>
-                        </div>
-                        
-                        <div className="flex flex-col items-end shrink-0 text-right">
-                           <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                             <History className="w-3 h-3" /> {lastOrder ? formatDays(lastOrder) : 'Mai'}
-                           </span>
-                           <span className="text-[9px] font-bold text-slate-400 mt-1">Ultimo Ordine</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {/* RISULTATI RIMOSSI: il testo LLM include già tutto (tabelle, nomi, date). 
+                  Manteniamo solo idSuggeriti per eventuale uso futuro, ma NON rendiamo card. */}
             </div>
           ))
         )}
