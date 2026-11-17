@@ -3,7 +3,7 @@ import {
   Package, Plus, Trash2, Edit2, Save, X, 
   Search, Filter, ArrowUpDown, MoreVertical,
   ChevronRight, AlertCircle, CheckCircle2,
-  Tag, DollarSign, Layers, Info, Archive, Upload, RefreshCw
+  Tag, DollarSign, Layers, Info, Archive, Upload, RefreshCw, Download
 } from 'lucide-react';
 import { useProducts } from '../contexts/ProductContext';
 import { useModals } from '../contexts/ModalContext';
@@ -76,6 +76,37 @@ const WarehouseTab: React.FC = () => {
       if (e.target) e.target.value = '';
     };
     reader.readAsText(file);
+  };
+
+  const handleExportCSV = () => {
+    if (!products || products.length === 0) {
+      alert('Il magazzino è vuoto, nulla da esportare.');
+      return;
+    }
+    const headers = ['codice', 'descrizione', 'prezzoUnita', 'unita', 'pezziPerStecca', 'categoria', 'isBundle'];
+    const rows = products.map(p => {
+      return [
+        p.codice || '',
+        (p.descrizione || '').replace(/;/g, ','),
+        p.prezzoUnita || 0,
+        p.unita || 'Pezzi',
+        p.pezziPerStecca || '',
+        (p.categoria || '').replace(/;/g, ','),
+        p.isBundle ? 'SI' : 'NO'
+      ].join(';');
+    });
+    
+    const csvContent = [headers.join(';'), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const safeDate = new Date().toLocaleDateString('it-IT').replace(/\//g, '-');
+    link.download = `tgest_magazzino_${safeDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleDelete = (id: string, descrizione: string) => {
@@ -176,6 +207,13 @@ const WarehouseTab: React.FC = () => {
             title="Importa da CSV Excel"
           >
             <Upload className="w-5 h-5 text-brand-600" />
+          </button>
+          <button 
+            onClick={handleExportCSV}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 p-3 rounded-xl shadow-sm transition-all flex items-center gap-2"
+            title="Esporta in CSV"
+          >
+            <Download className="w-5 h-5 text-brand-600" />
           </button>
           <button 
             onClick={() => setIsAdding(true)}

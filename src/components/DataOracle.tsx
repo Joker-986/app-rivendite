@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Sparkles, Loader2, MapPin, Store, History, Trash2, Bot, User, RefreshCw, Download } from 'lucide-react';
+import { Search, Sparkles, Loader2, MapPin, Store, History, Trash2, Bot, User, RefreshCw, Download, Copy, Check } from 'lucide-react';
 import { RubricaData, SearchResult, Product } from '../types';
 import { getRivenditaId } from '../utils/helpers';
 import { executeOracleQuery, syncSecondBrain } from '../services/oracleService';
@@ -80,7 +80,7 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
       const historyForService = messages.map(m => ({ role: m.role, content: m.content }));
       const activeModel = localStorage.getItem('openRouterModel') || '';
       
-      const result = await executeOracleQuery(userText, historyForService, combined, activeModel, rubrica, selectedClientId);
+      const result = await executeOracleQuery(userText, historyForService, combined, activeModel, rubrica, selectedClientId, prodotti);
       
       const newAiMsg: UIMessage = {
         id: (Date.now() + 1).toString(),
@@ -145,6 +145,140 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  const renderOracleContent = (text: string, messageId: string) => {
+    // 1. Intercetta blocco messaggio speciale
+    const msgMatch = text.match(/\[MSG_START\]([\s\S]*?)\[MSG_END\]/);
+    let rawTextToParse = text;
+    let specialMessageBlock: React.ReactNode = null;
+
+    if (msgMatch) {
+      const extractedMsg = msgMatch[1].trim();
+      rawTextToParse = text.replace(msgMatch[0], '').trim();
+      
+      specialMessageBlock = (
+        <div key="special-msg-block" className="my-3 bg-emerald-50 border border-emerald-200 rounded-2xl overflow-hidden shadow-sm relative">
+           <div className="bg-emerald-100/50 px-3 py-1.5 border-b border-emerald-100 flex justify-between items-center">
+              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Bozza Messaggio</span>
+              <button 
+                onClick={() => handleCopy(extractedMsg, messageId)}
+                className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-white px-2 py-1 rounded-md border border-emerald-200 hover:bg-emerald-50 transition-colors shadow-sm"
+              >
+                {copiedMsgId === messageId ? (
+                  <><Check className="w-3 h-3" /> COPIATO</>
+                ) : (
+                  <><Copy className="w-3 h-3" /> COPIA</>
+                )}
+              </button>
+           </div>
+           <div className="p-3 text-sm text-slate-800 whitespace-pre-wrap font-sans">
+              {extractedMsg}
+           </div>
+        </div>
+      );
+    }
+
+    const lines = rawTextToParse.split('\n');
+    const elements: React.ReactNode[] = [];
+    let currentCategory: string | null = null;
+    let currentSkus: { name: string; qta: string; motivo: string }[] = [];
+
+    const flushCategoryGroup = (keyPrefix: string | number) => {
+      if (currentCategory || currentSkus.length > 0) {
+        elements.push(
+          <div key={`cat-group-${keyPrefix}`} className="my-2.5 p-3 bg-slate-50/90 border border-slate-200/90 rounded-2xl shadow-xs">
+            {currentCategory && (
+              <div className="flex items-center pb-2 mb-1 border-b border-slate-200/70">
+                <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded-md uppercase tracking-wider">
+                  {currentCategory.replace(/[\[\]]/g, '')}
+                </span>
+              </div>
+            )}
+            <div className="divide-y divide-slate-200/70">
+              {currentSkus.map((sku, sIdx) => (
+                <div key={sIdx} className="py-2 first:pt-1 last:pb-0 flex flex-col gap-1">
+                  <div className="flex items-start justify-between gap-2 w-full">
+                    <span className="text-xs font-bold text-slate-800 leading-snug break-words flex-1">{sku.name}</span>
+                    {sku.qta && (
+                      <span className="shrink-0 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-md border border-emerald-200/80">
+                        {sku.qta}
+                      </span>
+                    )}
+                  </div>
+                  {sku.motivo && (
+                    <div className="w-full bg-white/80 px-2 py-1 rounded-md border border-slate-200/50">
+                      <span className="text-[10px] font-medium text-slate-500 italic break-words block leading-tight">{sku.motivo}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        currentCategory = null;
+        currentSkus = [];
+      }
+    };
+
+    lines.forEach((rawLine, idx) => {
+      const trimmed = rawLine.trim();
+      if (trimmed.startsWith('CAT_GROUP:')) {
+        flushCategoryGroup(idx);
+        currentCategory = trimmed.replace(/^CAT_GROUP:\s*/, '').trim();
+        return;
+      }
+      if (trimmed.startsWith('SKU_ROW:')) {
+        const cleanContent = trimmed.replace(/^SKU_ROW:\s*/, '');
+        const parts = cleanContent.split('|').map(p => p.trim());
+        let rawName = parts[0] || '';
+        
+        if (currentCategory && rawName) {
+          const catClean = currentCategory.replace(/[\[\]]/g, '').trim();
+          const catWords = catClean.toUpperCase().split(/\s+/).filter(Boolean);
+          const nameWords = rawName.split(/\s+/);
+          let cutIndex = 0;
+          while (cutIndex < nameWords.length - 1 && catWords.includes(nameWords[cutIndex].toUpperCase())) {
+            cutIndex++;
+          }
+          if (cutIndex > 0) {
+            rawName = nameWords.slice(cutIndex).join(' ').replace(/^[-–:]+\s*/, '').trim();
+          }
+        }
+        currentSkus.push({ name: rawName, qta: parts[1] || '', motivo: parts[2] || '' });
+        return;
+      }
+      if (currentCategory || currentSkus.length > 0) {
+        flushCategoryGroup(idx);
+      }
+      const parts = rawLine.split(/(\*\*.*?\*\*)/g);
+      elements.push(
+        <div key={`line-${idx}`} className="min-h-[1.25rem]">
+          {parts.map((part, pIdx) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+              return <strong key={pIdx} className="font-black text-indigo-950">{part.slice(2, -2)}</strong>;
+            }
+            return <span key={pIdx}>{part}</span>;
+          })}
+        </div>
+      );
+    });
+    flushCategoryGroup('end');
+    
+    // Inserisce il blocco messaggio estratto alla fine (o dove ritieni, di solito in coda)
+    if (specialMessageBlock) {
+        elements.push(specialMessageBlock);
+    }
+    
+    return elements;
   };
 
   return (
@@ -285,9 +419,15 @@ const DataOracle: React.FC<DataOracleProps> = ({ rubrica, crmAnagrafiche, stores
                   {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
                   <span className="text-[9px] font-black uppercase tracking-wider">{msg.role === 'user' ? 'Tu' : 'Oracolo'}</span>
                 </div>
-                <div className="leading-relaxed whitespace-pre-wrap font-mono text-sm">
-                  {msg.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className="font-bold">{part}</strong> : part)}
-                </div>
+                {msg.role === 'user' ? (
+                  <div className="leading-relaxed whitespace-pre-wrap text-sm">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div className="leading-relaxed text-sm space-y-1">
+                    {renderOracleContent(msg.content, msg.id)}
+                  </div>
+                )}
               </div>
 
               {/* RISULTATI RIMOSSI: il testo LLM include già tutto (tabelle, nomi, date). 

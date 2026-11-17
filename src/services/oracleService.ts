@@ -63,7 +63,7 @@ export const syncSecondBrain = async (
   prodotti: Product[],
   onProgress: (percent: number) => void
 ): Promise<void> => {
-  const catalogStr = prodotti.map(p => `[${p.codice}] ${p.descrizione} - €${p.prezzoUnita}`).join(' | ');
+  const catalogStr = prodotti.map(p => `[${p.codice}] ${p.descrizione} - €${p.prezzoUnita}`).join('\n');
   await saveToDB('tgest_catalog', catalogStr);
   
   const dossierMap: Record<string, string> = {};
@@ -127,12 +127,25 @@ export const executeOracleQuery = async (
   anagrafiche: SearchResult[],
   openRouterModel: string,
   rubrica: RubricaData,
-  selectedClientId?: string
+  selectedClientId: string | undefined,
+  prodotti: Product[]
 ): Promise<OracleResult> => {
   
   const historyText = history.map(msg => `${msg.role === 'user' ? 'Utente' : 'Oracolo'}: ${msg.content}`).join('\n');
   const kbData: Record<string, string> | undefined = await getFromDB('tgest_kb');
-  const catalogContext: string = await getFromDB('tgest_catalog') || 'Nessun catalogo sincronizzato.';
+  const catalogContext = prodotti
+    .filter(p => p.attivo !== false)
+    .map(p => {
+      let desc = `[${p.codice}] ${p.descrizione} - Categoria: ${p.categoria || 'Varie'} - Prezzo: €${p.prezzoUnita} (${p.unita})`;
+      if (p.isBundle && p.bundleItems && p.bundleItems.length > 0) {
+        const bundleContents = p.bundleItems.map(bi => {
+          const comp = prodotti.find(cp => cp.id === bi.productId);
+          return comp ? `${bi.quantita}x ${comp.codice}` : '';
+        }).filter(Boolean).join(', ');
+        desc += ` - BUNDLE CONTIENE: ${bundleContents}`;
+      }
+      return desc;
+    }).join('\n');
   // Mappa ID tecnico -> Nome display CRM (per far scrivere all'LLM i nomi corretti nel testo)
   const idToDisplayName: Record<string, string> = {};
   if (kbData) {
@@ -156,7 +169,7 @@ export const executeOracleQuery = async (
       dossier += `Note Operative: ${extra.note || 'Nessuna'}\n\n`;
       
       dossier += `[STORICO ORDINI DETTAGLIATO]\n`;
-      const ordini = (extra.history || []).filter(h => h.tipo === 'ORDINE' && h.isEseguito).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()).slice(0, 5);
+      const ordini = (extra.history || []).filter(h => h.tipo === 'ORDINE' && h.isEseguito).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
       if (ordini.length === 0) {
         dossier += `Nessun ordine diretto registrato.\n`;
       } else {
@@ -164,7 +177,10 @@ export const executeOracleQuery = async (
           dossier += `- Data: ${o.data} | Totale: €${o.importo}\n`;
           if (o.items && o.items.length > 0) {
             o.items.forEach(item => {
-               dossier += `   * ${item.quantita}x ${item.descrizione} a €${item.prezzoApplicato}\n`;
+               // Recupera la categoria ufficiale aggiornata dal magazzino
+               const liveProduct = prodotti.find(p => p.codice === item.codice || p.id === item.productId);
+               const cat = liveProduct?.categoria || item.categoria || 'Varie';
+               dossier += `   * [${cat}] ${item.quantita}x ${item.descrizione} a €${item.prezzoApplicato}\n`;
             });
           }
         });
@@ -199,15 +215,14 @@ REGOLE TASSATIVE:
 1. Rispondi SEMPRE E SOLO con un oggetto JSON valido (nessun blocco markdown \`\`\`json attorno).
 2. Formato JSON: { "rispostaTestuale": "...", "idSuggeriti": ["id1"], "aggiornamentiMemoria": [{"id": "...", "nota": "..."}] }
 3. CONCISEZZA: Rispondi in modo sintetico e diretto. Elenca SOLO le info strettamente necessarie alla domanda. Niente preamboli, riassunti non richiesti o dettagli superflui.
-4. FORMATTAZIONE ELENCO ALLINEATO (NO TABELLE MARKDOWN): All'interno di "rispostaTestuale" usa **elenchi con spaziatura fissa** per dati tabellari — l'UI usa \`whitespace-pre-wrap\` e font monospace per colonne allineate:
-   - **Intestazioni sezioni**: \`## Titolo\` + riga vuota
-   - **Righe dati**: formato \`• **SKU**  Prodotto..................  Q.tà  €U.listino  €Totale\` (spazi per allineare colonne)
-   - **Esempio riga**: \`• **RKDEZ214**  DRIP Kit Peach Ice............  2     €12,50     €25,00\`
-   - **Totale**: \`• **TOTALE**........................................................  €XXX,XX\`
-   - **Elenco puntato semplice** per voci non tabellari (es. componenti bundle)
-   - **Grassetto \`**\`** per valori chiave (importi, date, SKU, stati)
-   - **Riga vuota (\`\\n\\n\`)** tra sezioni
-   - **VIETATO** tabelle markdown (\`| | |\`), VIETATO muro di testo continuo
+4. FORMATTAZIONE VISUALE STRUTTURATA E ANALITICA: All'interno di "rispostaTestuale", per elencare prodotti, carrelli storici, consigli o preventivi, DEVI usare ESCLUSIVAMENTE questa sintassi per generare la UI a card:
+   - Raggruppa gli articoli sotto la loro REALE macro-categoria (letta dai dati) usando il prefisso 'CAT_GROUP: ' (es. CAT_GROUP: WAKA Ultra Device). NON inventare categorie.
+   - Sotto ciascun 'CAT_GROUP:', elenca i prodotti con il prefisso 'SKU_ROW: ' seguito da 3 campi separati da barra verticale (|): Nome Prodotto | Quantità (es. 2 PZ o 1 ST) | Dati Analitici.
+   - REGOLA SUI DATI ANALITICI (3° Campo): Inserisci SOLO il prezzo, il totale parziale, o dati oggettivi (es. "Ordinato 3 volte", "Mai ordinato"). È SEVERAMENTE VIETATO inserire descrizioni di marketing (es. "Starter kit", "Pod ricaricabile", "Top seller"). Mantieni un profilo da severo analista dati.
+   - Esempio corretto:
+     CAT_GROUP: WAKA SoMatch Pod
+     SKU_ROW: C0QRU Smokey Tobacco | 5 PZ | Ordinato il 16/10
+   - Usa il grassetto (**) per evidenziare parole chiave. Manda a capo le sezioni con un doppio "\\n". VIETATO usare tabelle markdown.
 5. CATALOGO VINCOLANTE (ANTI-HALLUCINAZIONE): **USA ESCLUSIVAMENTE** prodotti, SKU e prezzi presenti in \`<CATALOGO_MAGAZZINO>\`.
    - **VIETATO** inventare SKU, nomi prodotto, prezzi o quantità non presenti nel catalogo.
    - Se un prodotto non è in catalogo, **NON proporlo**.
@@ -218,7 +233,19 @@ REGOLE TASSATIVE:
 8. ID SUGGERITI PERTINENTI: Inserisci in "idSuggeriti" SOLO rivendite strettamente rilevanti per la richiesta dell'utente.
    - UTILE: utente chiede "chi ha comprato DRIP" → idSuggeriti con rivendite che hanno ordinato DRIP.
    - INUTILE: utente chiede "cosa contiene il bundle" / "storico Napoli 153" / "profilo Milano 42" → idSuggeriti VUOTO []. **DEVI lasciare l'array vuoto [] per domande informative su singola rivendita o prodotti.**
-9. TOOL CALLING (MEMORIA): Se ti viene chiesto di ricordare/annotare info su un cliente, inseriscile nell'array "aggiornamentiMemoria".`;
+9. TOOL CALLING (MEMORIA): Se ti viene chiesto di ricordare/annotare info su un cliente, inseriscile nell'array "aggiornamentiMemoria".
+10. GENERAZIONE MESSAGGI COMMERCIALI (WHATSAPP/EMAIL): Se l'utente ti chiede esplicitamente di scrivere, redigere o preparare un messaggio da inviare al cliente:
+    - DISATTIVA temporaneamente le regole analitiche (4) per la parte relativa al messaggio.
+    - Toni e Stile: Diventa empatico, persuasivo e commerciale. Usa formattazione leggibile (a capo) ed emoji adeguate.
+    - ZERO ALLUCINAZIONI SULLE ROUTINE: È ASSOLUTAMENTE VIETATO inventare giorni della settimana (es. "giro del giovedì"), appuntamenti o abitudini non presenti nei dati. Basati rigorosamente sullo storico oggettivo.
+    - FORMATO WHATSAPP: NON usare mai il grassetto Markdown (**testo**). Per evidenziare i testi usa il formato nativo di WhatsApp con un solo asterisco (*testo*).
+    - RACCHIUDI IL MESSAGGIO GENERATO (e solo quello) esattamente tra queste due etichette: \`[MSG_START]\` e \`[MSG_END]\`.
+    - Esempio:
+      Ecco una bozza per il cliente:
+      [MSG_START]
+      Ciao! 👋 
+      Ho visto dai tuoi ultimi ordini che i *WAKA Ultra* vanno molto bene. Hai bisogno di un rifornimento? 🚀
+      [MSG_END]`;
 
   try {
     const response = await fetch('/api/gemini-chat', {
@@ -232,11 +259,18 @@ REGOLE TASSATIVE:
 
     let intent: OracleIntent;
     try {
-      const cleanJson = resData.response.replace(/```json/gi, '').replace(/```/g, '').trim();
+      let cleanJson = resData.response.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      // Estrazione corazzata: cattura solo il JSON ignorando allucinazioni discorsive
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanJson = jsonMatch[0];
+      }
+      
       intent = JSON.parse(cleanJson) as OracleIntent;
     } catch (parseError) {
       console.error("JSON parse failed", parseError);
-      return { message: "Errore di formattazione nella risposta dell'AI. Riprova.", results: null };
+      return { message: "Errore di formattazione nella risposta dell'AI. Riprova in modo più specifico.", results: null };
     }
 
     let memoryUpdated = false;
